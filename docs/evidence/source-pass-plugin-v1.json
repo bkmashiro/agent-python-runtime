@@ -3,14 +3,14 @@
   "classification": "SYNTHETIC_EXACT_GUEST_PLUGIN_CORRECTNESS_AND_MATCHED_RUNTIME",
   "artifact": {
     "profile": "base",
-    "source_commit": "08e87946358047598d1b77b8b9a965407e69fa44",
-    "source_tree": "fa7c942ccee703fa8b31db6cdaa8bf6a83fa1ba3",
-    "sha256": "sha256:b646665b26a1fb7899d0a457d238025ea870b44209765220853da5bf824444e2",
-    "manifest_sha256": "sha256:314864bdf8413ac68e39cc5d47b118ed80c3ac93379324c21926a28dfb29c8f0"
+    "source_commit": "b2b3b1c2bfd848a9d0dbe1de1be1a720cbac3cca",
+    "source_tree": "7dde9ce1d95b6758ed4a8c4a59644088288a3b8e",
+    "sha256": "sha256:c1112c078a5aa1ab10440196e6fc24ee3e06c3d0f8d9a129dc082a60f5ea0320",
+    "manifest_sha256": "sha256:c95474e9cf0a8f72e418d5d6b805aa6c5b0be5b442e66b2ed7970aa70c756534"
   },
   "harness": {
-    "source_commit": "08e87946358047598d1b77b8b9a965407e69fa44",
-    "source_tree": "fa7c942ccee703fa8b31db6cdaa8bf6a83fa1ba3",
+    "source_commit": "278086787d968c20dba7683caf54554c4aefcb58",
+    "source_tree": "176854b897f2898c2616ad70c772366d13264789",
     "test": "TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest"
   },
   "platform": {
@@ -20,37 +20,72 @@
   "plugin": {
     "name": "pure_scalar_cse",
     "version": "pysolate.pure-scalar-cse-pass.v1",
+    "config_sha256": "sha256:48884671a1121cfb21c2b19f79faec1530342a6175ab515c0011ce2074e3057f",
     "stage": "whole_program_patch",
     "default_enabled": false
   },
   "correctness": {
     "positive_replacements": 1,
-    "baseline_result": [52, 52],
-    "treatment_result": [52, 52],
+    "baseline_result": [
+      52,
+      52
+    ],
+    "treatment_result": [
+      52,
+      52
+    ],
     "same_original_model_source_identity": true,
     "different_effective_ast_identity": true,
-    "inapplicable_call_fixture_used_original_source": true,
-    "inapplicable_call_result": 7,
-    "self_reference_fixture_used_original_source": true,
-    "self_reference_result": [2, 3],
-    "unknown_call_invalidated_scalar_facts": true,
-    "unknown_call_fixture_used_original_source": true,
-    "unknown_call_result": [4, 16]
+    "closed_scalar_program_only": true,
+    "call_control": {
+      "status": "not_applicable",
+      "result": 7
+    },
+    "self_reference_control": {
+      "status": "not_applicable",
+      "result": [
+        2,
+        3
+      ]
+    },
+    "unknown_call_control": {
+      "status": "not_applicable",
+      "result": [
+        4,
+        16
+      ]
+    },
+    "compiled_code_control": {
+      "status": "not_applicable",
+      "result": false
+    },
+    "integer_identity_control": {
+      "status": "not_applicable",
+      "result": false
+    }
   },
   "timing": {
     "fixture": "200 repeated int64-safe seed*seed-48 terms in two adjacent assignments",
     "repetitions": 3,
-    "baseline_nanos_sorted": [2455103250, 2469225917, 2473934250],
-    "treatment_nanos_sorted": [2835434750, 2844401042, 2850664209],
-    "baseline_median_nanos": 2469225917,
-    "treatment_median_nanos": 2844401042,
-    "treatment_over_baseline": 1.1519403803503816,
-    "treatment_slowdown_percent": 15.19403803503816
+    "baseline_nanos_sorted": [
+      2425019333,
+      2428868958,
+      2429253666
+    ],
+    "treatment_nanos_sorted": [
+      2778044167,
+      2783839291,
+      2812962084
+    ],
+    "baseline_median_nanos": 2428868958,
+    "treatment_median_nanos": 2783839291,
+    "treatment_over_baseline": 1.1461463500658728,
+    "treatment_slowdown_percent": 14.614635006587285
   },
   "claim_boundary": [
     "compile-time plugin registration and exact-Guest execution work",
-    "the first pure scalar CSE plugin preserves the checked synthetic results",
-    "unknown statements invalidate all remembered scalar facts",
+    "the checked closed scalar CSE subset preserves value results",
+    "imports, calls, control flow, compiled-code and integer-identity observation are not applicable",
     "the measured end-to-end treatment is slower on this fixture",
     "no natural prevalence or production speedup claim",
     "effect-owning paper passes still require a typed Host stage adapter"

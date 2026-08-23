@@ -14,6 +14,7 @@ and prepared-region contracts.
 | `semantic_pre_dispatch` | `overlay_only` | `prefix_overlay` |
 | `prepared_pure_region` | `execution_patch` | `whole_program_patch` |
 | `pure_scalar_cse` | `execution_patch` | `whole_program_patch` |
+| `pure_scalar_fold` | `execution_patch` | `whole_program_patch` |
 
 The registration definition owns its stage. `CurrentEntry` projects that stage into
 the outcome shell, and `New` rejects a caller-supplied stage that differs from the

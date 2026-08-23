@@ -105,15 +105,18 @@ consumer kind: overlay or execution patch
 bounded output AST/overlay identity
 ```
 
-The current registry has two concrete consumers:
+The current registry has two adapters and two runnable whole-program plugins:
 
 | Pass | Consumer | Current role |
 |---|---|---|
 | `semantic_pre_dispatch` | `overlay_only` | Uses a verified complete-prefix AST to prepare one qualified Host observation; the unchanged final source may claim it only at the exact occurrence. |
 | `prepared_pure_region` | `execution_patch` | Replaces one admitted scalar region with a one-shot materialization helper. |
+| `pure_scalar_cse` | `execution_patch` | Reuses one adjacent equal scalar computation inside the closed scalar-program lane. |
+| `pure_scalar_fold` | `execution_patch` | Folds one total scalar expression inside the same closed lane. |
 
-The registry is intentionally not yet a general pass manager. A third real
-transformation should validate the shared shape before the project generalizes it.
+The registry is intentionally not yet a general pass manager. The two runnable plugins
+are selected independently; no accepted fixture currently needs ordering, composition or
+reanalysis across a transformed AST.
 
 ## Stage model
 
@@ -224,6 +227,12 @@ The safe fallback depends on what has physically started:
 These kernels appear separately in stratum, LLMCompiler, APPL, LLM-Tool Compiler,
 AWO/Meta-tools and AAFLOW. Pysolate should claim only the kernel represented by the
 pass, not the complete paper system.
+
+Current absorption status: stratum's pure repeated-computation and constant-folding
+subsets are implemented as `pure_scalar_cse` and `pure_scalar_fold`. Frozen reads,
+projection, batching, parallel calls and composite tools remain deferred because the
+whole-program source-patch seam does not own their required Host effect semantics. See
+[`paper-pass-absorption-v1.md`](paper-pass-absorption-v1.md).
 
 ### Pysolate-native passes
 

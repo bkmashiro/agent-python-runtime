@@ -229,6 +229,16 @@ adjacent identical, statically evaluable int64/bool expressions; calls, division
 mutable values, control flow and non-adjacent reuse remain unchanged. See
 [`source-pass-plugins.md`](../source-pass-plugins.md).
 
+**Paper-pass follow-up:** **Implemented.** A bounded audit of stratum, LLMCompiler,
+APPL, LLM-Tool Compiler, AWO/Meta-tools and AAFLOW admitted only stratum's exact
+constant-folding kernel without a new Host execution contract. `pure_scalar_fold` is a
+second independent whole-program plugin over a closed top-level bool/signed-int64
+program. Programs with imports, calls, control flow or compiled-code introspection are
+not applicable.
+Batching, projection, parallel calls and composite tools remain deferred for their typed
+Host semantics; see
+[`paper-pass-absorption-v1.md`](../research/paper-pass-absorption-v1.md).
+
 ## Phase 1S: Unify the existing streaming overlay contract
 
 **Promise:** Make the already implemented semantic pre-dispatch lane a first-class pass
@@ -295,9 +305,9 @@ versioned rewrite law.
 parity. If the existing capability surface cannot express an exact law without a broad
 new API, record the no-go and continue without projection pushdown.
 
-**Decision:** **Deferred.** The workspace surface has no versioned range/line law and
-the source rewrite requires the same deferred execution-patch selector as Phase 1.
-Adding an unused projection capability would only widen the product surface.
+**Decision:** **Deferred.** The workspace surface has no versioned range/line law. The
+generic source-patch selector now exists, but adding a projection capability without a
+concrete workload and adapter-owned exact law would only widen the product surface.
 
 ## Phase 4: Ordered read-only batch fusion
 
@@ -320,7 +330,8 @@ trace. Partial-failure evidence is typed and no stateful capability is admitted.
 
 **Decision:** **Deferred.** One Broker call currently owns one operation index and one
 receipt. A physical batch cannot represent the original ordered logical calls without
-a new Broker item lifecycle and source-patch lowering.
+a new Broker item lifecycle. The available source-patch lowering cannot manufacture
+per-item outcomes or receipts.
 
 ## Phase 5: Independent read parallelization
 
@@ -365,9 +376,11 @@ substrate.
 release gates pass; exact Linux evidence is bound to one source commit/tree before any
 private-COW claim.
 
-**Decision:** **Deferred.** Prepared NumPy ingress installs a private global, but
-removing the original constructor still requires the deferred final-source patch seam.
-The closed Prepared Family data plane and COW claims remain unchanged.
+**Decision:** **Deferred.** Prepared NumPy ingress installs a private global, and the
+generic final-source patch can now remove or replace source. The missing piece is a
+typed join between that patch and the prepared materialization, including mutation
+isolation and lifecycle ownership. The closed Prepared Family data plane and COW claims
+remain unchanged.
 
 ## Phase 6S: Streaming preparation promotion
 
@@ -438,10 +451,11 @@ No shared heap, Plan/Broker reuse, scheduler or workspace publication is introdu
 pass-order mutation tests fail closed; all-off execution remains byte/trace compatible
 with the ordinary path.
 
-**Decision:** **Deferred beyond the v0 shell.** Only two passes are retained, so the
-three-pass abstraction gate is not met. Current closed stage routing, deterministic
-outcome order, stage-confusion rejection and all-off behavior remain the complete
-manager surface.
+**Decision:** **Deferred beyond the v0 shell.** The registry now retains two adapters and
+two independently runnable whole-program plugins, but no accepted fixture needs pass
+ordering, overlap resolution or reanalysis across transformed ASTs. Explicit one-pass
+dispatch, stage-confusion rejection and all-off behavior remain the complete manager
+surface; pass composition will be added only for a concrete interacting pair.
 
 ## Phase 8: Agentic coding workload evidence
 

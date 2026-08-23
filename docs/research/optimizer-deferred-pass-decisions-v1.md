@@ -27,6 +27,18 @@ This supersedes only the Phase 1 deferral. It does not supply the Broker, batchi
 parallel-call, workspace-projection or multi-program contracts required by later
 passes.
 
+## Paper follow-up: `pure_scalar_fold`
+
+Decision: **Implemented as a second runnable whole-program plugin.**
+
+The paper-candidate audit found only stratum's exact constant-folding kernel compatible
+with the current authority-free source-patch stage. `pure_scalar_fold` accepts a closed
+top-level scalar program and folds total `+`, `-` and `*` bool/signed-int64
+expressions. Any import, call, control flow, unsupported assignment or observable
+compiled-code path rejects the whole pass. This absorbs one narrow logical rewrite, not stratum's graph optimizer, cross-pipeline reuse, projection,
+vectorization or approximate execution. See
+[`paper-pass-absorption-v1.md`](paper-pass-absorption-v1.md).
+
 ## Phase 2: `frozen_observation_cse`
 
 Decision: **Deferred before implementation.**
@@ -53,13 +65,14 @@ and result detachment.
 Decision: **Deferred before implementation.**
 
 The current workspace surface exposes `workspace.read_text` but no line/range
-projection with a versioned encoding, newline, slice and error law. Adding a narrow
-`read_lines` capability would be possible, but rewriting the original call still
-requires the deferred generic source-patch selector from Phase 1. Introducing the
-capability without an admitted rewrite would only enlarge the product surface.
+projection with a versioned encoding, newline, slice and error law. The generic
+source-patch selector now exists, but adding `read_lines` and rewriting to it still
+requires that adapter-owned exact law. Introducing the capability without a concrete
+workload and admitted law would only enlarge the product surface.
 
-Reconsider when both an adapter-authored projection law and the reviewed source-patch
-selection seam exist. No query DSL or partial capability is added now.
+Reconsider with a concrete workload and adapter-authored projection law. The reviewed
+source-patch seam is no longer the blocker. No query DSL or partial capability is added
+now.
 
 ## Phase 4: `ordered_read_batch_fusion`
 
@@ -69,8 +82,8 @@ The Broker currently maps one Guest call to one operation index and one receipt.
 single batch capability would therefore appear as one logical call, not the ordered
 set of original calls required by the pass contract. Expanding one physical batch
 into per-item logical receipts, first-visible failure and cancellation state requires
-a new Broker lifecycle and batch adapter contract. The source rewrite also depends on
-the deferred patch selector.
+a new Broker lifecycle and batch adapter contract. The source rewrite seam now exists,
+but it cannot manufacture those per-item semantics.
 
 Reconsider only after the Broker has a reviewed logical-item/physical-dispatch model;
 do not emulate fusion with an ordinary batch tool and claim parity.
@@ -83,8 +96,8 @@ The Guest exposes synchronous capability calls, and the Broker assigns operation
 as calls arrive. There is no bounded Host helper that can start several calls while
 later presenting exceptions in source order, cancelling siblings and recording
 late/orphaned physical work. Adding that helper plus an AST lowering and budget model
-would create a new concurrent execution subsystem. It also depends on the deferred
-source-patch selector.
+would create a new concurrent execution subsystem. The available source-patch selector
+does not provide that runtime helper or its failure semantics.
 
 Reconsider only after source-order failure selection and physical orphan accounting
 have a narrow Host owner. The existing general workflow/subagent concurrency is not
@@ -95,15 +108,15 @@ reused inside one Agent Python program.
 Decision: **Deferred before implementation.**
 
 Prepared NumPy ingress can install one bounded private array as a Guest global, but
-ordinary source that constructs the same array would overwrite that global. Turning
-construction into one-shot materialization therefore still needs a final-source-bound
-execution patch. The available patch selector is prepared-scalar-region-specific and
-cannot express array assignment removal or materialization. Streaming promotion would
-inherit the same missing final patch and add speculative preparation lifecycle.
+ordinary source that constructs the same array would overwrite that global. The generic
+source-patch selector can remove or replace source, but it cannot install or bind a
+prepared materialization. Hoisting therefore still needs a typed bridge joining the
+patch to the Prepared Family object and its mutation-isolation lifecycle. Streaming
+promotion would add speculative preparation lifecycle on top of that bridge.
 
 The existing Prepared Family/data plane remains unchanged. Reconsider complete-source
-hoisting after the source-patch selector is reviewed; reconsider streaming promotion
-only after that complete-source pass exists and passes lifecycle controls.
+hoisting after a typed patch/materialization join is reviewed; reconsider streaming
+promotion only after that complete-source pass passes lifecycle controls.
 
 ## Cohort common prefix and Phase 7 composition
 
@@ -115,8 +128,9 @@ Prepared Family API, not an optimizer pass. Sharing mutable Python state, Plan/B
 objects or workspace publication remains prohibited.
 
 The retained registry now has the existing `semantic_pre_dispatch` overlay,
-`prepared_pure_region` patch and the narrow `pure_scalar_cse` source-patch plugin.
-This proves compile-time registration and one-pass dispatch, but not automatic
+`prepared_pure_region` patch and two narrow runnable source-patch plugins:
+`pure_scalar_cse` and `pure_scalar_fold`. This proves compile-time registration and
+independent one-pass dispatch, but not automatic
 composition: no current fixture needs overlapping transforms, reanalysis or conflict
 resolution. `PassPipeline` keeps deterministic outcome order, per-pass disable and
 all-off behavior; a larger ordering or fixed-point manager remains unnecessary.

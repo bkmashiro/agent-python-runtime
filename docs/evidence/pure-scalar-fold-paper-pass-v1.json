@@ -1,0 +1,106 @@
+{
+  "schema_version": "pysolate.paper-source-pass-evidence.v1",
+  "classification": "SYNTHETIC_EXACT_GUEST_PAPER_KERNEL_CORRECTNESS_AND_MATCHED_RUNTIME",
+  "paper_kernel": {
+    "source_system": "stratum",
+    "arxiv": "2603.03589",
+    "absorbed_kernel": "exact constant folding",
+    "pass_name": "pure_scalar_fold",
+    "pass_version": "pysolate.pure-scalar-fold-pass.v1",
+    "scope": "closed top-level bool/signed-int64 program using total +, - and *"
+  },
+  "artifact": {
+    "profile": "base",
+    "source_commit": "b2b3b1c2bfd848a9d0dbe1de1be1a720cbac3cca",
+    "source_tree": "7dde9ce1d95b6758ed4a8c4a59644088288a3b8e",
+    "artifact_sha256": "sha256:c1112c078a5aa1ab10440196e6fc24ee3e06c3d0f8d9a129dc082a60f5ea0320",
+    "manifest_sha256": "sha256:c95474e9cf0a8f72e418d5d6b805aa6c5b0be5b442e66b2ed7970aa70c756534"
+  },
+  "harness": {
+    "source_commit": "278086787d968c20dba7683caf54554c4aefcb58",
+    "source_tree": "176854b897f2898c2616ad70c772366d13264789",
+    "test": "TestRealGuestPureScalarFoldPaperPass"
+  },
+  "registration": {
+    "config_sha256": "sha256:ebd1a5f88e49f6170044cc146ad394b9967aa5aad5443f9d2734c86c98b130c6",
+    "stage": "whole_program_patch",
+    "consumer": "execution_patch"
+  },
+  "correctness": {
+    "positive": {
+      "replacement_count": 1,
+      "baseline_result": 52,
+      "derived_result": 52
+    },
+    "closed_scalar_program_only": true,
+    "unknown_call_control": {
+      "status": "not_applicable",
+      "unchanged_result": 3
+    },
+    "compiled_code_control": {
+      "status": "not_applicable",
+      "unchanged_result": false
+    },
+    "integer_identity_control": {
+      "status": "not_applicable",
+      "unchanged_result": false
+    },
+    "original_run_request_preserved": true,
+    "final_guest_rederived_patch": true,
+    "existing_cse_and_adapter_regressions_passed": true
+  },
+  "timing": {
+    "fixture": "200-term total scalar addition, three matched pairs per run",
+    "unit": "ns",
+    "runs": [
+      {
+        "baseline": [
+          2251750667,
+          2252137250,
+          2256372958
+        ],
+        "treatment": [
+          2341887459,
+          2344049666,
+          2368908250
+        ],
+        "medians": [
+          2252137250,
+          2344049666
+        ],
+        "treatment_over_baseline": 1.0408111965645077
+      },
+      {
+        "baseline": [
+          2375380583,
+          2385342083,
+          2387808084
+        ],
+        "treatment": [
+          2470224750,
+          2492427458,
+          2504187292
+        ],
+        "medians": [
+          2385342083,
+          2492427458
+        ],
+        "treatment_over_baseline": 1.0448930892399806
+      }
+    ],
+    "result": "negative; retained run slowdown 4.489%"
+  },
+  "claim_boundary": {
+    "supports": [
+      "static paper-kernel plugin integration",
+      "exact-Guest bounded correctness",
+      "matched synthetic negative timing"
+    ],
+    "does_not_support": [
+      "full stratum optimizer",
+      "natural workload prevalence",
+      "general speedup",
+      "projection, batching, vectorization or approximate execution"
+    ]
+  }
+}

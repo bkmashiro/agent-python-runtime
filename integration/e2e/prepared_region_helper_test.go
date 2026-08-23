@@ -15,8 +15,10 @@ import (
 	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/preparedregion"
+	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
 
 func TestExactGuestPreparedRegionHelperClaimsHostTableWithoutBrokerOrWorkspace(t *testing.T) {
@@ -103,9 +105,10 @@ func TestExactGuestEmitsCanonicalPreparedRegionPatchBindingInPrivateSession(t *t
 	source := "seed = 40\nvalue = seed + 2\nresult = value\n"
 	span := preparedregion.SourceSpan{StartLine: 2, StartColumn: 0, EndLine: 2, EndColumn: 16}
 	sourceSHA := preparedRegionDigest([]byte(source))
+	astSHA := preparedRegionASTSHA(t, artifact, config, source)
 	regionDescriptor := fmt.Sprintf("pysolate.semantic-candidate-region.v0\x00%s\x001\x002:0:2:16", sourceSHA)
 	binding := preparedregion.PreparedRegionBinding{
-		SourceSHA256: sourceSHA, ASTSHA256: digestA, AnalysisSHA256: digestA,
+		SourceSHA256: sourceSHA, ASTSHA256: astSHA, AnalysisSHA256: digestA,
 		RegionID: preparedRegionDigest([]byte(regionDescriptor)), RegionSpan: span,
 		RegionSourceSHA256: preparedRegionDigest([]byte("value = seed + 2")), LiveInsSHA256: digestA,
 		EnvironmentSHA256: digestA, ExecutionProfileSHA256: digestA, ImportClosureSHA256: digestA,
@@ -295,9 +298,10 @@ func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecut
 	}
 	span := preparedregion.SourceSpan{StartLine: 2, StartColumn: 0, EndLine: 2, EndColumn: 16}
 	sourceSHA := preparedRegionDigest([]byte(source))
+	astSHA := preparedRegionASTSHA(t, artifact, config, source)
 	regionDescriptor := fmt.Sprintf("pysolate.semantic-candidate-region.v0\x00%s\x001\x002:0:2:16", sourceSHA)
 	decisionRaw, decision, err := preparedregion.SealPreparedRegionDecision(preparedregion.PreparedRegionBinding{
-		SourceSHA256: sourceSHA, ASTSHA256: digestA, AnalysisSHA256: digestA,
+		SourceSHA256: sourceSHA, ASTSHA256: astSHA, AnalysisSHA256: digestA,
 		RegionID: preparedRegionDigest([]byte(regionDescriptor)), RegionSpan: span,
 		RegionSourceSHA256: preparedRegionDigest([]byte("value = seed + 2")), LiveInsSHA256: liveInsSHA,
 		EnvironmentSHA256: digestA, ExecutionProfileSHA256: profileSHA256, ImportClosureSHA256: digestA,
@@ -531,9 +535,10 @@ func qualifyPreparedDerivedFixture(t *testing.T, ctx context.Context, artifact [
 		t.Fatal(err)
 	}
 	sourceSHA := preparedRegionDigest([]byte(source))
+	astSHA := preparedRegionASTSHA(t, artifact, config, source)
 	regionDescriptor := fmt.Sprintf("pysolate.semantic-candidate-region.v0\x00%s\x00%d\x00%d:%d:%d:%d", sourceSHA, statementIndex, span.StartLine, span.StartColumn, span.EndLine, span.EndColumn)
 	decisionRaw, decision, err := preparedregion.SealPreparedRegionDecision(preparedregion.PreparedRegionBinding{
-		SourceSHA256: sourceSHA, ASTSHA256: digestA, AnalysisSHA256: digestA,
+		SourceSHA256: sourceSHA, ASTSHA256: astSHA, AnalysisSHA256: digestA,
 		RegionID: preparedRegionDigest([]byte(regionDescriptor)), RegionSpan: span,
 		RegionSourceSHA256: preparedRegionDigest([]byte(regionSource)), LiveInsSHA256: liveInsSHA,
 		EnvironmentSHA256: digestA, ExecutionProfileSHA256: profileSHA256, ImportClosureSHA256: digestA,
@@ -779,6 +784,35 @@ func runPreparedRegionExact(t *testing.T, artifact []byte, config runtimeconfig.
 		t.Fatal(err)
 	}
 	return response
+}
+
+func preparedRegionASTSHA(t *testing.T, artifact []byte, config runtimeconfig.RunConfig, source string) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	runner, err := (wazeroengine.Factory{}).New(ctx, artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	profile := config.ExecutionProfile
+	request, err := semantic.NewRequest(source, semantic.Bindings{
+		ArtifactSHA256: profile.ArtifactSHA256(), ExecutionProfileSHA256: runner.Properties().ExecutionProfileBindingSHA256,
+		ImportClosureSHA256:  agentfunction.ImportClosureIdentity(profile.AvailableImports(), profile.QualifiedImports()),
+		CapabilityPlanSHA256: digestA,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified, err := semantic.AnalyzeVerified(ctx, trustedSemanticRunner(t, runner), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysis, err := verified.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return analysis.ASTSHA256
 }
 
 func loadPreparedRegionArtifact(t *testing.T) ([]byte, runtimeconfig.ExecutionProfile) {

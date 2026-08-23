@@ -192,23 +192,26 @@ needs another top-level hard-coded branch, and the substrate remains small enoug
 delete without migrating runtime semantics. General ordering/composition stays deferred
 to Phase 7 after at least three retained passes expose the real shared seam.
 
+Checklist legend: `[x]` is completed and `[-]` is explicitly deferred by the decision
+paragraph in that phase. A deferred item is closed for this megagoal, not implemented.
+
 ## Phase 1: Third real pass, pure scalar CSE
 
 **Promise:** Validate a reusable AST-in/AST-out pass shape without introducing external
 effects or a large optimizer framework.
 
-- [ ] Add RED fixtures for repeated exact `bool`/`int64` scalar expressions and controls
+- [-] Add RED fixtures for repeated exact `bool`/`int64` scalar expressions and controls
   for division, calls, heap mutation, alias-sensitive values, exceptions and opaque
   control.
-- [ ] Implement a bounded `pure_scalar_cse` transformation using target-Guest analysis.
+- [-] Implement a bounded `pure_scalar_cse` transformation using target-Guest analysis.
   It may replace only repeated proven scalar values whose evaluation is total and whose
   identity is unobservable.
-- [ ] Bind pass name/version/config, original and derived AST, source, profile, import
+- [-] Bind pass name/version/config, original and derived AST, source, profile, import
   closure and Plan through the existing registration/patch lineage.
-- [ ] Compile the derived AST before one formal execution; failure selects unchanged
+- [-] Compile the derived AST before one formal execution; failure selects unchanged
   source before Agent execution.
-- [ ] Differentially compare result, exception, stdout, logical effects and workspace.
-- [ ] Measure transform/compile/runtime cost but make no agent-workload speedup claim.
+- [-] Differentially compare result, exception, stdout, logical effects and workspace.
+- [-] Measure transform/compile/runtime cost but make no agent-workload speedup claim.
 
 **Gate P1:** Every positive and negative case matches target-CPython behavior; the pass
 has one exact off-state and fails closed. If the third pass requires a broad IR or cannot
@@ -247,19 +250,19 @@ no write is preissued and no analysis-service optimization is mislabeled as a pa
 
 **Promise:** Reduce repeated physical reads while retaining every original logical call.
 
-- [ ] Freeze a coalescing contract distinct from pre-dispatch. It must bind exact
+- [-] Freeze a coalescing contract distinct from pre-dispatch. It must bind exact
   capability/spec/handler/Plan/grant, resource identity, arguments, freshness epoch,
   privacy partition, workspace root, result codec and logical occurrence set.
-- [ ] Keep live/latest reads, writes, unknown effects and mutable identity out of the
+- [-] Keep live/latest reads, writes, unknown effects and mutable identity out of the
   admitted subset.
-- [ ] RED-test two exact repeated reads, changed arguments, changed roots, intervening
+- [-] RED-test two exact repeated reads, changed arguments, changed roots, intervening
   private write, live freshness, first-call failure, second-call failure, cancellation,
   result mutation and Plan drift.
-- [ ] Implement one physical read plus detached per-occurrence materialization. Preserve
+- [-] Implement one physical read plus detached per-occurrence materialization. Preserve
   source-order logical events, budgets, receipts and exception behavior.
-- [ ] Account late/orphaned physical work; never hide a speculative or single-flight
+- [-] Account late/orphaned physical work; never hide a speculative or single-flight
   attempt behind a cache hit.
-- [ ] Run exact-Guest pass-off/pass-on and race tests.
+- [-] Run exact-Guest pass-off/pass-on and race tests.
 
 **Gate P2:** Positive rows record fewer physical reads with identical ordered logical
 trace and terminal/workspace state. Every adversarial row rejects or matches unchanged
@@ -276,14 +279,14 @@ capability lifecycle; see
 **Promise:** Reduce Host-to-Guest bytes for a coding-agent read pattern under one exact,
 versioned rewrite law.
 
-- [ ] Audit the real capability surface and select one useful bounded coding pattern.
+- [-] Audit the real capability surface and select one useful bounded coding pattern.
   Prefer an exact file range/line projection; do not invent a generic query DSL.
-- [ ] Freeze Python semantics for encoding, newline handling, slicing, missing files,
+- [-] Freeze Python semantics for encoding, newline handling, slicing, missing files,
   oversized results and exceptions.
-- [ ] Add one adapter-declared rewrite law and bind it into Plan/pass identity.
-- [ ] Transform only the exact AST shape. Dynamic indices, method rebinding, unknown
+- [-] Add one adapter-declared rewrite law and bind it into Plan/pass identity.
+- [-] Transform only the exact AST shape. Dynamic indices, method rebinding, unknown
   encoding, mutable intermediate values and live roots reject.
-- [ ] Differentially test result/error and compare physical bytes, calls and allocations.
+- [-] Differentially test result/error and compare physical bytes, calls and allocations.
 
 **Gate P3:** One real coding fixture reduces transferred bytes under exact semantic
 parity. If the existing capability surface cannot express an exact law without a broad
@@ -298,15 +301,15 @@ Adding an unused projection capability would only widen the product surface.
 **Promise:** Turn a bounded map/list-comprehension of identical safe operations into one
 physical batch while retaining per-item logical behavior.
 
-- [ ] Freeze `map(single, args) == batch(args)` semantics including empty input, order,
+- [-] Freeze `map(single, args) == batch(args)` semantics including empty input, order,
   duplicate arguments, first visible failure, partial Host failure, cancellation and
   per-item result bounds.
-- [ ] Require one capability, Plan, freshness, privacy partition and workspace root.
-- [ ] RED-test external writes, approval-gated calls, changing roots, dynamic callable,
+- [-] Require one capability, Plan, freshness, privacy partition and workspace root.
+- [-] RED-test external writes, approval-gated calls, changing roots, dynamic callable,
   generators with side effects, short-circuit behavior and oversized batches.
-- [ ] Implement the minimum list-comprehension or simple-loop rewrite supported by the
+- [-] Implement the minimum list-comprehension or simple-loop rewrite supported by the
   target AST analyzer.
-- [ ] Expand one physical batch outcome into ordered logical receipts without inventing
+- [-] Expand one physical batch outcome into ordered logical receipts without inventing
   success for unperformed items.
 
 **Gate P4:** Batch-positive fixtures reduce Host crossings and preserve complete logical
@@ -321,14 +324,14 @@ a new Broker item lifecycle and source-patch lowering.
 **Promise:** Parallelize only calls whose external execution is safe even when an earlier
 source-order call later fails.
 
-- [ ] Extend the dependency/effect proof only as far as required for adjacent assignments
+- [-] Extend the dependency/effect proof only as far as required for adjacent assignments
   or another predeclared bounded basic-block shape.
-- [ ] Freeze source-order exception selection, cancellation, late/orphaned work and
+- [-] Freeze source-order exception selection, cancellation, late/orphaned work and
   physical budget semantics before implementation.
-- [ ] Reject writes, approvals, unknown effects, live reads, dynamic calls and any
+- [-] Reject writes, approvals, unknown effects, live reads, dynamic calls and any
   data/control predecessor.
-- [ ] Lower to a bounded Host helper without adding a scheduler or general DAG runtime.
-- [ ] Compare against unchanged serial execution under matched delays.
+- [-] Lower to a bounded Host helper without adding a scheduler or general DAG runtime.
+- [-] Compare against unchanged serial execution under matched delays.
 
 **Gate P5:** Exact outcomes and logical traces match for every row; at least one frozen
 read-only coordinate shows reduced critical path after pass/analyzer/Host overhead. A
@@ -344,15 +347,15 @@ Adding it would create an intra-program concurrent execution subsystem.
 **Promise:** Connect a genuine AST hoisting pass to the existing bounded Prepared Family
 substrate.
 
-- [ ] Select one exact immutable literal or NumPy construction shape already supported
+- [-] Select one exact immutable literal or NumPy construction shape already supported
   by the `numpy-core` profile and descriptor/body contract.
-- [ ] RED-test dtype/shape/layout drift, mutable aliasing, source/input/profile/Plan drift,
+- [-] RED-test dtype/shape/layout drift, mutable aliasing, source/input/profile/Plan drift,
   oversized body, unavailable profile, consumer cancellation and family close.
-- [ ] Rewrite construction to one-shot materialization while retaining a fresh private
+- [-] Rewrite construction to one-shot materialization while retaining a fresh private
   Python object for each consumer.
-- [ ] Compare ordinary fresh, private-copy and matched Linux private-COW lanes. Report
+- [-] Compare ordinary fresh, private-copy and matched Linux private-COW lanes. Report
   only exact platform modes observed.
-- [ ] Keep prepared body out of source, RunRequest, Broker JSON, receipts and public
+- [-] Keep prepared body out of source, RunRequest, Broker JSON, receipts and public
   evidence.
 
 **Gate P6:** Real-Guest fixtures match values and mutation isolation; lifecycle/body
@@ -369,16 +372,16 @@ The closed Prepared Family data plane and COW claims remain unchanged.
 construction can be prepared after its complete prefix arrives and consumed only after
 the complete final AST admits the normal execution patch.
 
-- [ ] Freeze positive and negative chunk schedules before timing. Include suffix drift,
+- [-] Freeze positive and negative chunk schedules before timing. Include suffix drift,
   invalid final syntax, later mutation/dependency, profile/Plan drift, cancellation and
   preparation completing after finalization.
-- [ ] Reuse the final-source region/array patch contract. Prefix analysis may start
+- [-] Reuse the final-source region/array patch contract. Prefix analysis may start
   physical pure/private work but cannot pre-authorize the final patch.
-- [ ] Invalid, abandoned or changed final source discards preparation and records its
+- [-] Invalid, abandoned or changed final source discards preparation and records its
   physical cost without a logical claim.
-- [ ] Do not execute the visible prefix as Agent Python. Scratch execution, if needed,
+- [-] Do not execute the visible prefix as Agent Python. Scratch execution, if needed,
   remains authority-free, output-bounded and separate from the formal Guest.
-- [ ] Measure whether remaining source-generation time overlaps enough preparation cost
+- [-] Measure whether remaining source-generation time overlaps enough preparation cost
   to justify retaining the hybrid pass.
 
 **Gate P6S:** Retain a hybrid streaming pass only if every semantic/identity/lifecycle
@@ -417,15 +420,15 @@ No shared heap, Plan/Broker reuse, scheduler or workspace publication is introdu
 
 **Promise:** Compose proven passes without building a second compiler.
 
-- [ ] Extract only the shared registration, ordering, identity and bounded transform
+- [-] Extract only the shared registration, ordering, identity and bounded transform
   driver exercised by at least three retained passes.
-- [ ] Freeze a deterministic pass order and reject duplicate/incompatible consumers.
-- [ ] Re-run target analysis after transformations when a later pass relies on changed
+- [-] Freeze a deterministic pass order and reject duplicate/incompatible consumers.
+- [-] Re-run target analysis after transformations when a later pass relies on changed
   AST facts; never reuse stale analysis by digest convention alone.
-- [ ] Add pairwise and selected multi-pass differential cases for specialization, fold,
+- [-] Add pairwise and selected multi-pass differential cases for specialization, fold,
   CSE, pushdown, batch and parallel order interactions.
-- [ ] Add pass-level disable flags and one all-off unchanged-source oracle.
-- [ ] Record rejection reasons and final derived AST identity without source bodies in
+- [-] Add pass-level disable flags and one all-off unchanged-source oracle.
+- [-] Record rejection reasons and final derived AST identity without source bodies in
   public evidence.
 
 **Gate P7:** Pass order is deterministic; stale-analysis, authority-widening and
@@ -474,17 +477,17 @@ claim.
 - [ ] Run independent frozen-target review of each effect-changing pass and the composed
   pipeline. Fix every Blocking/High/Medium finding with RED tests and rerun affected
   evidence.
-- [ ] Run full Go, focused race, Guest Python, scripts, vet and `git diff --check` gates.
-- [ ] Run exact real-Guest tests for every retained Guest transform. Missing
+- [x] Run full Go, focused race, Guest Python, scripts, vet and `git diff --check` gates.
+- [x] Run exact real-Guest tests for every retained Guest transform. Missing
   `AGENT_RUNTIME_GUEST` skips do not count as evidence.
-- [ ] Use gpu31 only for bounded Linux private-COW or exact Linux behavior that cannot be
+- [x] Use gpu31 only for bounded Linux private-COW or exact Linux behavior that cannot be
   established locally; use shared toolchain/cache paths.
-- [ ] Update main docs and `pysolate-explained` paper notes to separate implemented,
+- [x] Update main docs and `pysolate-explained` paper notes to separate implemented,
   rejected, substrate and related-work claims.
-- [ ] Do not modify thesis/report/deck artifacts unless separately requested.
-- [ ] Sign and push each stable slice. Do not manually trigger CI; prefer local and ICL
+- [x] Do not modify thesis/report/deck artifacts unless separately requested.
+- [x] Sign and push each stable slice. Do not manually trigger CI; prefer local and ICL
   gates under the existing resource policy.
-- [ ] Verify branch clean/upstream-aligned and every relevant commit signed.
+- [x] Verify branch clean/upstream-aligned and every relevant commit signed.
 
 **Gate P9:** No unchecked executable item remains. Each candidate is Current, Rejected
 with evidence, Deferred by explicit non-goal or Blocked by a named owner decision. Final

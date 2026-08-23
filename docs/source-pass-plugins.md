@@ -51,6 +51,19 @@ It replaces the second adjacent scalar RHS with the first result name while pres
 
 This pass proves that a new transform can define itself, register without changing the central registry, run in the exact Guest and execute through the common patch selector. It is not intended as a broad Python optimizer.
 
+### Exact-Guest result
+
+The checked synthetic control produced one replacement, the same `[52, 52]` result in
+pass-off and pass-on execution, the same original model-source identity and a different
+effective AST identity. An inapplicable repeated call executed the unchanged source and
+returned `7`.
+
+The matched three-pair runtime fixture was negative: baseline median 2,479,375,084 ns
+and treatment median 2,876,464,667 ns, a 16.02% slowdown. The initial CSE is therefore
+an extensibility/correctness demonstrator, not a speedup result. The exact artifact,
+raw samples and claim boundary are in
+[`source-pass-plugin-v1.json`](evidence/source-pass-plugin-v1.json).
+
 ## Adding a paper pass
 
 1. Define a versioned `passregistration.Definition` and bind it to the current analyzer/config.

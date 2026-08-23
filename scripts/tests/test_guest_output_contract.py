@@ -13,6 +13,9 @@ def load_runtime():
     spec = importlib.util.spec_from_file_location("agent_runtime_output_contract_test", BOOTSTRAP)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    # The bootstrap is now a package with relative helper imports. Register the
+    # fresh package instance while its loader resolves those imports.
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     module._initialize("{}")
     return module

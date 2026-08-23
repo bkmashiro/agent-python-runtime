@@ -47,7 +47,7 @@ left = seed * seed + 3
 right = seed * seed + 3
 ```
 
-It replaces the second adjacent scalar RHS with the first result name while preserving source byte length and line layout. Both assignments must be single-name assignments, the RHS trees must be identical one-line ASCII spans, both static values must match before and after the first assignment, and the expression may contain only known bool/int64 names, bool/int literals and `+`, `-` or `*`. Calls, attributes, subscripts, control flow and non-adjacent reuse are not transformed.
+It replaces the second adjacent scalar RHS with the first result name while preserving source byte length and line layout. Both assignments must be single-name assignments, the RHS trees must be identical one-line ASCII spans, both static values must match before and after the first assignment, and the expression may contain only known bool/int64 names, bool/int literals and `+`, `-` or `*`. Calls, attributes, subscripts, control flow and non-adjacent reuse are not transformed. Any unsupported statement or assignment clears all remembered scalar facts before scanning continues.
 
 This pass proves that a new transform can define itself, register without changing the central registry, run in the exact Guest and execute through the common patch selector. It is not intended as a broad Python optimizer.
 
@@ -55,11 +55,12 @@ This pass proves that a new transform can define itself, register without changi
 
 The checked synthetic control produced one replacement, the same `[52, 52]` result in
 pass-off and pass-on execution, the same original model-source identity and a different
-effective AST identity. Inapplicable repeated-call and self-referential
-reassignment controls executed the unchanged source and returned `7` and `[2, 3]`.
+effective AST identity. Inapplicable repeated-call, self-referential reassignment and
+unknown-call mutation controls executed the unchanged source and returned `7`, `[2, 3]`
+and `[4, 16]`.
 
-The matched three-pair runtime fixture was negative: baseline median 2,444,994,167 ns
-and treatment median 2,819,939,459 ns, a 15.34% slowdown. The initial CSE is therefore
+The matched three-pair runtime fixture was negative: baseline median 2,469,225,917 ns
+and treatment median 2,844,401,042 ns, a 15.19% slowdown. The initial CSE is therefore
 an extensibility/correctness demonstrator, not a speedup result. The exact artifact,
 raw samples and claim boundary are in
 [`source-pass-plugin-v1.json`](evidence/source-pass-plugin-v1.json).

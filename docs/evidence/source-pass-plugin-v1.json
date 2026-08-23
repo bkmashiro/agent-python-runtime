@@ -3,14 +3,14 @@
   "classification": "SYNTHETIC_EXACT_GUEST_PLUGIN_CORRECTNESS_AND_MATCHED_RUNTIME",
   "artifact": {
     "profile": "base",
-    "source_commit": "7b285e87917df3a60659d82dacdab26327b3532f",
-    "source_tree": "0064f0ef69875e0c17fcb8025831359aebaccac9",
-    "sha256": "sha256:4ef73fbcf14c0bf5e4ef0d0dd11740fb56584ca7c742fb89f234e9ab911a9fb0",
-    "manifest_sha256": "sha256:1c5a1adbdf1e1ebff91636b2d03d5929d50f3e5c03c1c4b7ef6d92f613b45827"
+    "source_commit": "08e87946358047598d1b77b8b9a965407e69fa44",
+    "source_tree": "fa7c942ccee703fa8b31db6cdaa8bf6a83fa1ba3",
+    "sha256": "sha256:b646665b26a1fb7899d0a457d238025ea870b44209765220853da5bf824444e2",
+    "manifest_sha256": "sha256:314864bdf8413ac68e39cc5d47b118ed80c3ac93379324c21926a28dfb29c8f0"
   },
   "harness": {
-    "source_commit": "c61ea0e2198d81b6f83e13b0e82f6848773545da",
-    "source_tree": "f568c106f38c62f659bce63b52f9de00d8c4a0f8",
+    "source_commit": "08e87946358047598d1b77b8b9a965407e69fa44",
+    "source_tree": "fa7c942ccee703fa8b31db6cdaa8bf6a83fa1ba3",
     "test": "TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest"
   },
   "platform": {
@@ -32,21 +32,25 @@
     "inapplicable_call_fixture_used_original_source": true,
     "inapplicable_call_result": 7,
     "self_reference_fixture_used_original_source": true,
-    "self_reference_result": [2, 3]
+    "self_reference_result": [2, 3],
+    "unknown_call_invalidated_scalar_facts": true,
+    "unknown_call_fixture_used_original_source": true,
+    "unknown_call_result": [4, 16]
   },
   "timing": {
     "fixture": "200 repeated int64-safe seed*seed-48 terms in two adjacent assignments",
     "repetitions": 3,
-    "baseline_nanos_sorted": [2442963834, 2444994167, 2470149666],
-    "treatment_nanos_sorted": [2814542417, 2819939459, 2871473250],
-    "baseline_median_nanos": 2444994167,
-    "treatment_median_nanos": 2819939459,
-    "treatment_over_baseline": 1.153352223518822,
-    "treatment_slowdown_percent": 15.335222351882205
+    "baseline_nanos_sorted": [2455103250, 2469225917, 2473934250],
+    "treatment_nanos_sorted": [2835434750, 2844401042, 2850664209],
+    "baseline_median_nanos": 2469225917,
+    "treatment_median_nanos": 2844401042,
+    "treatment_over_baseline": 1.1519403803503816,
+    "treatment_slowdown_percent": 15.19403803503816
   },
   "claim_boundary": [
     "compile-time plugin registration and exact-Guest execution work",
     "the first pure scalar CSE plugin preserves the checked synthetic results",
+    "unknown statements invalidate all remembered scalar facts",
     "the measured end-to-end treatment is slower on this fixture",
     "no natural prevalence or production speedup claim",
     "effect-owning paper passes still require a typed Host stage adapter"

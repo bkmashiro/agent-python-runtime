@@ -16,6 +16,8 @@ const PreregistrationSchemaVersion = "pysolate.source-bound-pass-preregistration
 
 type Stage string
 type Outcome string
+type ComparatorField string
+type ForbiddenClaim string
 
 const (
 	StagePrefixOverlay      Stage = "prefix_overlay"
@@ -27,6 +29,25 @@ const (
 	OutcomeDiscarded             Outcome = "discarded"
 	OutcomePreparedAwaitingFinal Outcome = "prepared_awaiting_final"
 	OutcomeRejected              Outcome = "rejected"
+
+	ComparatorOriginalSourceSHA256 ComparatorField = "original_source_sha256"
+	ComparatorDerivedSourceSHA256  ComparatorField = "derived_source_sha256"
+	ComparatorOriginalASTSHA256    ComparatorField = "original_ast_sha256"
+	ComparatorDerivedASTSHA256     ComparatorField = "derived_ast_sha256"
+	ComparatorPassOrder            ComparatorField = "pass_order"
+	ComparatorLogicalEvents        ComparatorField = "logical_events"
+	ComparatorPhysicalEvents       ComparatorField = "physical_events"
+	ComparatorResultSHA256         ComparatorField = "result_sha256"
+	ComparatorExceptionClass       ComparatorField = "exception_class"
+	ComparatorExceptionOrder       ComparatorField = "exception_order"
+	ComparatorWorkspaceDisposition ComparatorField = "workspace_disposition"
+	ComparatorRejectionReason      ComparatorField = "rejection_reason"
+
+	ForbiddenPresealExecution        ForbiddenClaim = "formal_execution_before_final_source_seal"
+	ForbiddenCapabilityAmplification ForbiddenClaim = "capability_amplification"
+	ForbiddenPostEffectReplay        ForbiddenClaim = "post_effect_replay"
+	ForbiddenGenericRollback         ForbiddenClaim = "generic_external_rollback"
+	ForbiddenUnmatchedPerformance    ForbiddenClaim = "performance_without_matched_artifact"
 )
 
 var (
@@ -54,20 +75,24 @@ type Case struct {
 }
 
 type Preregistration struct {
-	SchemaVersion  string    `json:"schema_version"`
-	IdentitySHA256 string    `json:"identity_sha256"`
-	Stages         []Stage   `json:"stages"`
-	Outcomes       []Outcome `json:"outcomes"`
-	Bounds         Bounds    `json:"bounds"`
-	Cases          []Case    `json:"cases"`
+	SchemaVersion    string            `json:"schema_version"`
+	IdentitySHA256   string            `json:"identity_sha256"`
+	Stages           []Stage           `json:"stages"`
+	Outcomes         []Outcome         `json:"outcomes"`
+	Bounds           Bounds            `json:"bounds"`
+	ComparatorFields []ComparatorField `json:"comparator_fields"`
+	ForbiddenClaims  []ForbiddenClaim  `json:"forbidden_claims"`
+	Cases            []Case            `json:"cases"`
 }
 
 type preregistrationIdentity struct {
-	SchemaVersion string    `json:"schema_version"`
-	Stages        []Stage   `json:"stages"`
-	Outcomes      []Outcome `json:"outcomes"`
-	Bounds        Bounds    `json:"bounds"`
-	Cases         []Case    `json:"cases"`
+	SchemaVersion    string            `json:"schema_version"`
+	Stages           []Stage           `json:"stages"`
+	Outcomes         []Outcome         `json:"outcomes"`
+	Bounds           Bounds            `json:"bounds"`
+	ComparatorFields []ComparatorField `json:"comparator_fields"`
+	ForbiddenClaims  []ForbiddenClaim  `json:"forbidden_claims"`
+	Cases            []Case            `json:"cases"`
 }
 
 func PreregistrationV1() Preregistration {
@@ -79,6 +104,16 @@ func PreregistrationV1() Preregistration {
 			MaxPasses: 16, MaxASTNodes: 8192, MaxSourceBytes: 1 << 20,
 			MaxPreparationBytes: 8 << 20, MaxReanalyses: 16,
 		},
+		ComparatorFields: []ComparatorField{
+			ComparatorOriginalSourceSHA256, ComparatorDerivedSourceSHA256, ComparatorOriginalASTSHA256,
+			ComparatorDerivedASTSHA256, ComparatorPassOrder, ComparatorLogicalEvents,
+			ComparatorPhysicalEvents, ComparatorResultSHA256, ComparatorExceptionClass,
+			ComparatorExceptionOrder, ComparatorWorkspaceDisposition, ComparatorRejectionReason,
+		},
+		ForbiddenClaims: []ForbiddenClaim{
+			ForbiddenPresealExecution, ForbiddenCapabilityAmplification, ForbiddenPostEffectReplay,
+			ForbiddenGenericRollback, ForbiddenUnmatchedPerformance,
+		},
 		Cases: []Case{
 			{ID: "branch_not_taken", Stage: StagePrefixOverlay, ExpectedOutcome: OutcomeDiscarded, RejectionReason: "call_not_reached", ExpectedPhysicalWork: 1},
 			{ID: "cancellation", Stage: StagePrefixOverlay, ExpectedOutcome: OutcomeDiscarded, RejectionReason: "cancelled", ExpectedPhysicalWork: 1},
@@ -88,6 +123,7 @@ func PreregistrationV1() Preregistration {
 			{ID: "invalid_final_suffix", Stage: StagePrefixOverlay, ExpectedOutcome: OutcomeDiscarded, RejectionReason: "final_source_invalid", ExpectedPhysicalWork: 1},
 			{ID: "mutable_alias", Stage: StageWholeProgramPatch, ExpectedOutcome: OutcomeRejected, RejectionReason: "identity_alias"},
 			{ID: "plan_drift", Stage: StageWholeProgramPatch, ExpectedOutcome: OutcomeRejected, RejectionReason: "plan_mismatch"},
+			{ID: "positive_hybrid_preparation", Stage: StageHybridPreparePatch, ExpectedOutcome: OutcomePreparedAwaitingFinal, ExpectedPhysicalWork: 1},
 			{ID: "positive_prefix_overlay", Stage: StagePrefixOverlay, ExpectedOutcome: OutcomeApplied, ExpectedLogicalEvents: 1, ExpectedPhysicalWork: 1},
 			{ID: "positive_pure_scalar_patch", Stage: StageWholeProgramPatch, ExpectedOutcome: OutcomeApplied},
 			{ID: "privacy_drift", Stage: StagePrefixOverlay, ExpectedOutcome: OutcomeRejected, RejectionReason: "privacy_mismatch"},
@@ -105,6 +141,8 @@ func (value Preregistration) Validate() error {
 		!reflect.DeepEqual(value.Stages, []Stage{StagePrefixOverlay, StageHybridPreparePatch, StageWholeProgramPatch, StageMultiProgramPatch}) ||
 		!reflect.DeepEqual(value.Outcomes, []Outcome{OutcomeApplied, OutcomeDiscarded, OutcomePreparedAwaitingFinal, OutcomeRejected}) ||
 		value.Bounds != (Bounds{MaxPasses: 16, MaxASTNodes: 8192, MaxSourceBytes: 1 << 20, MaxPreparationBytes: 8 << 20, MaxReanalyses: 16}) ||
+		!reflect.DeepEqual(value.ComparatorFields, PreregistrationV1().ComparatorFields) ||
+		!reflect.DeepEqual(value.ForbiddenClaims, PreregistrationV1().ForbiddenClaims) ||
 		len(value.Cases) == 0 || len(value.Cases) > 64 || identitySHA256(value) != value.IdentitySHA256 {
 		return ErrInvalidPreregistration
 	}
@@ -120,7 +158,7 @@ func (value Preregistration) Validate() error {
 			return ErrInvalidPreregistration
 		}
 		seen[row.ID] = struct{}{}
-		if row.ExpectedOutcome == OutcomeApplied {
+		if row.ExpectedOutcome == OutcomeApplied || row.ExpectedOutcome == OutcomePreparedAwaitingFinal {
 			if row.RejectionReason != "" {
 				return ErrInvalidPreregistration
 			}
@@ -155,7 +193,10 @@ func DecodePreregistration(raw []byte) (Preregistration, error) {
 }
 
 func identitySHA256(value Preregistration) string {
-	identity := preregistrationIdentity{SchemaVersion: value.SchemaVersion, Stages: value.Stages, Outcomes: value.Outcomes, Bounds: value.Bounds, Cases: value.Cases}
+	identity := preregistrationIdentity{
+		SchemaVersion: value.SchemaVersion, Stages: value.Stages, Outcomes: value.Outcomes, Bounds: value.Bounds,
+		ComparatorFields: value.ComparatorFields, ForbiddenClaims: value.ForbiddenClaims, Cases: value.Cases,
+	}
 	raw, err := json.Marshal(identity)
 	if err != nil {
 		return ""

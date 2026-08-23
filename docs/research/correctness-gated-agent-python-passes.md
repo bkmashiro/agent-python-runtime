@@ -4,7 +4,8 @@ Status: **design contract for the next optimizer lane**
 
 The body-free v1 study is frozen by
 [`source-bound-pass-preregistration-v1.json`](../evidence/source-bound-pass-preregistration-v1.json).
-It binds the four stage identities, four outcome classes, pipeline bounds and 14
+It binds the four stage identities, four outcome classes, pipeline bounds, the
+body-safe comparison columns, forbidden claim classes and 15
 positive/adversarial controls without storing source, result or workspace bodies.
 
 This note defines what Pysolate may call an optimization pass and how that pass

@@ -21,10 +21,26 @@ func TestPreregistrationFreezesStagesOutcomesBoundsAndControls(t *testing.T) {
 	if value.Bounds.MaxPasses != 16 || value.Bounds.MaxASTNodes != 8192 || value.Bounds.MaxSourceBytes != 1<<20 || value.Bounds.MaxPreparationBytes != 8<<20 || value.Bounds.MaxReanalyses != 16 {
 		t.Fatalf("bounds=%+v", value.Bounds)
 	}
+	wantComparators := []ComparatorField{
+		ComparatorOriginalSourceSHA256, ComparatorDerivedSourceSHA256, ComparatorOriginalASTSHA256,
+		ComparatorDerivedASTSHA256, ComparatorPassOrder, ComparatorLogicalEvents,
+		ComparatorPhysicalEvents, ComparatorResultSHA256, ComparatorExceptionClass,
+		ComparatorExceptionOrder, ComparatorWorkspaceDisposition, ComparatorRejectionReason,
+	}
+	if !reflect.DeepEqual(value.ComparatorFields, wantComparators) {
+		t.Fatalf("comparators=%v", value.ComparatorFields)
+	}
+	wantForbidden := []ForbiddenClaim{
+		ForbiddenPresealExecution, ForbiddenCapabilityAmplification, ForbiddenPostEffectReplay,
+		ForbiddenGenericRollback, ForbiddenUnmatchedPerformance,
+	}
+	if !reflect.DeepEqual(value.ForbiddenClaims, wantForbidden) {
+		t.Fatalf("forbidden=%v", value.ForbiddenClaims)
+	}
 	wantCases := []string{
 		"branch_not_taken", "cancellation", "earlier_exception", "external_write", "freshness_drift", "invalid_final_suffix",
-		"mutable_alias", "plan_drift", "positive_prefix_overlay", "positive_pure_scalar_patch", "privacy_drift", "unsupported_syntax",
-		"workspace_drift", "zero_iteration",
+		"mutable_alias", "plan_drift", "positive_hybrid_preparation", "positive_prefix_overlay", "positive_pure_scalar_patch",
+		"privacy_drift", "unsupported_syntax", "workspace_drift", "zero_iteration",
 	}
 	if len(value.Cases) != len(wantCases) {
 		t.Fatalf("cases=%d", len(value.Cases))

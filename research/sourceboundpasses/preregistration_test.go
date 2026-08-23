@@ -2,6 +2,7 @@ package sourceboundpasses
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"reflect"
 	"testing"
@@ -94,5 +95,48 @@ func TestPreregistrationRejectsUnknownFieldsAndIdentityDrift(t *testing.T) {
 	mutated = bytes.Replace(mutated, needle, []byte(`"max_passes":15`), 1)
 	if _, err := DecodePreregistration(mutated); err == nil {
 		t.Fatal("accepted identity drift")
+	}
+}
+
+func TestPreregistrationRejectsInternallyResealedCaseMatrixDrift(t *testing.T) {
+	for name, mutate := range map[string]func(*Preregistration){
+		"omitted case": func(value *Preregistration) {
+			value.Cases = append([]Case(nil), value.Cases[1:]...)
+		},
+		"changed hybrid outcome": func(value *Preregistration) {
+			for index := range value.Cases {
+				if value.Cases[index].ID == "positive_hybrid_preparation" {
+					value.Cases[index].ExpectedOutcome = OutcomeApplied
+					value.Cases[index].ExpectedPhysicalWork = 0
+				}
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			value := PreregistrationV1()
+			mutate(&value)
+			value.IdentitySHA256 = identitySHA256(value)
+			raw, err := json.Marshal(value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := DecodePreregistration(raw); err == nil {
+				t.Fatal("resealed matrix drift decoded")
+			}
+		})
+	}
+}
+
+func TestPreregistrationRejectsDuplicateJSONKeys(t *testing.T) {
+	raw, err := EncodePreregistration(PreregistrationV1())
+	if err != nil {
+		t.Fatal(err)
+	}
+	duplicate := append([]byte(`{"schema_version":"pysolate.source-bound-pass-preregistration.v1",`), raw[1:]...)
+	if !json.Valid(duplicate) {
+		t.Fatal("duplicate-key fixture is malformed")
+	}
+	if _, err := DecodePreregistration(duplicate); err == nil {
+		t.Fatal("duplicate key decoded")
 	}
 }

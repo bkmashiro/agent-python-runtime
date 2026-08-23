@@ -143,7 +143,7 @@ func (value Preregistration) Validate() error {
 		value.Bounds != (Bounds{MaxPasses: 16, MaxASTNodes: 8192, MaxSourceBytes: 1 << 20, MaxPreparationBytes: 8 << 20, MaxReanalyses: 16}) ||
 		!reflect.DeepEqual(value.ComparatorFields, PreregistrationV1().ComparatorFields) ||
 		!reflect.DeepEqual(value.ForbiddenClaims, PreregistrationV1().ForbiddenClaims) ||
-		len(value.Cases) == 0 || len(value.Cases) > 64 || identitySHA256(value) != value.IdentitySHA256 {
+		!reflect.DeepEqual(value.Cases, PreregistrationV1().Cases) || identitySHA256(value) != value.IdentitySHA256 {
 		return ErrInvalidPreregistration
 	}
 	if !sort.SliceIsSorted(value.Cases, func(i, j int) bool { return value.Cases[i].ID < value.Cases[j].ID }) {
@@ -177,6 +177,9 @@ func EncodePreregistration(value Preregistration) ([]byte, error) {
 }
 
 func DecodePreregistration(raw []byte) (Preregistration, error) {
+	if rejectDuplicateJSONKeys(raw) != nil {
+		return Preregistration{}, ErrInvalidPreregistration
+	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	var value Preregistration
@@ -190,6 +193,64 @@ func DecodePreregistration(raw []byte) (Preregistration, error) {
 		return Preregistration{}, err
 	}
 	return value, nil
+}
+
+func rejectDuplicateJSONKeys(raw []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var consume func() error
+	consume = func() error {
+		token, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		delimiter, compound := token.(json.Delim)
+		if !compound {
+			return nil
+		}
+		switch delimiter {
+		case '{':
+			seen := make(map[string]struct{})
+			for decoder.More() {
+				keyToken, err := decoder.Token()
+				key, ok := keyToken.(string)
+				if err != nil || !ok {
+					return ErrInvalidPreregistration
+				}
+				if _, duplicate := seen[key]; duplicate {
+					return ErrInvalidPreregistration
+				}
+				seen[key] = struct{}{}
+				if err := consume(); err != nil {
+					return err
+				}
+			}
+			end, err := decoder.Token()
+			if err != nil || end != json.Delim('}') {
+				return ErrInvalidPreregistration
+			}
+		case '[':
+			for decoder.More() {
+				if err := consume(); err != nil {
+					return err
+				}
+			}
+			end, err := decoder.Token()
+			if err != nil || end != json.Delim(']') {
+				return ErrInvalidPreregistration
+			}
+		default:
+			return ErrInvalidPreregistration
+		}
+		return nil
+	}
+	if err := consume(); err != nil {
+		return err
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		return ErrInvalidPreregistration
+	}
+	return nil
 }
 
 func identitySHA256(value Preregistration) string {

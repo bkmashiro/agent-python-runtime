@@ -62,7 +62,7 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 		t.Fatal(err)
 	}
 	session, err := engine.NewSemanticAnalysisSession(context.Background(), wazeroengine.SemanticAnalysisSessionLimits{
-		MaxRequests: 3, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
+		MaxRequests: 4, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -98,6 +98,20 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 	negativeResult, err := decodeSuccessfulGuestResult(negative.Payload)
 	if err != nil || string(negativeResult) != `7` {
 		t.Fatalf("negative result=%s err=%v", negativeResult, err)
+	}
+	selfReferenceRequest, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
+		RunID: "source-pass-plugin-self-reference", Code: "a = 1\na = a + 1\nb = a + 1\nresult = [a, b]\n", Inputs: json.RawMessage(`{}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	selfReference, err := registry.Execute(context.Background(), sourcepatch.PureScalarCSEName, session, engine, selfReferenceRequest)
+	if err != nil || selfReference.Applied || selfReference.Patch.Status != "not_applicable" {
+		t.Fatalf("self-reference execution=%+v err=%v", selfReference, err)
+	}
+	selfReferenceResult, err := decodeSuccessfulGuestResult(selfReference.Payload)
+	if err != nil || string(selfReferenceResult) != `[2,3]` {
+		t.Fatalf("self-reference result=%s err=%v", selfReferenceResult, err)
 	}
 	baselineResult, err := decodeSuccessfulGuestResult(baseline)
 	if err != nil {

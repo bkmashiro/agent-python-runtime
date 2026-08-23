@@ -168,17 +168,17 @@ hole in the proposed study.
 **Promise:** Remove the next obvious hard-coded seams before the third pass without
 building a general optimizer framework.
 
-- [ ] Add typed stage and outcome records for `prefix_overlay`,
+- [x] Add typed stage and outcome records for `prefix_overlay`,
   `hybrid_prepare_patch`, `whole_program_patch` and `multi_program_patch`; preserve the
   existing registration identities and consumers.
-- [ ] Add a small Host-owned `PassPipeline` that routes the current
+- [x] Add a small Host-owned `PassPipeline` that routes the current
   `semantic_pre_dispatch` and `prepared_pure_region` lanes, records typed rejection and
   applied outcomes, and enforces explicit per-pass/all-off controls.
-- [ ] Keep stage-specific entry points. Do not introduce one universal transform
+- [x] Keep stage-specific entry points. Do not introduce one universal transform
   callback, plugin loading, dependency resolution, fixed-point iteration or a new IR.
-- [ ] Freeze pipeline bounds for pass count, source/AST growth, preparation bytes and
+- [x] Freeze pipeline bounds for pass count, source/AST growth, preparation bytes and
   reanalysis. Reject overflow before formal Agent execution.
-- [ ] Prove the current two passes remain byte/trace compatible through the new shell;
+- [x] Prove the current two passes remain byte/trace compatible through the new shell;
   all-off must take the existing unchanged-source path.
 
 **Gate P0M:** Existing overlay and patch behavior is unchanged, the third pass no longer
@@ -467,7 +467,7 @@ admitted phases.
 
 ## Current execution pointer
 
-`Phase 0 gate: run independent read-only review of the frozen preregistration and current safety boundary; fix findings before Phase 0M.`
+`Phase 1: implement the narrow pure-scalar CSE pass with target-Guest differential controls; defer rather than widen the runtime if the existing patch seam is insufficient.`
 
 ## Short `/goal`
 

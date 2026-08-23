@@ -8,6 +8,10 @@ It binds the four stage identities, four outcome classes, pipeline bounds, the
 body-safe comparison columns, forbidden claim classes and 15
 positive/adversarial controls without storing source, result or workspace bodies.
 
+The minimum Host routing and outcome shell is specified by
+[`pass-pipeline-v0.md`](../pass-pipeline-v0.md). It preserves the existing pass
+registrations and stage-specific execution owners; it is not a transform engine.
+
 This note defines what Pysolate may call an optimization pass and how that pass
 inherits the runtime's existing source, effect, authority, workspace and terminal
 boundaries. The optimizer has both streaming-prefix overlays and complete-source

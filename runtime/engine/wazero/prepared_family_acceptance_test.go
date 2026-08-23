@@ -63,15 +63,16 @@ func TestPreparedFamilyAcceptanceReportIsBodyFreeAndRejectsDrift(t *testing.T) {
 		PhysicalDisposition: PreparedDispositionPrivateCopy, Outcome: PreparedMemberOK, FinalWorkspaceSHA256: digest('e'),
 	}
 	state := PreparedFamilyState{Created: 1, Terminal: 1, FamilySHA256: digest('a'), InputSHA256: digest('b'), Disposition: PreparedDispositionPrivateCopy}
-	encoded, err := EncodePreparedFamilyAcceptanceReport(digest('f'), digest('1'), digest('2'), state, []PreparedMemberRecord{record}, digest('e'))
+	sourceCommit, sourceTree := strings.Repeat("c", 40), strings.Repeat("d", 40)
+	encoded, err := EncodePreparedFamilyAcceptanceReport(sourceCommit, sourceTree, digest('1'), digest('2'), state, []PreparedMemberRecord{record}, digest('e'))
 	if err != nil || strings.Contains(string(encoded), "body") || strings.Contains(string(encoded), "response") {
 		t.Fatalf("report=%s err=%v", encoded, err)
 	}
-	if _, err := EncodePreparedFamilyAcceptanceReport(digest('f'), digest('1'), digest('2'), state, []PreparedMemberRecord{record}, digest('9')); err == nil {
+	if _, err := EncodePreparedFamilyAcceptanceReport(sourceCommit, sourceTree, digest('1'), digest('2'), state, []PreparedMemberRecord{record}, digest('9')); err == nil {
 		t.Fatal("accepted unobserved selected root")
 	}
 	zero := PreparedFamilyState{FamilySHA256: digest('a'), InputSHA256: digest('b'), Disposition: PreparedDispositionPrivateCopy}
-	if _, err := EncodePreparedFamilyAcceptanceReport(digest('f'), digest('1'), digest('2'), zero, nil, ""); err != nil {
+	if _, err := EncodePreparedFamilyAcceptanceReport(sourceCommit, sourceTree, digest('1'), digest('2'), zero, nil, ""); err != nil {
 		t.Fatalf("zero fanout: %v", err)
 	}
 }

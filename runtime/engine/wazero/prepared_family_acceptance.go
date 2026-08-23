@@ -15,7 +15,8 @@ var ErrPreparedFamilyAcceptanceReport = errors.New("invalid prepared family acce
 // backing handle, or scheduler policy.
 type PreparedFamilyAcceptanceReport struct {
 	SchemaVersion          string                      `json:"schema_version"`
-	SourceTreeSHA256       string                      `json:"source_tree_sha256"`
+	SourceCommit           string                      `json:"source_commit"`
+	SourceTree             string                      `json:"source_tree"`
 	ArtifactSHA256         string                      `json:"artifact_sha256"`
 	ExecutionProfileSHA256 string                      `json:"execution_profile_sha256"`
 	InputSHA256            string                      `json:"input_sha256"`
@@ -31,14 +32,15 @@ type PreparedFamilyAcceptanceReport struct {
 // family snapshot. The caller supplies source/artifact/profile identities from
 // its verified Host build and may omit selectedRootSHA256 before selection.
 func EncodePreparedFamilyAcceptanceReport(
-	sourceTreeSHA256 string,
+	sourceCommit string,
+	sourceTree string,
 	artifactSHA256 string,
 	executionProfileSHA256 string,
 	state PreparedFamilyState,
 	records []PreparedMemberRecord,
 	selectedRootSHA256 string,
 ) ([]byte, error) {
-	if !validPreparedDigest(sourceTreeSHA256) || !validPreparedDigest(artifactSHA256) || !validPreparedDigest(executionProfileSHA256) ||
+	if !validSourceObjectID(sourceCommit) || !validSourceObjectID(sourceTree) || !validPreparedDigest(artifactSHA256) || !validPreparedDigest(executionProfileSHA256) ||
 		!validPreparedDigest(state.InputSHA256) || !validPreparedDigest(state.FamilySHA256) || state.Active != 0 || state.Created != uint32(len(records)) || state.Terminal != uint32(len(records)) ||
 		(state.Disposition != PreparedDispositionPrivateCopy && state.Disposition != PreparedDispositionPrivateCOW && state.Disposition != PreparedDispositionOrdinaryFresh) ||
 		(selectedRootSHA256 != "" && !validPreparedDigest(selectedRootSHA256)) {
@@ -64,8 +66,8 @@ func EncodePreparedFamilyAcceptanceReport(
 		return nil, ErrPreparedFamilyAcceptanceReport
 	}
 	report := PreparedFamilyAcceptanceReport{
-		SchemaVersion:    PreparedFamilyAcceptanceReportV1,
-		SourceTreeSHA256: sourceTreeSHA256, ArtifactSHA256: artifactSHA256, ExecutionProfileSHA256: executionProfileSHA256,
+		SchemaVersion: PreparedFamilyAcceptanceReportV1,
+		SourceCommit:  sourceCommit, SourceTree: sourceTree, ArtifactSHA256: artifactSHA256, ExecutionProfileSHA256: executionProfileSHA256,
 		InputSHA256: state.InputSHA256, FamilySHA256: state.FamilySHA256, PhysicalDisposition: state.Disposition,
 		Created: state.Created, Terminal: state.Terminal, SelectedRootSHA256: selectedRootSHA256, Members: members,
 	}
@@ -74,4 +76,16 @@ func EncodePreparedFamilyAcceptanceReport(
 		return nil, ErrPreparedFamilyAcceptanceReport
 	}
 	return encoded, nil
+}
+
+func validSourceObjectID(value string) bool {
+	if len(value) != 40 && len(value) != 64 {
+		return false
+	}
+	for _, character := range value {
+		if !((character >= '0' && character <= '9') || (character >= 'a' && character <= 'f')) {
+			return false
+		}
+	}
+	return true
 }

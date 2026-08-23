@@ -303,8 +303,8 @@ func TestPreparedFamilyComposesWithPrivateSubagentBranchesAndAttenuatedPlans(t *
 		}
 	}
 	report, err := EncodePreparedFamilyAcceptanceReport(
-		digestPreparedBytes([]byte("fixture-source-tree")), profile.ArtifactSHA256(), profileSHA256,
-		family.State(), records, joined.SelectedRoot.WorkspaceSHA256,
+		"cccccccccccccccccccccccccccccccccccccccc", "dddddddddddddddddddddddddddddddddddddddd",
+		profile.ArtifactSHA256(), profileSHA256, family.State(), records, joined.SelectedRoot.WorkspaceSHA256,
 	)
 	if err != nil || bytes.Contains(report, []byte(`"body"`)) || bytes.Contains(report, []byte(`"response"`)) {
 		t.Fatalf("acceptance report=%s err=%v", report, err)

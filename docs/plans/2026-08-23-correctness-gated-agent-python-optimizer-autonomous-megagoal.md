@@ -158,6 +158,29 @@ correctness after performance work.
 and current exact-Guest controls pass; independent review finds no authority or effect
 hole in the proposed study.
 
+## Phase 0M: Minimum pass-pipeline substrate
+
+**Promise:** Remove the next obvious hard-coded seams before the third pass without
+building a general optimizer framework.
+
+- [ ] Add typed stage and outcome records for `prefix_overlay`,
+  `hybrid_prepare_patch`, `whole_program_patch` and `multi_program_patch`; preserve the
+  existing registration identities and consumers.
+- [ ] Add a small Host-owned `PassPipeline` that routes the current
+  `semantic_pre_dispatch` and `prepared_pure_region` lanes, records typed rejection and
+  applied outcomes, and enforces explicit per-pass/all-off controls.
+- [ ] Keep stage-specific entry points. Do not introduce one universal transform
+  callback, plugin loading, dependency resolution, fixed-point iteration or a new IR.
+- [ ] Freeze pipeline bounds for pass count, source/AST growth, preparation bytes and
+  reanalysis. Reject overflow before formal Agent execution.
+- [ ] Prove the current two passes remain byte/trace compatible through the new shell;
+  all-off must take the existing unchanged-source path.
+
+**Gate P0M:** Existing overlay and patch behavior is unchanged, the third pass no longer
+needs another top-level hard-coded branch, and the substrate remains small enough to
+delete without migrating runtime semantics. General ordering/composition stays deferred
+to Phase 7 after at least three retained passes expose the real shared seam.
+
 ## Phase 1: Third real pass, pure scalar CSE
 
 **Promise:** Validate a reusable AST-in/AST-out pass shape without introducing external

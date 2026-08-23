@@ -1,6 +1,6 @@
 # Prepared family v1 contract
 
-**Status:** Implemented through the private workspace/authority composition slice; deterministic product acceptance remains gated by the active megagoal. This document governs the post-paper lane and does not change frozen paper contracts.
+**Status:** Implemented and closed on 2026-08-23. Deterministic local and exact Linux artifact-backed acceptance passed. The API remains explicit opt-in and does not change frozen paper contracts.
 
 ## Scope
 
@@ -17,6 +17,25 @@ The v1 implementation owner is `runtime/engine/wazero`. It reuses `runtime/numpy
 - All limits are explicit: body at most `numpycodec.MaxBodyBytes`, rank at most `numpycodec.MaxRank`, and family consumer/active counts are non-zero bounded integers.
 - The body never enters `RunRequest`, Broker JSON, evidence, logs, trusted Python source, Guest-visible handles or a filesystem path.
 - Ordinary mechanism-off execution remains unchanged.
+
+## Relationship to the historical fanout probe
+
+The research-only `cmd/prepared-data-fanout-probe` already demonstrated the
+physical mechanism: one fixed `<i8 [1024,1024]` dataset could feed N fresh Guest
+runs, and Linux private-COW consumers did not observe each other's mutations.
+That result remains valid. Prepared Family promotes the mechanism rather than
+claiming to invent it:
+
+| Historical fanout probe | Prepared Family v1 |
+|---|---|
+| fixed fixture and N=`0/1/2/4` experiment loop | bounded ndarray and finite Host-selected consumers |
+| research `Engine` methods and one shared engine configuration | exported family plus independently configured single-use runners |
+| private-copy body encoded into trusted Python preparation source | bounded raw-memory ABI; no body in source, RunRequest or Broker JSON |
+| varied Run ID and code | independently frozen InvocationRef, RunConfig, Plan, Broker and workspace |
+| benchmark report lifecycle | retry-safe close, terminal accounting and body-free acceptance evidence |
+
+The family still does not schedule children or publish workspaces. Existing Host
+and `subagent.Orchestrator` code owns those decisions.
 
 ## Binary preparation ABI
 
@@ -104,7 +123,7 @@ func (*PreparedFamily) State() PreparedFamilyState
 func (*PreparedFamily) Close(context.Context) error
 ```
 
-The exact exported names may change during implementation, but not these ownership rules:
+The exact exported API now implements these ownership rules:
 
 - `PreparedNumpyInput` stores a copied body and copied shape; callers cannot mutate admitted bytes.
 - The canonical preparation engine has no Broker, grants or workspace.

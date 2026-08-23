@@ -15,21 +15,23 @@ Agent Python source
   → Host-authored result, receipts and optional observations
 ```
 
-The active default path deliberately does not enable prepared pools, COW
-restore, pinned sessions, schedulers, durable transactions, MCP daemons, trace
-databases, production benchmark orchestration, or recovery machinery. Experimental
-prepared/COW, continuation-preserving cold-I/O, and AST-qualified exact whole-Run
-reuse mechanisms remain fail-closed and off by default. The HTTP service reports
-prepared/COW disabled unless a bounded, single-exported-memory candidate is
-explicitly selected by an embedding profile; semantic reuse is an internal
-Experimental adapter, not an ordinary arbitrary-Python cache. Growable memories
-are eligible when they declare a finite maximum; the sealed image reserves that
-virtual extent while
-keeping the prepared prefix and zero growth tail sparse. It does
-include an optional Host-owned rooted workspace and a complete deterministic
-storage capsule; neither is a transaction system. Historical findings are
-summarized in [docs/research-history.md](docs/research-history.md) and remain
-available in Git history.
+The active CLI and HTTP paths deliberately do not enable prepared pools, pinned
+sessions, schedulers, durable transactions, MCP daemons, trace databases,
+production benchmark orchestration, or recovery machinery. An embedding Host may
+explicitly opt into the bounded [Prepared Family](docs/prepared-family-v1.md) API:
+one immutable NumPy input can back fresh, single-use consumers while RunConfig,
+Plan, Broker, invocation identity and private workspace remain per consumer.
+Linux may use qualified private COW; the portable path copies into each fresh
+Guest. This is not a resettable pool and it is never selected implicitly by
+`apyrun` or the HTTP service.
+
+Continuation-preserving cold-I/O and AST-qualified exact whole-Run reuse remain
+fail-closed and off by default. Semantic reuse is an internal Experimental
+adapter, not an ordinary arbitrary-Python cache. Pysolate also includes an
+optional Host-owned rooted workspace and a complete deterministic storage
+capsule; neither is a transaction system. Historical findings are summarized in
+[docs/research-history.md](docs/research-history.md) and remain available in Git
+history.
 
 The refined product direction is an authority-lifecycle runtime for Agent-authored
 programs: ordinary Python provides control flow, while the Host freezes

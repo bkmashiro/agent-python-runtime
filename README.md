@@ -194,6 +194,11 @@ expose a durable Recorder configuration. See
 
 The following surfaces are **Experimental**:
 
+- `runtime/compensation` provides Host-owned graded compensation contracts,
+  reverse-topological `plan`/`validate` dry runs, exact-plan review binding,
+  execute-time revalidation and deterministic fake-provider evidence. It is not
+  yet a production external-write journal or real-provider integration; see
+  [Reviewable tool compensation v1](docs/reviewable-tool-compensation-v1.md);
 - capability-boundary branches start a fresh Guest, strictly replay a parent
   prefix, then use a Host-owned override, recorded suffix, or already sealed
   live external-read suffix;
@@ -240,6 +245,7 @@ runtime/engine/native/      Experimental verified one-shot OCI/gVisor execution
 runtime/placement/          deterministic Host-owned execution placement
 runtime/capability/         small Host tool registry and broker
 runtime/capabilityrpc/      Experimental private native transport adapter
+runtime/compensation/       Experimental reviewable tool compensation contract
 runtime/lifecycle/          backend-neutral lifecycle/resource evidence
 runtime/verification/       independent native evidence verifier
 runtime/workspace/          bounded WASI workspace mount and capsule storage

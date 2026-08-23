@@ -64,6 +64,23 @@ class SourcePassTests(unittest.TestCase):
                 self.assertEqual(0, patch["replacement_count"])
                 self.assertEqual("", patch["derived_source"])
 
+    def test_does_not_reuse_after_the_first_assignment_changes_an_input(self):
+        source = "a = 1\na = a + 1\nb = a + 1\nresult = [a, b]\n"
+        patch = json.loads(emit_source_pass_patch_request_json(request(source)))
+        self.assertEqual("not_applicable", patch["status"])
+
+    def test_utf8_identifier_is_a_valid_reuse_target(self):
+        source = "seed = 1\né = seed + 1\nê = seed + 1\nresult = [é, ê]\n"
+        raw = emit_source_pass_patch_request_json(request(source))
+        patch = json.loads(raw)
+        self.assertEqual("applied", patch["status"])
+        tree = validate_source_pass_execution_request(source, raw)
+        original_namespace = {}
+        derived_namespace = {}
+        exec(source, original_namespace, original_namespace)
+        exec(compile(tree, "<agent-run>", "exec"), derived_namespace, derived_namespace)
+        self.assertEqual(original_namespace["result"], derived_namespace["result"])
+
     def test_execution_rederives_patch_from_original_source(self):
         source = "seed = 7\nleft = seed * seed\nright = seed * seed\nresult = right\n"
         patch = json.loads(emit_source_pass_patch_request_json(request(source)))

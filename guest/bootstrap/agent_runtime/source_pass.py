@@ -120,10 +120,11 @@ def _pure_scalar_cse(source):
                 if (
                     second_name != first_name
                     and second_result is not _MISSING
+                    and second_result == first_result
                     and ast.dump(first_value, include_attributes=False) == ast.dump(second_value, include_attributes=False)
                 ):
                     start, end = _span_offsets(source, second_value)
-                    encoded_name = first_name.encode("ascii")
+                    encoded_name = first_name.encode("utf-8")
                     if len(encoded_name) <= end - start:
                         replacements.append((start, end, encoded_name + b" " * (end - start - len(encoded_name))))
                         scalar_values = after_first

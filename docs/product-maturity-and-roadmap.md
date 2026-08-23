@@ -55,6 +55,41 @@ reach production service maturity, is:
 These ranges are architectural planning estimates, not measured forecasts. The
 thesis does not require the final two finish lines.
 
+## 2026-08-23 prepared-runtime-family addendum
+
+**Current**
+
+- a bounded `numpy-core` binary preparation ABI moves descriptor plus raw body
+  through Host-owned Guest memory without `RunRequest`, Broker or source-text
+  transport;
+- the portable `private_copy` lane creates fresh single-use runners with frozen
+  RunConfig, distinct Invocation/Execution identity and optional private
+  workspace/Broker binding;
+- existing workspace branches and `subagent.Orchestrator` select or discard
+  roots outside Runtime;
+- a checked-in correctness fixture and body-free acceptance-report encoder cover
+  exact family/input/member/root joins.
+
+**Experimental**
+
+- Linux `private_cow` shares one immutable prepared physical image while each
+  consumer receives a fresh module, Host context, cancellation scope, Broker and
+  workspace lease;
+- `auto` selects COW only after exact artifact eligibility and otherwise reports
+  `private_copy`;
+- current qualification is deterministic `numpy-core` engineering evidence on
+  macOS plus the bounded gpu31 Linux Host gate. It is not performance evidence.
+
+**Deferred**
+
+- natural-workload dogfood is **not entered**. It requires a naturally occurring
+  Pysolate consumer, meaningful inputs and a separate approval;
+- general package heaps, mutable shared memory, Host-visible family handles,
+  scheduler/retry policy, automatic workspace merge and external-effect cohorts
+  are outside this slice;
+- no release-support, multi-tenant or production-readiness claim follows from
+  these fixtures.
+
 ## Capability-by-capability assessment
 
 ### 1. Fresh Python execution substrate — strong prototype

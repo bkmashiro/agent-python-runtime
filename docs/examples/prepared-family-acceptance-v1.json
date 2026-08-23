@@ -1,0 +1,48 @@
+{
+  "schema_version": "pysolate.prepared-family-acceptance-fixture.v1",
+  "classification": "deterministic_correctness_fixture",
+  "arrays": [
+    {
+      "id": "i8-vector",
+      "dtype": "<i8",
+      "shape": [4],
+      "generator": "little_endian_signed_integers_1_through_4",
+      "nbytes": 32,
+      "body_sha256": "sha256:73e200e2b048c86d4e8c86b86bf62bbda84c7384e34e250b01aa30ab29d234a4"
+    },
+    {
+      "id": "f4-matrix",
+      "dtype": "<f4",
+      "shape": [2, 2],
+      "generator": "little_endian_float32_quarters_0.25_through_3.25",
+      "nbytes": 16,
+      "body_sha256": "sha256:60fd73008c7169d7eb940c26f127bd76e6400818c5c12f3e473e4467fd6120ed"
+    },
+    {
+      "id": "u1-tensor",
+      "dtype": "|u1",
+      "shape": [2, 2, 2],
+      "generator": "unsigned_bytes_0_through_7",
+      "nbytes": 8,
+      "body_sha256": "sha256:8a851ff82ee7048ad09ec3847f1ddf44944104d2cbd17ef4e3db22c6785a0d45"
+    }
+  ],
+  "programs": [
+    {
+      "id": "reduce",
+      "oracle": "returns exact dtype, shape, first element and sum"
+    },
+    {
+      "id": "mutate-private",
+      "oracle": "mutates dataset[0] in one consumer; sibling retains the original first element"
+    },
+    {
+      "id": "workspace-private",
+      "oracle": "writes a child-specific file; Host selects one immutable root and discards the others"
+    }
+  ],
+  "fanout": [0, 1, 2, 4],
+  "terminal_cases": ["ok", "guest_error", "timeout", "cancelled"],
+  "claims": ["correctness", "fresh_state", "private_mutation", "private_workspace", "authority_separation"],
+  "not_claimed": ["performance", "natural_workload", "agent_quality", "economic_benefit"]
+}

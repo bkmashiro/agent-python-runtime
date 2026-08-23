@@ -188,11 +188,60 @@ Qualification runs on the real artifact for every promoted dtype and binds the a
 
 - family/image identity;
 - member, Run, Invocation and execution identity;
+- per-member capability Plan and frozen grant-map identities;
 - physical disposition;
 - terminal state (`ok`, `guest_error`, `cancelled`, `timeout`, `closed_unrun`);
 - optional final workspace content identity.
 
 It contains no body, source text, response body, credential, Host path or raw native handle. Existing response, workspace receipts and subagent join records remain authoritative in their domains; this record joins identities rather than replacing them.
+
+`EncodePreparedFamilyAcceptanceReport` joins verified source-tree, artifact,
+profile, family, input, member and optional selected-root identities into a
+canonical body-free correctness report. It rejects mixed-family records,
+duplicate members and selected roots that were not observed in a member record.
+
+## Running the bounded example
+
+The checked-in fixture is
+`docs/examples/prepared-family-acceptance-v1.json`. It defines three generated
+arrays, three distinct program oracles, fanout `0/1/2/4` and the required
+terminal cases. It contains digests and generator descriptions, not array bodies.
+
+Build an exact `numpy-core` Guest on the approved workstation path:
+
+```bash
+scripts/build-guest-workstation.sh \
+  --artifact-profile numpy-core \
+  --output "$HOME/.hermes/evidence/pysolate/guest-build-numpy-core"
+```
+
+Run the portable private-copy, family, workspace and report fixtures on macOS:
+
+```bash
+AGENT_RUNTIME_GUEST="$HOME/.hermes/evidence/pysolate/guest-build-numpy-core/dist/agent-python-runtime-numpy-core.wasm" \
+  go test ./runtime/engine/wazero -run 'TestPrepared(Family|Numpy)' -count=1
+```
+
+Run the exact Linux private-COW gate:
+
+```bash
+scripts/test-host-workstation.sh \
+  --suite prepared-family \
+  --output "$HOME/.hermes/evidence/pysolate/host-test-prepared-family"
+```
+
+The portable control path is an ordinary fresh Engine, not a hidden family or
+replay:
+
+```go
+runner, err := wazero.New(ctx, wasm, runConfig)
+```
+
+macOS reports `private_copy`. Linux `auto` reports `private_cow` only after the
+artifact passes exact COW eligibility; otherwise it uses `private_copy`.
+Explicit `private_cow` fails rather than downgrading. None of these commands
+creates a scheduler, chooses a workspace root, publishes effects or establishes
+a performance claim.
 
 ## Linux Host gate
 

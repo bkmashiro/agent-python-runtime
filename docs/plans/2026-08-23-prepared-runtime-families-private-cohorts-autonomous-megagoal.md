@@ -439,14 +439,14 @@ Tasks:
 
 Tasks:
 
-- [ ] Add one small checked-in acceptance manifest or Go fixture describing the three generated arrays and distinct programs. It is a correctness fixture, not a benchmark corpus.
+- [x] Add one small checked-in acceptance manifest or Go fixture describing the three generated arrays and distinct programs. It is a correctness fixture, not a benchmark corpus.
 - [ ] Execute copy/reference and Linux COW lanes against the same semantic oracles.
-- [ ] Cover N=0/1/2/4, success, Python error, timeout/cancellation, mutation and workspace selection.
-- [ ] Produce a compact body-free acceptance report with exact source/artifact/profile/input/family/invocation/root identities and terminal dispositions.
-- [ ] Document the Host API in README or one focused design page, including an ordinary fresh fallback example and platform limitations.
-- [ ] Update `docs/product-maturity-and-roadmap.md` with Current/Experimental/Deferred facts. Do not edit paper claims.
-- [ ] Mark real workload dogfood as **not entered**. It may begin only when a naturally occurring Pysolate consumer and meaningful inputs exist and Yuzhe approves that separate goal.
-- [ ] Remove only product-path duplication proved redundant. Keep historical evidence/probes required to verify earlier claims.
+- [x] Cover N=0/1/2/4, success, Python error, timeout/cancellation, mutation and workspace selection.
+- [x] Produce a compact body-free acceptance report with exact source/artifact/profile/input/family/invocation/root identities and terminal dispositions.
+- [x] Document the Host API in README or one focused design page, including an ordinary fresh fallback example and platform limitations.
+- [x] Update `docs/product-maturity-and-roadmap.md` with Current/Experimental/Deferred facts. Do not edit paper claims.
+- [x] Mark real workload dogfood as **not entered**. It may begin only when a naturally occurring Pysolate consumer and meaningful inputs exist and Yuzhe approves that separate goal.
+- [x] Remove only product-path duplication proved redundant. Keep historical evidence/probes required to verify earlier claims.
 
 **Gate P5:** A new developer can understand and run the bounded prepared-family example. The report proves correctness/isolation only, uses no invented model/dataset claims and distinguishes portable copy from Linux COW.
 

@@ -1,6 +1,7 @@
 package wazero
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -300,6 +301,13 @@ func TestPreparedFamilyComposesWithPrivateSubagentBranchesAndAttenuatedPlans(t *
 		if err := record.Validate(); err != nil || record.Outcome != PreparedMemberOK {
 			t.Fatalf("record=%+v err=%v", record, err)
 		}
+	}
+	report, err := EncodePreparedFamilyAcceptanceReport(
+		digestPreparedBytes([]byte("fixture-source-tree")), profile.ArtifactSHA256(), profileSHA256,
+		family.State(), records, joined.SelectedRoot.WorkspaceSHA256,
+	)
+	if err != nil || bytes.Contains(report, []byte(`"body"`)) || bytes.Contains(report, []byte(`"response"`)) {
+		t.Fatalf("acceptance report=%s err=%v", report, err)
 	}
 	if err := family.Close(context.Background()); err != nil {
 		t.Fatal(err)

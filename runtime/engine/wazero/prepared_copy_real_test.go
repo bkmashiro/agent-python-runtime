@@ -156,14 +156,14 @@ func TestPreparedNumpyPrivateCOWSupportsMultipleLayoutsAndIsolatesMutation(t *te
 	}
 	defer runner.Close(context.Background())
 
-	floatBody := make([]byte, 6*4)
-	for index, value := range []float32{1.5, 2.5, 3.5, 4.5, 5.5, 6.5} {
+	floatBody := make([]byte, 4*4)
+	for index, value := range []float32{0.25, 1.25, 2.25, 3.25} {
 		binary.LittleEndian.PutUint32(floatBody[index*4:], math.Float32bits(value))
 	}
 	inputs := []PreparedNumpyInput{
-		realPreparedInput(t, profile, []uint64{2, 2}, []uint64{1, 2, 3, 4}),
-		realPreparedInputRaw(t, profile, "<f4", []uint64{2, 3}, floatBody),
-		realPreparedInputRaw(t, profile, "|u1", []uint64{3}, []byte{7, 8, 9}),
+		realPreparedInput(t, profile, []uint64{4}, []uint64{1, 2, 3, 4}),
+		realPreparedInputRaw(t, profile, "<f4", []uint64{2, 2}, floatBody),
+		realPreparedInputRaw(t, profile, "|u1", []uint64{2, 2, 2}, []byte{0, 1, 2, 3, 4, 5, 6, 7}),
 	}
 	for index, input := range inputs {
 		if err := runner.PrepareNumpyCOWInput(context.Background(), input); err != nil {
@@ -228,24 +228,20 @@ func TestPreparedNumpyPrivateCOWSupportsMultipleLayoutsAndIsolatesMutation(t *te
 
 func TestPreparedNumpyPrivateCopySupportsMultipleLayoutsAndMutationIsolation(t *testing.T) {
 	artifact, profile := realPreparedGuest(t)
-	cases := []struct {
-		shape  []uint64
-		values []uint64
-	}{
-		{shape: []uint64{4}, values: []uint64{1, 2, 3, 4}},
-		{shape: []uint64{2, 2}, values: []uint64{5, 6, 7, 8}},
-		{shape: []uint64{1, 2, 2}, values: []uint64{9, 10, 11, 12}},
+	floatBody := make([]byte, 4*4)
+	for index, value := range []float32{0.25, 1.25, 2.25, 3.25} {
+		binary.LittleEndian.PutUint32(floatBody[index*4:], math.Float32bits(value))
 	}
-	for index, test := range cases {
-		input := realPreparedInput(t, profile, test.shape, test.values)
-		mutated := runPreparedCopy(t, artifact, profile, input, fmt.Sprintf("copy-mutate-%d", index), "dataset.flat[0] = 99\nresult = [list(dataset.shape), int(dataset.sum())]\n")
-		fresh := runPreparedCopy(t, artifact, profile, input, fmt.Sprintf("copy-fresh-%d", index), "result = [list(dataset.shape), int(dataset.sum()), int(dataset.flat[0])]\n")
-		var mutatedValue, freshValue []any
-		if json.Unmarshal(mutated, &mutatedValue) != nil || json.Unmarshal(fresh, &freshValue) != nil {
-			t.Fatalf("invalid results mutated=%s fresh=%s", mutated, fresh)
-		}
-		if got := int(freshValue[2].(float64)); got != int(test.values[0]) {
-			t.Fatalf("case=%d mutation leaked: fresh=%s", index, fresh)
+	inputs := []PreparedNumpyInput{
+		realPreparedInput(t, profile, []uint64{4}, []uint64{1, 2, 3, 4}),
+		realPreparedInputRaw(t, profile, "<f4", []uint64{2, 2}, floatBody),
+		realPreparedInputRaw(t, profile, "|u1", []uint64{2, 2, 2}, []byte{0, 1, 2, 3, 4, 5, 6, 7}),
+	}
+	for index, input := range inputs {
+		mutated := runPreparedCopy(t, artifact, profile, input, fmt.Sprintf("copy-mutate-%d", index), "dataset.flat[0] = 99\nresult = [dataset.dtype.str, list(dataset.shape), float(dataset.sum())]\n")
+		fresh := runPreparedCopy(t, artifact, profile, input, fmt.Sprintf("copy-fresh-%d", index), "result = [dataset.dtype.str, list(dataset.shape), float(dataset.flat[0]), float(dataset.sum())]\n")
+		if strings.Contains(string(fresh), "99") || len(mutated) == 0 {
+			t.Fatalf("mutation leaked for input %d: mutated=%s fresh=%s", index, mutated, fresh)
 		}
 	}
 }

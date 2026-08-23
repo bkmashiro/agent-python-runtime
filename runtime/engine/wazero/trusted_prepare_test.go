@@ -99,10 +99,11 @@ func TestCOWBaselineGrowthPages(t *testing.T) {
 }
 
 type fakeDerivableCOWRuntime struct {
-	identity string
-	parent   string
-	closed   int
-	derived  int
+	identity      string
+	parent        string
+	preparedInput string
+	closed        int
+	derived       int
 }
 
 func (runtime *fakeDerivableCOWRuntime) prepare(context.Context, *Engine) (*preparedInstance, cowCloneLifecycle, error) {
@@ -110,11 +111,32 @@ func (runtime *fakeDerivableCOWRuntime) prepare(context.Context, *Engine) (*prep
 }
 func (runtime *fakeDerivableCOWRuntime) close() error { runtime.closed++; return nil }
 func (runtime *fakeDerivableCOWRuntime) imageState() PreparedImageState {
-	return PreparedImageState{Available: true, TrustedPrepareSHA256: runtime.identity, ParentTrustedPrepareSHA256: runtime.parent}
+	return PreparedImageState{Available: true, TrustedPrepareSHA256: runtime.identity, ParentTrustedPrepareSHA256: runtime.parent, PreparedInputSHA256: runtime.preparedInput}
 }
 func (runtime *fakeDerivableCOWRuntime) derive(_ context.Context, _ *Engine, _ string, identity string) (cowPreparedRuntime, error) {
 	runtime.derived++
 	return &fakeDerivableCOWRuntime{identity: identity, parent: runtime.identity}, nil
+}
+func (runtime *fakeDerivableCOWRuntime) deriveNumpy(_ context.Context, _ *Engine, _ PreparedNumpyInput, identity string) (cowPreparedRuntime, error) {
+	runtime.derived++
+	return &fakeDerivableCOWRuntime{parent: runtime.identity, preparedInput: identity}, nil
+}
+
+func TestPrepareNumpyCOWInputRetainsPackageParent(t *testing.T) {
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms = runtimeconfig.MechanismSet{PreparedRuntime: true, MemoryCOW: true}
+	config.ExecutionProfile = testBoundNumpyProfile(t)
+	input := realPreparedInput(t, config.ExecutionProfile, []uint64{4}, []uint64{1, 2, 3, 4})
+	packageIdentity, _ := trustedCOWPrepareIdentity(trustedCOWPackageSource)
+	parent := &fakeDerivableCOWRuntime{identity: packageIdentity}
+	engine := &Engine{config: config, preparedInitialized: true, preparedTrustedSHA: packageIdentity, cowRuntime: parent}
+	if err := engine.PrepareNumpyCOWInput(context.Background(), input); err != nil {
+		t.Fatal(err)
+	}
+	state := engine.PreparedImageState()
+	if engine.cowParentRuntime != parent || parent.derived != 1 || state.PreparedInputSHA256 != input.IdentitySHA256() || state.ParentTrustedPrepareSHA256 != packageIdentity {
+		t.Fatalf("parent=%p state=%+v derived=%d", engine.cowParentRuntime, state, parent.derived)
+	}
 }
 
 func TestDeriveSemanticRuntimeRetainsPackageParent(t *testing.T) {

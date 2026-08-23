@@ -16,6 +16,7 @@ type linuxCOWPreparedRuntime struct {
 	image                      *cowImage
 	trustedPrepareSHA256       string
 	parentTrustedPrepareSHA256 string
+	preparedInputSHA256        string
 }
 
 func cowMaximumMemoryBytes(engine *Engine) (uint64, error) {
@@ -84,6 +85,27 @@ func (runtime *linuxCOWPreparedRuntime) derive(ctx context.Context, engine *Engi
 		return nil, withGuestDiagnostic(err, canonical.stderr.String())
 	}
 	return sealCOWPreparedRuntime(engine, canonical, trustedIdentity, runtime.trustedPrepareSHA256)
+}
+
+func (runtime *linuxCOWPreparedRuntime) deriveNumpy(ctx context.Context, engine *Engine, input PreparedNumpyInput, identity string) (cowPreparedRuntime, error) {
+	if input.identity == "" || input.identity != identity {
+		return nil, ErrPreparedImageCompatibility
+	}
+	canonical, _, err := runtime.prepare(ctx, engine)
+	if err != nil {
+		return nil, fmt.Errorf("clone package COW baseline: %w", err)
+	}
+	defer closePreparedInstance(canonical)
+	if err := callPreparedNumpyInput(ctx, canonical.module, input); err != nil {
+		return nil, withGuestDiagnostic(err, canonical.stderr.String())
+	}
+	sealed, err := sealCOWPreparedRuntime(engine, canonical, "", runtime.trustedPrepareSHA256)
+	if err != nil {
+		return nil, err
+	}
+	prepared := sealed.(*linuxCOWPreparedRuntime)
+	prepared.preparedInputSHA256 = identity
+	return prepared, nil
 }
 
 func sealCOWPreparedRuntime(engine *Engine, canonical *preparedInstance, trustedIdentity, parentIdentity string) (cowPreparedRuntime, error) {
@@ -191,6 +213,7 @@ func (runtime *linuxCOWPreparedRuntime) imageState() PreparedImageState {
 	state := runtime.image.preparedImageState()
 	state.TrustedPrepareSHA256 = runtime.trustedPrepareSHA256
 	state.ParentTrustedPrepareSHA256 = runtime.parentTrustedPrepareSHA256
+	state.PreparedInputSHA256 = runtime.preparedInputSHA256
 	return state
 }
 

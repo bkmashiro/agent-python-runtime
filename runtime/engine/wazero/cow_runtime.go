@@ -81,6 +81,11 @@ type derivableCOWPreparedRuntime interface {
 	derive(context.Context, *Engine, string, string) (cowPreparedRuntime, error)
 }
 
+type numpyDerivableCOWPreparedRuntime interface {
+	cowPreparedRuntime
+	deriveNumpy(context.Context, *Engine, PreparedNumpyInput, string) (cowPreparedRuntime, error)
+}
+
 type cowCloneLifecycle struct {
 	ModuleInstantiations uint32
 	InitializeCalls      uint32
@@ -98,6 +103,7 @@ type PreparedImageState struct {
 	SparsePotentialBytes       uint64 `json:"sparse_potential_bytes"`
 	TrustedPrepareSHA256       string `json:"trusted_prepare_sha256,omitempty"`
 	ParentTrustedPrepareSHA256 string `json:"parent_trusted_prepare_sha256,omitempty"`
+	PreparedInputSHA256        string `json:"prepared_input_sha256,omitempty"`
 }
 
 func (engine *Engine) PreparedImageState() PreparedImageState {

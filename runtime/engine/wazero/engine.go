@@ -273,7 +273,7 @@ func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig,
 }
 
 func newPreparedNumpyCopyEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, brokerFactory BrokerFactory, binding *workspaceBinding, input PreparedNumpyInput) (*Engine, error) {
-	if input.identity == "" || len(input.body) == 0 || len(input.descriptorJSON) == 0 {
+	if input.validateForConfig(config) != nil || len(input.body) == 0 || len(input.descriptorJSON) == 0 {
 		return nil, ErrPreparedNumpyInput
 	}
 	engine, err := newEngine(ctx, wasm, config, brokerFactory, binding, nil)
@@ -404,6 +404,45 @@ func (engine *Engine) DeriveNumpyI64COWDataset(ctx context.Context, body []byte)
 	if properties.WorkspaceMounted || properties.CapabilityBrokerAvailable {
 		return ErrSemanticAnalysisSessionAuthority
 	}
+	return engine.replaceDerivedCOWRuntime(func(parent cowPreparedRuntime) (cowPreparedRuntime, error) {
+		deriver, ok := parent.(derivableCOWPreparedRuntime)
+		if !ok {
+			return nil, runtimeconfig.ErrMechanismDisabled
+		}
+		return deriver.derive(ctx, engine, source, identity)
+	})
+}
+
+// PrepareNumpyCOWInput seals one descriptor-bound ndarray into a Linux private-
+// COW image. The package parent remains immutable and the body is consumed only
+// through the bounded binary preparation ABI.
+func (engine *Engine) PrepareNumpyCOWInput(ctx context.Context, input PreparedNumpyInput) error {
+	if engine == nil || ctx == nil || !engine.config.Mechanisms.PreparedRuntime || !engine.config.Mechanisms.MemoryCOW {
+		return runtimeconfig.ErrMechanismDisabled
+	}
+	if err := engine.validateNumpyCOWProfile(); err != nil {
+		return err
+	}
+	if err := input.validateForConfig(engine.config); err != nil {
+		return err
+	}
+	properties := engine.Properties()
+	if properties.WorkspaceMounted || properties.CapabilityBrokerAvailable {
+		return ErrSemanticAnalysisSessionAuthority
+	}
+	if err := engine.PrepareNumpyCOWShard(ctx); err != nil {
+		return err
+	}
+	return engine.replaceDerivedCOWRuntime(func(parent cowPreparedRuntime) (cowPreparedRuntime, error) {
+		deriver, ok := parent.(numpyDerivableCOWPreparedRuntime)
+		if !ok {
+			return nil, runtimeconfig.ErrMechanismDisabled
+		}
+		return deriver.deriveNumpy(ctx, engine, input, input.identity)
+	})
+}
+
+func (engine *Engine) replaceDerivedCOWRuntime(build func(cowPreparedRuntime) (cowPreparedRuntime, error)) error {
 	engine.preparedInitMu.Lock()
 	defer engine.preparedInitMu.Unlock()
 	if !engine.preparedInitialized || engine.preparedInitErr != nil || engine.preparedTrustedSHA == "" {
@@ -421,11 +460,7 @@ func (engine *Engine) DeriveNumpyI64COWDataset(ctx context.Context, body []byte)
 	if parent == nil {
 		parent = engine.cowRuntime
 	}
-	deriver, ok := parent.(derivableCOWPreparedRuntime)
-	if !ok {
-		return runtimeconfig.ErrMechanismDisabled
-	}
-	derived, err := deriver.derive(ctx, engine, source, identity)
+	derived, err := build(parent)
 	if err != nil {
 		return err
 	}

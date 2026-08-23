@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/numpycodec"
@@ -82,6 +84,36 @@ func NewPreparedNumpyInput(name string, descriptor numpycodec.Descriptor, body [
 		body:           append([]byte(nil), body...),
 		identity:       digestPreparedBytes(descriptorJSON),
 	}, nil
+}
+
+func preparedImportClosureIdentity(available, qualified []string) string {
+	available = append([]string(nil), available...)
+	qualified = append([]string(nil), qualified...)
+	sort.Strings(available)
+	sort.Strings(qualified)
+	parts := append([]string{"pysolate.import-closure.v1", "available"}, available...)
+	parts = append(parts, "qualified")
+	parts = append(parts, qualified...)
+	return digestPreparedBytes([]byte(strings.Join(parts, "\x00")))
+}
+
+func (input PreparedNumpyInput) validateForConfig(config runtimeconfig.RunConfig) error {
+	if input.identity == "" || config.Validate() != nil || config.ExecutionProfile == nil {
+		return ErrPreparedImageCompatibility
+	}
+	profile := config.ExecutionProfile
+	profileSHA256, err := runtimeconfig.ExecutionProfileBindingSHA256(config)
+	if err != nil {
+		return ErrPreparedImageCompatibility
+	}
+	bindings := input.descriptor.Bindings
+	if profile.ID() != "numpy-core" || profile.ArtifactSHA256() == "" || profile.ManifestSHA256() == "" ||
+		bindings.ArtifactSHA256 != profile.ArtifactSHA256() || bindings.ExecutionProfileID != profile.ID() ||
+		bindings.ExecutionProfileSHA256 != profileSHA256 ||
+		bindings.ImportClosureSHA256 != preparedImportClosureIdentity(profile.AvailableImports(), profile.QualifiedImports()) {
+		return ErrPreparedImageCompatibility
+	}
+	return nil
 }
 
 func validPreparedName(name string) bool {

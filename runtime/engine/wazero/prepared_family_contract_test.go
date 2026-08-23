@@ -94,6 +94,24 @@ func TestPreparedImageIdentityRejectsImageAffectingDrift(t *testing.T) {
 	}
 }
 
+func TestPreparedInputBindingRejectsProfileDrift(t *testing.T) {
+	profile := testBoundNumpyProfile(t)
+	input := realPreparedInput(t, profile, []uint64{4}, []uint64{1, 2, 3, 4})
+	config := runtimeconfig.DefaultRunConfig()
+	config.ExecutionProfile = profile
+	if err := input.validateForConfig(config); err != nil {
+		t.Fatalf("valid binding err=%v", err)
+	}
+	deterministic, err := runtimeconfig.NewDeterministicVerificationProfile(profile.ArtifactSHA256(), "seed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.DeterministicVerification = &deterministic
+	if err := input.validateForConfig(config); !errors.Is(err, ErrPreparedImageCompatibility) {
+		t.Fatalf("profile drift err=%v", err)
+	}
+}
+
 func TestPreparedFamilyLifecycleBoundsAndClose(t *testing.T) {
 	lifecycle, err := newPreparedFamilyLifecycle(2, 1)
 	if err != nil {

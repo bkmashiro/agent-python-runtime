@@ -7,7 +7,9 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -42,18 +44,20 @@ func realPreparedGuest(t *testing.T) ([]byte, *runtimeconfig.ExecutionProfile) {
 	return artifact, &profile
 }
 
-func realPreparedInput(t *testing.T, shape []uint64, values []uint64) PreparedNumpyInput {
+func realPreparedInputRaw(t *testing.T, profile *runtimeconfig.ExecutionProfile, dtype string, shape []uint64, body []byte) PreparedNumpyInput {
 	t.Helper()
-	body := make([]byte, len(values)*8)
-	for index, value := range values {
-		binary.LittleEndian.PutUint64(body[index*8:], value)
+	config := runtimeconfig.DefaultRunConfig()
+	config.ExecutionProfile = profile
+	profileSHA256, err := runtimeconfig.ExecutionProfileBindingSHA256(config)
+	if err != nil {
+		t.Fatal(err)
 	}
 	bindings := numpycodec.Bindings{
-		ArtifactSHA256: digestHex('a'), ExecutionProfileID: "numpy-core", ExecutionProfileSHA256: digestHex('b'),
-		ImportClosureSHA256: digestHex('c'), SourceSHA256: digestHex('d'), InputsSHA256: digestHex('e'), PassRegistrationSHA256: digestHex('f'),
+		ArtifactSHA256: profile.ArtifactSHA256(), ExecutionProfileID: "numpy-core", ExecutionProfileSHA256: profileSHA256,
+		ImportClosureSHA256: preparedImportClosureIdentity(profile.AvailableImports(), profile.QualifiedImports()), SourceSHA256: digestHex('d'), InputsSHA256: digestHex('e'), PassRegistrationSHA256: digestHex('f'),
 	}
 	producer, err := json.Marshal(numpycodec.ProducerValue{
-		SchemaVersion: numpycodec.ProducerValueSchemaVersion, DType: "<i8", Shape: shape, Order: "C", CContiguous: true,
+		SchemaVersion: numpycodec.ProducerValueSchemaVersion, DType: dtype, Shape: shape, Order: "C", CContiguous: true,
 		NBytes: uint64(len(body)), BodySHA256: resultblob.BytesDigest(body), BodyBase64: base64.StdEncoding.EncodeToString(body),
 	})
 	if err != nil {
@@ -68,6 +72,15 @@ func realPreparedInput(t *testing.T, shape []uint64, values []uint64) PreparedNu
 		t.Fatal(err)
 	}
 	return input
+}
+
+func realPreparedInput(t *testing.T, profile *runtimeconfig.ExecutionProfile, shape []uint64, values []uint64) PreparedNumpyInput {
+	t.Helper()
+	body := make([]byte, len(values)*8)
+	for index, value := range values {
+		binary.LittleEndian.PutUint64(body[index*8:], value)
+	}
+	return realPreparedInputRaw(t, profile, "<i8", shape, body)
 }
 
 func runPreparedCopy(t *testing.T, artifact []byte, profile *runtimeconfig.ExecutionProfile, input PreparedNumpyInput, runID, code string) json.RawMessage {
@@ -97,7 +110,81 @@ func runPreparedCopy(t *testing.T, artifact []byte, profile *runtimeconfig.Execu
 	return decoded.Result
 }
 
-func TestPreparedNumpyPrivateCopyRunsThreeLayoutsAndIsolatesMutation(t *testing.T) {
+func runPreparedEngine(t *testing.T, runner *Engine, runID, code string) json.RawMessage {
+	t.Helper()
+	request := runtimeconfig.RunRequest{RunID: runID, Code: code, Inputs: json.RawMessage(`{}`), Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: "numpy-core", Imports: []string{}}}
+	raw, err := runtimeconfig.EncodeRunRequest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := runner.Run(context.Background(), raw, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := runtimeconfig.DecodeAndValidateRunResponse(request, response)
+	if err != nil || decoded.Status != runtimeconfig.RunResponseOK {
+		t.Fatalf("response=%s err=%v", response, err)
+	}
+	return decoded.Result
+}
+
+func TestPreparedNumpyPrivateCOWSupportsMultipleLayoutsAndIsolatesMutation(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("private COW requires Linux")
+	}
+	artifact, profile := realPreparedGuest(t)
+	config := runtimeconfig.DefaultRunConfig()
+	config.ExecutionProfile = profile
+	config.Mechanisms = runtimeconfig.MechanismSet{PreparedRuntime: true, MemoryCOW: true}
+	runner, err := New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+
+	floatBody := make([]byte, 6*4)
+	for index, value := range []float32{1.5, 2.5, 3.5, 4.5, 5.5, 6.5} {
+		binary.LittleEndian.PutUint32(floatBody[index*4:], math.Float32bits(value))
+	}
+	inputs := []PreparedNumpyInput{
+		realPreparedInput(t, profile, []uint64{2, 2}, []uint64{1, 2, 3, 4}),
+		realPreparedInputRaw(t, profile, "<f4", []uint64{2, 3}, floatBody),
+		realPreparedInputRaw(t, profile, "|u1", []uint64{3}, []byte{7, 8, 9}),
+	}
+	for index, input := range inputs {
+		if err := runner.PrepareNumpyCOWInput(context.Background(), input); err != nil {
+			t.Fatalf("prepare %d: %v", index, err)
+		}
+		state := runner.PreparedImageState()
+		if state.PreparedInputSHA256 != input.IdentitySHA256() || state.ParentTrustedPrepareSHA256 == "" || state.BaselineBytes == 0 {
+			t.Fatalf("state %d: %+v", index, state)
+		}
+		mutated := runPreparedEngine(t, runner, fmt.Sprintf("cow-mutate-%d", index), "dataset.flat[0] = 99\nresult = [dataset.dtype.str, list(dataset.shape), float(dataset.sum())]\n")
+		fresh := runPreparedEngine(t, runner, fmt.Sprintf("cow-fresh-%d", index), "result = [dataset.dtype.str, list(dataset.shape), float(dataset.flat[0]), float(dataset.sum())]\n")
+		if strings.Contains(string(fresh), "99") || len(mutated) == 0 {
+			t.Fatalf("mutation leaked for input %d: mutated=%s fresh=%s", index, mutated, fresh)
+		}
+	}
+
+	failedRequest := runtimeconfig.RunRequest{RunID: "cow-error", Code: "raise RuntimeError('fixture')\n", Inputs: json.RawMessage(`{}`), Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: "numpy-core", Imports: []string{}}}
+	raw, err := runtimeconfig.EncodeRunRequest(failedRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := runner.Run(context.Background(), raw, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := runtimeconfig.DecodeAndValidateRunResponse(failedRequest, response)
+	if err != nil || decoded.Status != runtimeconfig.RunResponseError {
+		t.Fatalf("error response=%s err=%v", response, err)
+	}
+	if got := runPreparedEngine(t, runner, "cow-after-error", "result = int(dataset.flat[0])\n"); string(got) != "7" {
+		t.Fatalf("post-error state=%s", got)
+	}
+}
+
+func TestPreparedNumpyPrivateCopySupportsMultipleLayoutsAndMutationIsolation(t *testing.T) {
 	artifact, profile := realPreparedGuest(t)
 	cases := []struct {
 		shape  []uint64
@@ -108,7 +195,7 @@ func TestPreparedNumpyPrivateCopyRunsThreeLayoutsAndIsolatesMutation(t *testing.
 		{shape: []uint64{1, 2, 2}, values: []uint64{9, 10, 11, 12}},
 	}
 	for index, test := range cases {
-		input := realPreparedInput(t, test.shape, test.values)
+		input := realPreparedInput(t, profile, test.shape, test.values)
 		mutated := runPreparedCopy(t, artifact, profile, input, fmt.Sprintf("copy-mutate-%d", index), "dataset.flat[0] = 99\nresult = [list(dataset.shape), int(dataset.sum())]\n")
 		fresh := runPreparedCopy(t, artifact, profile, input, fmt.Sprintf("copy-fresh-%d", index), "result = [list(dataset.shape), int(dataset.sum()), int(dataset.flat[0])]\n")
 		var mutatedValue, freshValue []any

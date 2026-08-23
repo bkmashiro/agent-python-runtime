@@ -83,18 +83,20 @@ func (record PreparedMemberRecord) Validate() error {
 // PreparedFamily owns one immutable input image and creates bounded single-use runners.
 // It does not schedule, retry, select, or publish member work.
 type PreparedFamily struct {
-	mu          sync.Mutex
-	wasm        []byte
-	imageConfig runtimeconfig.RunConfig
-	input       PreparedNumpyInput
-	identity    string
-	disposition PreparedPhysicalDisposition
-	lifecycle   *preparedFamilyLifecycle
-	parent      *Engine
-	runners     map[uint64]*preparedFamilyRunner
-	invocations map[uint64]runtimeconfig.InvocationRef
-	records     map[uint64]PreparedMemberRecord
-	closed      bool
+	closeMu       sync.Mutex
+	closeComplete bool
+	mu            sync.Mutex
+	wasm          []byte
+	imageConfig   runtimeconfig.RunConfig
+	input         PreparedNumpyInput
+	identity      string
+	disposition   PreparedPhysicalDisposition
+	lifecycle     *preparedFamilyLifecycle
+	parent        *Engine
+	runners       map[uint64]*preparedFamilyRunner
+	invocations   map[uint64]runtimeconfig.InvocationRef
+	records       map[uint64]PreparedMemberRecord
+	closed        bool
 }
 
 // PrepareNumpyFamily seals one bounded ndarray input for later fresh consumers.
@@ -131,8 +133,14 @@ func PrepareNumpyFamily(ctx context.Context, wasm []byte, config PreparedFamilyC
 			return nil, err
 		}
 		if err := parent.PrepareNumpyCOWInput(ctx, input); err != nil {
-			_ = parent.Close(context.Background())
-			return nil, err
+			closeErr := parent.Close(context.Background())
+			if config.Mode == PreparedFamilyAuto && errors.Is(err, ErrCOWIneligible) && closeErr == nil {
+				family.disposition = PreparedDispositionPrivateCopy
+				family.imageConfig.Mechanisms.PreparedRuntime = false
+				family.imageConfig.Mechanisms.MemoryCOW = false
+				return family, nil
+			}
+			return nil, errors.Join(err, closeErr)
 		}
 		family.parent = parent
 		family.input.body = nil
@@ -150,6 +158,7 @@ func (family *PreparedFamily) State() PreparedFamilyState {
 	state.FamilySHA256 = family.identity
 	state.InputSHA256 = family.input.identity
 	state.Disposition = family.disposition
+	state.Closed = family.closeComplete
 	family.mu.Unlock()
 	return state
 }

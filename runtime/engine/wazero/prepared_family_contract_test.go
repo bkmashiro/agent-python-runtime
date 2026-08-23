@@ -232,6 +232,65 @@ func TestPreparedGuestTransferReleasesBothAllocationsOnEveryTerminalPath(t *test
 	}
 }
 
+type closeRaceFamilyRunner struct {
+	started chan struct{}
+	release chan struct{}
+	closed  chan struct{}
+}
+
+func (runner *closeRaceFamilyRunner) Run(context.Context, []byte, string) ([]byte, error) {
+	close(runner.started)
+	<-runner.release
+	return []byte(`{"schema_version":"pysolate.run-response.v1","run_id":"run","status":"ok","result":1,"metrics":{}}`), nil
+}
+func (runner *closeRaceFamilyRunner) Close(context.Context) error {
+	close(runner.closed)
+	return nil
+}
+func (*closeRaceFamilyRunner) Properties() engine.Properties { return engine.Properties{} }
+
+func TestPreparedFamilyRunnerConcurrentFirstRunAndCloseIsOrdered(t *testing.T) {
+	for attempt := 0; attempt < 50; attempt++ {
+		lifecycle, _ := newPreparedFamilyLifecycle(1, 1)
+		member, _ := lifecycle.reserve()
+		delegate := &closeRaceFamilyRunner{started: make(chan struct{}), release: make(chan struct{}), closed: make(chan struct{})}
+		ref := runtimeconfig.InvocationRef{AgentRunID: "agent", InvocationID: "inv", InvocationAttempt: 1, ExecutionID: "run"}
+		runner := newPreparedFamilyRunner(delegate, ref, lifecycle, member)
+		request := []byte(`{"run_id":"run","code":"result=1","inputs":{}}`)
+		runDone := make(chan error, 1)
+		closeDone := make(chan error, 1)
+		go func() { _, err := runner.Run(context.Background(), request, ""); runDone <- err }()
+		go func() { closeDone <- runner.Close(context.Background()) }()
+		closeFinished := false
+		select {
+		case <-delegate.started:
+			select {
+			case <-delegate.closed:
+				t.Fatal("delegate closed before active Run completed")
+			default:
+			}
+			close(delegate.release)
+		case err := <-closeDone:
+			if err != nil {
+				t.Fatal(err)
+			}
+			closeFinished = true
+			close(delegate.release)
+		}
+		if err := <-runDone; err != nil && !errors.Is(err, ErrPreparedRunnerConsumed) {
+			t.Fatal(err)
+		}
+		if !closeFinished {
+			if err := <-closeDone; err != nil {
+				t.Fatal(err)
+			}
+		}
+		if state := lifecycle.state(); state.Active != 0 {
+			t.Fatalf("state=%+v", state)
+		}
+	}
+}
+
 type blockingFamilyRunner struct {
 	started chan struct{}
 	release chan struct{}
@@ -274,9 +333,11 @@ func TestPreparedFamilyRunnerCloseWaitsForActiveRun(t *testing.T) {
 }
 
 type familyFakeRunner struct {
-	runs     int
-	ref      runtimeconfig.InvocationRef
-	runError error
+	runs          int
+	ref           runtimeconfig.InvocationRef
+	runError      error
+	closes        int
+	failCloseOnce bool
 }
 
 func (runner *familyFakeRunner) Run(ctx context.Context, _ []byte, trustedPrepare string) ([]byte, error) {
@@ -290,8 +351,51 @@ func (runner *familyFakeRunner) Run(ctx context.Context, _ []byte, trustedPrepar
 	}
 	return []byte(`{"schema_version":"pysolate.run-response.v1","run_id":"execution","status":"ok","result":1,"receipts":[],"metrics":{"capability_calls":0,"result_bytes":1}}`), nil
 }
-func (*familyFakeRunner) Close(context.Context) error   { return nil }
+func (runner *familyFakeRunner) Close(context.Context) error {
+	runner.closes++
+	if runner.failCloseOnce && runner.closes == 1 {
+		return errors.New("close fixture")
+	}
+	return nil
+}
 func (*familyFakeRunner) Properties() engine.Properties { return engine.Properties{Backend: "fake"} }
+
+func TestPreparedFamilyRunnerCloseRetriesDelegateFailure(t *testing.T) {
+	lifecycle, _ := newPreparedFamilyLifecycle(1, 1)
+	member, _ := lifecycle.reserve()
+	delegate := &familyFakeRunner{failCloseOnce: true}
+	ref := runtimeconfig.InvocationRef{AgentRunID: "agent", InvocationID: "invocation", InvocationAttempt: 1, ExecutionID: "execution"}
+	runner := newPreparedFamilyRunner(delegate, ref, lifecycle, member)
+	notifications := 0
+	runner.onClose = func(uint64) { notifications++ }
+	if err := runner.Close(context.Background()); err == nil {
+		t.Fatal("first Close unexpectedly succeeded")
+	}
+	if err := runner.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if delegate.closes != 2 || notifications != 1 {
+		t.Fatalf("closes=%d notifications=%d", delegate.closes, notifications)
+	}
+}
+
+func TestPreparedFamilyCloseRetriesAndRetainsOwnedBytesUntilSuccess(t *testing.T) {
+	lifecycle, _ := newPreparedFamilyLifecycle(1, 1)
+	member, _ := lifecycle.reserve()
+	delegate := &familyFakeRunner{failCloseOnce: true}
+	ref := runtimeconfig.InvocationRef{AgentRunID: "agent", InvocationID: "invocation", InvocationAttempt: 1, ExecutionID: "execution"}
+	runner := newPreparedFamilyRunner(delegate, ref, lifecycle, member)
+	family := &PreparedFamily{lifecycle: lifecycle, wasm: []byte("artifact"), input: PreparedNumpyInput{body: []byte("body")}, runners: map[uint64]*preparedFamilyRunner{member: runner}}
+	if err := family.Close(context.Background()); err == nil || family.closeComplete || len(family.wasm) == 0 {
+		t.Fatalf("first Close err=%v complete=%t wasm=%d", err, family.closeComplete, len(family.wasm))
+	}
+	if err := family.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !family.closeComplete || family.wasm != nil || family.input.body != nil {
+		t.Fatalf("complete=%t wasm=%v body=%v", family.closeComplete, family.wasm, family.input.body)
+	}
+}
 
 func TestPreparedFamilyRunnerRecordsTimeoutSeparately(t *testing.T) {
 	lifecycle, _ := newPreparedFamilyLifecycle(1, 1)
@@ -320,10 +424,11 @@ func TestPreparedFamilyRunnerRejectsTrustedPrepareAndIsSingleUse(t *testing.T) {
 	if _, err := runner.Run(context.Background(), []byte(`{"run_id":"other","code":"result=1","inputs":{}}`), ""); !errors.Is(err, ErrPreparedInvocationMismatch) || delegate.runs != 0 {
 		t.Fatalf("identity drift err=%v runs=%d", err, delegate.runs)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	if _, err := runner.Run(ctx, request, ""); err != nil || delegate.runs != 1 || delegate.ref != ref {
+	if _, err := runner.Run(context.Background(), request, ""); err != nil || delegate.runs != 1 || delegate.ref != ref {
 		t.Fatalf("run err=%v runs=%d ref=%+v", err, delegate.runs, delegate.ref)
+	}
+	if _, err := runner.Run(context.Background(), []byte(`{"run_id":"other"}`), "forbidden"); !errors.Is(err, ErrPreparedRunnerConsumed) || delegate.runs != 1 {
+		t.Fatalf("repeat priority err=%v runs=%d", err, delegate.runs)
 	}
 	if _, err := runner.Run(context.Background(), request, ""); !errors.Is(err, ErrPreparedRunnerConsumed) || delegate.runs != 1 {
 		t.Fatalf("repeat err=%v runs=%d", err, delegate.runs)

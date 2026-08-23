@@ -201,12 +201,15 @@ type preparedFamilyRunner struct {
 	lifecycle  *preparedFamilyLifecycle
 	memberID   uint64
 
-	mu         sync.Mutex
-	closed     bool
-	running    bool
-	done       chan struct{}
-	onTerminal func(uint64, string, PreparedMemberDisposition, []byte)
-	onClose    func(uint64)
+	mu            sync.Mutex
+	closed        bool
+	consumed      bool
+	running       bool
+	done          chan struct{}
+	closeMu       sync.Mutex
+	closeComplete bool
+	onTerminal    func(uint64, string, PreparedMemberDisposition, []byte)
+	onClose       func(uint64)
 }
 
 func newPreparedFamilyRunner(delegate enginecontract.Runner, invocation runtimeconfig.InvocationRef, lifecycle *preparedFamilyLifecycle, memberID uint64) *preparedFamilyRunner {
@@ -217,6 +220,12 @@ func newPreparedFamilyRunner(delegate enginecontract.Runner, invocation runtimec
 }
 
 func (runner *preparedFamilyRunner) Run(ctx context.Context, request []byte, trustedPrepare string) ([]byte, error) {
+	runner.mu.Lock()
+	consumed := runner.closed || runner.consumed || runner.running
+	runner.mu.Unlock()
+	if consumed {
+		return nil, ErrPreparedRunnerConsumed
+	}
 	if trustedPrepare != "" {
 		return nil, ErrPreparedTrustedPrepare
 	}
@@ -225,7 +234,7 @@ func (runner *preparedFamilyRunner) Run(ctx context.Context, request []byte, tru
 		return nil, ErrPreparedInvocationMismatch
 	}
 	runner.mu.Lock()
-	if runner.closed || runner.running {
+	if runner.closed || runner.consumed || runner.running {
 		runner.mu.Unlock()
 		return nil, ErrPreparedRunnerConsumed
 	}
@@ -236,6 +245,9 @@ func (runner *preparedFamilyRunner) Run(ctx context.Context, request []byte, tru
 		runner.finishRun()
 		return nil, err
 	}
+	runner.mu.Lock()
+	runner.consumed = true
+	runner.mu.Unlock()
 
 	runContext, err := enginecontract.WithInvocationRef(ctx, runner.invocation)
 	if err != nil {
@@ -281,34 +293,40 @@ func (runner *preparedFamilyRunner) finishRun() {
 }
 
 func (runner *preparedFamilyRunner) Close(ctx context.Context) error {
-	runner.mu.Lock()
-	if runner.closed {
-		runner.mu.Unlock()
+	if ctx == nil {
+		return ErrPreparedFamilyConfig
+	}
+	runner.closeMu.Lock()
+	defer runner.closeMu.Unlock()
+	if runner.closeComplete {
 		return nil
 	}
-	running := runner.running
-	done := runner.done
-	runner.mu.Unlock()
-	if running {
+	for {
+		runner.mu.Lock()
+		if !runner.running {
+			runner.closed = true
+			runner.mu.Unlock()
+			break
+		}
+		done := runner.done
+		runner.mu.Unlock()
 		select {
 		case <-done:
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
-	runner.mu.Lock()
-	if runner.closed {
-		runner.mu.Unlock()
-		return nil
+	if err := runner.lifecycle.retire(runner.memberID); err != nil {
+		return err
 	}
-	runner.closed = true
-	runner.mu.Unlock()
-	retireErr := runner.lifecycle.retire(runner.memberID)
-	closeErr := runner.delegate.Close(ctx)
+	if err := runner.delegate.Close(ctx); err != nil {
+		return err
+	}
+	runner.closeComplete = true
 	if runner.onClose != nil {
 		runner.onClose(runner.memberID)
 	}
-	return errors.Join(retireErr, closeErr)
+	return nil
 }
 
 func (runner *preparedFamilyRunner) Properties() enginecontract.Properties {

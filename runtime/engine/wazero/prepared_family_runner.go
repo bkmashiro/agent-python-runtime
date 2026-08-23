@@ -48,6 +48,9 @@ func (family *PreparedFamily) NewRunner(ctx context.Context, config PreparedRunn
 	if family.disposition == PreparedDispositionPrivateCOW {
 		childConfig.Mechanisms.PreparedRuntime = true
 		childConfig.Mechanisms.MemoryCOW = true
+	} else {
+		childConfig.Mechanisms.PreparedRuntime = false
+		childConfig.Mechanisms.MemoryCOW = false
 	}
 	if family.input.validateForConfig(childConfig) != nil {
 		return nil, ErrPreparedFamilyDrift
@@ -156,16 +159,22 @@ func (family *PreparedFamily) Close(ctx context.Context) error {
 	if family == nil || family.lifecycle == nil {
 		return nil
 	}
-	family.mu.Lock()
-	if family.closed {
-		family.mu.Unlock()
+	if ctx == nil {
+		return ErrPreparedFamilyConfig
+	}
+	family.closeMu.Lock()
+	defer family.closeMu.Unlock()
+	if family.closeComplete {
 		return nil
 	}
-	if err := family.lifecycle.close(); err != nil {
-		family.mu.Unlock()
-		return err
+	family.mu.Lock()
+	if !family.closed {
+		if err := family.lifecycle.close(); err != nil {
+			family.mu.Unlock()
+			return err
+		}
+		family.closed = true
 	}
-	family.closed = true
 	runners := make([]*preparedFamilyRunner, 0, len(family.runners))
 	for _, runner := range family.runners {
 		runners = append(runners, runner)
@@ -173,16 +182,23 @@ func (family *PreparedFamily) Close(ctx context.Context) error {
 	parent := family.parent
 	family.mu.Unlock()
 
-	var result error
+	var runnerErr error
 	for _, runner := range runners {
-		result = errors.Join(result, runner.Close(ctx))
+		runnerErr = errors.Join(runnerErr, runner.Close(ctx))
+	}
+	if runnerErr != nil {
+		return runnerErr
 	}
 	if parent != nil {
-		result = errors.Join(result, parent.Close(ctx))
+		if err := parent.Close(ctx); err != nil {
+			return err
+		}
 	}
 	family.mu.Lock()
 	family.input.body = nil
+	family.wasm = nil
 	family.parent = nil
+	family.closeComplete = true
 	family.mu.Unlock()
-	return result
+	return nil
 }

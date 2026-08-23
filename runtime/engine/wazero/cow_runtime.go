@@ -22,6 +22,7 @@ const (
 var (
 	ErrTrustedCOWPrepareSource  = errors.New("trusted COW prepare source is invalid")
 	ErrTrustedCOWPrepareBinding = errors.New("trusted COW prepare source does not match the initialized baseline")
+	ErrCOWIneligible            = errors.New("artifact is not eligible for bounded private COW")
 	errCOWAllocationShape       = errors.New("COW allocation shape does not match image")
 )
 

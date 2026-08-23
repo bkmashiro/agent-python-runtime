@@ -2,8 +2,11 @@ package wazero
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"runtime"
 	"testing"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
@@ -29,6 +32,66 @@ func runFamilyMember(t *testing.T, runner interface {
 	decoded, err := runtimeconfig.DecodeAndValidateRunResponse(request, response)
 	if err != nil || decoded.Status != runtimeconfig.RunResponseOK {
 		t.Fatalf("response=%s err=%v", response, err)
+	}
+}
+
+func TestPreparedFamilyAutoFallsBackOnlyForCOWIneligibleArtifact(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux eligibility fallback")
+	}
+	wasm := []byte{0, 97, 115, 109, 1, 0, 0, 0}
+	digest := sha256.Sum256(wasm)
+	profile, err := runtimeconfig.NewExecutionProfile("numpy-core", []string{"numpy"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err = profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{
+		ProfileID: "numpy-core", ArtifactSHA256: fmt.Sprintf("sha256:%x", digest[:]), ManifestSHA256: digestHex('a'),
+		ImportRoots: []string{"numpy"}, QualifiedImportRoots: []string{"numpy"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runtimeconfig.DefaultRunConfig()
+	config.ExecutionProfile = &profile
+	input := realPreparedInput(t, &profile, []uint64{1}, []uint64{7})
+	family, err := PrepareNumpyFamily(context.Background(), wasm, PreparedFamilyConfig{ImageConfig: config, MaxConsumers: 1, MaxActive: 1, Mode: PreparedFamilyAuto}, input)
+	if err != nil || family.State().Disposition != PreparedDispositionPrivateCopy {
+		t.Fatalf("auto family=%v err=%v", family, err)
+	}
+	if err := family.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PrepareNumpyFamily(context.Background(), wasm, PreparedFamilyConfig{ImageConfig: config, MaxConsumers: 1, MaxActive: 1, Mode: PreparedFamilyPrivateCOW}, input); !errors.Is(err, ErrCOWIneligible) {
+		t.Fatalf("explicit COW err=%v", err)
+	}
+}
+
+func TestPreparedFamilyExplicitPrivateCopyClearsConsumerCOW(t *testing.T) {
+	artifact, profile := realPreparedGuest(t)
+	imageConfig := runtimeconfig.DefaultRunConfig()
+	imageConfig.ExecutionProfile = profile
+	input := realPreparedInput(t, profile, []uint64{2}, []uint64{3, 4})
+	family, err := PrepareNumpyFamily(context.Background(), artifact, PreparedFamilyConfig{ImageConfig: imageConfig, MaxConsumers: 1, MaxActive: 1, Mode: PreparedFamilyPrivateCopy}, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	memberConfig := imageConfig
+	memberConfig.Mechanisms.PreparedRuntime = true
+	memberConfig.Mechanisms.MemoryCOW = true
+	runner, err := family.NewRunner(context.Background(), PreparedRunnerConfig{RunConfig: memberConfig, InvocationRef: preparedInvocation("copy-member", 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runFamilyMember(t, runner, "copy-member")
+	if family.State().Disposition != PreparedDispositionPrivateCopy {
+		t.Fatalf("state=%+v", family.State())
+	}
+	if err := runner.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := family.Close(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 }
 

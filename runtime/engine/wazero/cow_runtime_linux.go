@@ -52,7 +52,7 @@ func newCOWPreparedRuntimeWithTrustedSource(ctx context.Context, engine *Engine,
 	}
 	probe := engine.COWProbe()
 	if !probe.MemoryCOWCandidate {
-		return nil, errors.New("artifact linear memory is not a bounded private COW candidate")
+		return nil, fmt.Errorf("%w: artifact linear memory is not exported and bounded", ErrCOWIneligible)
 	}
 	canonical, err := engine.newPrepared(ctx)
 	if err != nil {

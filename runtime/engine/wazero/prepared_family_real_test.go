@@ -53,6 +53,11 @@ func TestPreparedFamilyRealGuestSingleUseBoundsAndRecords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	drift := memberConfig
+	drift.MemoryLimitPages++
+	if _, err := family.NewRunner(context.Background(), PreparedRunnerConfig{RunConfig: drift, InvocationRef: preparedInvocation("family-drift", 1)}); !errors.Is(err, ErrPreparedFamilyDrift) {
+		t.Fatalf("drift runner err=%v", err)
+	}
 	if _, err := family.NewRunner(context.Background(), PreparedRunnerConfig{RunConfig: memberConfig, InvocationRef: preparedInvocation("family-third", 1)}); !errors.Is(err, ErrPreparedFamilyConsumerLimit) {
 		t.Fatalf("third runner err=%v", err)
 	}

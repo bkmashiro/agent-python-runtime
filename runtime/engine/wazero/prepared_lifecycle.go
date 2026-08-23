@@ -40,6 +40,7 @@ const (
 type preparedFamilyMember struct {
 	phase       preparedMemberPhase
 	disposition PreparedMemberDisposition
+	terminal    bool
 }
 
 type PreparedFamilyState struct {
@@ -117,6 +118,7 @@ func (lifecycle *preparedFamilyLifecycle) finish(id uint64, disposition Prepared
 	}
 	member.phase = preparedMemberTerminal
 	member.disposition = disposition
+	member.terminal = true
 	lifecycle.members[id] = member
 	lifecycle.active--
 	return nil
@@ -133,6 +135,7 @@ func (lifecycle *preparedFamilyLifecycle) retire(id uint64) error {
 	case preparedMemberNew:
 		member.disposition = PreparedMemberClosedUnrun
 		member.phase = preparedMemberClosed
+		member.terminal = true
 	case preparedMemberTerminal:
 		member.phase = preparedMemberClosed
 	case preparedMemberClosed:
@@ -158,6 +161,7 @@ func (lifecycle *preparedFamilyLifecycle) close() error {
 		if member.phase == preparedMemberNew {
 			member.phase = preparedMemberClosed
 			member.disposition = PreparedMemberClosedUnrun
+			member.terminal = true
 			lifecycle.members[id] = member
 		}
 	}
@@ -169,7 +173,7 @@ func (lifecycle *preparedFamilyLifecycle) state() PreparedFamilyState {
 	defer lifecycle.mu.Unlock()
 	state := PreparedFamilyState{Created: lifecycle.total, Active: lifecycle.active, Closed: lifecycle.closed}
 	for _, member := range lifecycle.members {
-		if member.phase == preparedMemberTerminal || member.phase == preparedMemberClosed {
+		if member.terminal {
 			state.Terminal++
 		}
 	}
@@ -220,6 +224,9 @@ func (runner *preparedFamilyRunner) Run(ctx context.Context, request []byte, tru
 	runContext, err := enginecontract.WithInvocationRef(ctx, runner.invocation)
 	if err != nil {
 		_ = runner.lifecycle.finish(runner.memberID, PreparedMemberGuestError)
+		if runner.onTerminal != nil {
+			runner.onTerminal(runner.memberID, decoded.RunID, PreparedMemberGuestError, nil)
+		}
 		runner.finishRun()
 		return nil, err
 	}

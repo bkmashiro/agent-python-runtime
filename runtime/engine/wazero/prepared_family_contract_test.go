@@ -52,6 +52,9 @@ func TestPreparedNumpyInputCopiesAndBindsBody(t *testing.T) {
 	if input.body[0] != 7 || input.IdentitySHA256() != identity || input.Name() != "dataset" {
 		t.Fatalf("input aliased caller body: body=%d identity=%s", input.body[0], input.IdentitySHA256())
 	}
+	if strings.Contains(string(input.descriptorJSON), `\u003c`) || !strings.HasPrefix(string(input.descriptorJSON), `{"body_sha256":`) {
+		t.Fatalf("Guest descriptor is not Python-canonical: %s", input.descriptorJSON)
+	}
 	mutated := append([]byte(nil), input.body...)
 	mutated[0]++
 	if _, err := NewPreparedNumpyInput("dataset", input.Descriptor(), mutated); !errors.Is(err, ErrPreparedNumpyInput) {

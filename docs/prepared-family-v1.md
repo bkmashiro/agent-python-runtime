@@ -1,6 +1,6 @@
 # Prepared family v1 contract
 
-**Status:** Implemented through the bounded prepared-family runner slice; workspace/subagent acceptance remains gated by the active megagoal. This document governs the post-paper lane and does not change frozen paper contracts.
+**Status:** Implemented through the private workspace/authority composition slice; deterministic product acceptance remains gated by the active megagoal. This document governs the post-paper lane and does not change frozen paper contracts.
 
 ## Scope
 
@@ -87,6 +87,7 @@ type PreparedRunnerConfig struct {
     WorkspaceRef workspace.Ref
     WorkspaceOwner string
     InvocationRef runtime.InvocationRef
+    PlanSHA256 string
 }
 
 func PrepareNumpyFamily(context.Context, []byte, PreparedFamilyConfig, PreparedNumpyInput) (*PreparedFamily, error)
@@ -101,6 +102,9 @@ The exact exported names may change during implementation, but not these ownersh
 - The canonical preparation engine has no Broker, grants or workspace.
 - `NewRunner` validates compatibility before creating the runner and deep-copies mutable RunConfig members, especially `CapabilityGrants`.
 - Each call receives a fresh Broker factory result and private workspace binding through the existing Engine path.
+- A non-nil Broker factory requires `PlanSHA256`; the produced Broker must report that exact plan identity and must not have appeared in another family member.
+- Invocation IDs, execution IDs and non-empty workspace refs are unique for the family lifetime. Closing a member does not make an authority or workspace identity reusable.
+- Terminal records carry only body-free plan/grant/workspace digests. The grant digest is computed from the frozen `CapabilityGrants` snapshot.
 - The wrapper applies its Host-owned `InvocationRef` to the Run context, requires request `run_id == InvocationRef.ExecutionID`, and rejects caller-supplied trusted preparation.
 - The returned wrapper is single-use and does not expose the raw prepared Engine.
 - Family identity and member records are Host values; neither is Guest input.

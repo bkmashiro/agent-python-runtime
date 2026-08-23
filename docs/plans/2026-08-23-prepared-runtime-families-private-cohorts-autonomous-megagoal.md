@@ -2,9 +2,9 @@
 
 > **For Hermes:** Execute this plan continuously in `/Users/yuzhe/projects/agent-python-runtime` only after Yuzhe starts it with `/goal`. Read the whole file and live Git/code first. Prefer the thinnest executable vertical slice, use RED -> GREEN -> refactor for behavior, keep the Runtime free of scheduling policy, make coherent signed commits, push after verified phases, and continue without waiting after ordinary checkpoints. Stop only at a named architecture, resource, permission or safety gate below.
 
-**Status:** Active since 2026-08-23. Gates P0 through P2 passed; Phase 3 implementation is active.
+**Status:** Active since 2026-08-23. Gates P0-P3 passed; Phase 4 authority/workspace composition is active.
 
-**Current execution pointer:** Phase 3, implementing the bounded Host-owned prepared family and single-use runner factory from the observed RED test.
+**Current execution pointer:** Phase 4, composing the sealed image with distinct Broker/Plan and private workspace branches through existing Host/subagent primitives.
 
 **Goal:** Turn Pysolate's completed fixed prepared-NumPy/private-COW research prototype into a small reusable Host-owned prepared runtime family. One sealed package/data image may create many fresh single-use Python runners with different program source, Run identity, authority and private workspace while preserving mutation, failure and teardown isolation. Prove the product contract with deterministic acceptance fixtures on macOS and Linux. Do not invent a real evaluation dataset or reopen paper economics.
 
@@ -392,18 +392,18 @@ Tasks:
 
 Tasks:
 
-- [ ] Implement a sealed prepared-family lifecycle with explicit `Prepare`, single-use runner creation, finite total/active consumer bounds and `Close`.
-- [ ] Ensure every runner receives a new Run/Invocation identity, validation path, output buffers, cancellation scope and terminal disposition.
-- [ ] Ensure runner creation cannot widen the family's artifact/profile/import identity or reuse another consumer's RunConfig/Broker.
-- [ ] Wrap or narrow the legacy Runner surface so every prepared-family runner rejects caller-provided non-empty `trustedPrepare`; only the family-internal sealed preparation may be installed.
-- [ ] Review whether existing default-off `PreparedRuntime`/`MemoryCOW` mechanism selection is sufficient before adding any new flag.
-- [ ] Do not add `MechanismSet.Cohort`: cohort membership and scheduling belong to Host/Harness, while physical selection continues to use existing prepared/COW dispositions.
-- [ ] Provide explicit physical disposition: `private_cow`, `private_copy` or `ordinary_fresh`.
-- [ ] Make unsupported platform/mechanism selection fail explicitly or use the tested reference mode according to the frozen P0 contract.
-- [ ] Keep `engine.Runner` ordinary semantics and `RunRequest` untrusted shape unchanged unless a smaller reviewed extension is required.
-- [ ] Keep cohort/member selectors, shared input authority and family handles out of `RunRequest` and Guest inputs.
-- [ ] Add one focused example/test that runs visibly different programs over one family. Do not add a production scheduler CLI.
-- [ ] Run an independent API/lifecycle review before proceeding.
+- [x] Implement a sealed prepared-family lifecycle with explicit `Prepare`, single-use runner creation, finite total/active consumer bounds and `Close`.
+- [x] Ensure every runner receives a new Run/Invocation identity, validation path, output buffers, cancellation scope and terminal disposition.
+- [x] Ensure runner creation cannot widen the family's artifact/profile/import identity or reuse another consumer's RunConfig/Broker.
+- [x] Wrap or narrow the legacy Runner surface so every prepared-family runner rejects caller-provided non-empty `trustedPrepare`; only the family-internal sealed preparation may be installed.
+- [x] Review whether existing default-off `PreparedRuntime`/`MemoryCOW` mechanism selection is sufficient before adding any new flag.
+- [x] Do not add `MechanismSet.Cohort`: cohort membership and scheduling belong to Host/Harness, while physical selection continues to use existing prepared/COW dispositions.
+- [x] Provide explicit physical disposition: `private_cow`, `private_copy` or `ordinary_fresh`.
+- [x] Make unsupported platform/mechanism selection fail explicitly or use the tested reference mode according to the frozen P0 contract.
+- [x] Keep `engine.Runner` ordinary semantics and `RunRequest` untrusted shape unchanged unless a smaller reviewed extension is required.
+- [x] Keep cohort/member selectors, shared input authority and family handles out of `RunRequest` and Guest inputs.
+- [x] Add one focused example/test that runs visibly different programs over one family. Do not add a production scheduler CLI.
+- [x] Run an independent API/lifecycle review before proceeding.
 
 **Gate P3:** A caller can prepare once, create multiple ordinary single-use runners, close each runner independently and close the family after all consumers. Default-off ordinary execution remains unchanged. The API exposes no backing or scheduler handle.
 
@@ -420,15 +420,15 @@ Architecture preference:
 
 Tasks:
 
-- [ ] Spike the smallest safe image-owner/runner relationship. Prefer one immutable ref-counted image provider attached to independently configured runners over making workspace binding mutable inside a shared engine.
-- [ ] Prove artifact/profile/import/config drift rejects image attachment before Guest execution.
-- [ ] Bind two consumers to private branches of one expected base root and run different programs.
-- [ ] Prove file writes, temporary state, mutation, failure and cancellation remain branch-local.
-- [ ] Prove capability Plans/grants are independently constructed and never unioned because of shared preparation.
-- [ ] Seal successful branches to immutable roots; keep failed/cancelled branches private or discard them.
-- [ ] Select one root through existing `workspace.SelectRoot` or existing authority-aware `subagent.Orchestrator`; do not select inside the prepared family.
-- [ ] Add a thin prepared-family-backed `subagent.RunnerFactory` only if it composes the existing interfaces without duplicating orchestration.
-- [ ] Verify family close waits for or rejects active consumers deterministically and never invalidates an already sealed workspace root.
+- [x] Spike the smallest safe image-owner/runner relationship. Prefer one immutable ref-counted image provider attached to independently configured runners over making workspace binding mutable inside a shared engine.
+- [x] Prove artifact/profile/import/config drift rejects image attachment before Guest execution.
+- [x] Bind two consumers to private branches of one expected base root and run different programs.
+- [x] Prove file writes, temporary state, mutation, failure and cancellation remain branch-local.
+- [x] Prove capability Plans/grants are independently constructed and never unioned because of shared preparation.
+- [x] Seal successful branches to immutable roots; keep failed/cancelled branches private or discard them.
+- [x] Select one root through existing `workspace.SelectRoot` or existing authority-aware `subagent.Orchestrator`; do not select inside the prepared family.
+- [x] Add a thin prepared-family-backed `subagent.RunnerFactory` only if it composes the existing interfaces without duplicating orchestration.
+- [x] Verify family close waits for or rejects active consumers deterministically and never invalidates an already sealed workspace root.
 - [ ] Run independent authority/workspace leakage review.
 
 **Gate P4:** On gpu31, two or more different programs use one prepared image with different Run identities, Plans and private branches. Consumer mutation/failure cannot affect siblings; only the Host-selected root becomes the chosen immutable result. If Wazero image sharing across independently configured runners requires shared mutable Engine policy, a broad Runtime rewrite or authority in the canonical prepare image, stop for Yuzhe's architecture decision. A compute-only prepared family remains a valid completed subset.

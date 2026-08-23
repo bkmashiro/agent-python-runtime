@@ -1,6 +1,7 @@
 package wazero
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -78,7 +79,15 @@ func NewPreparedNumpyInput(name string, descriptor numpycodec.Descriptor, body [
 		BodySHA256:    descriptor.BodySHA256,
 		InputSHA256:   digestPreparedBytes(canonical),
 	}
-	descriptorJSON, err := json.Marshal(internal)
+	var descriptorBuffer bytes.Buffer
+	encoder := json.NewEncoder(&descriptorBuffer)
+	encoder.SetEscapeHTML(false)
+	err = encoder.Encode(map[string]any{
+		"body_sha256": internal.BodySHA256, "codec": internal.Codec, "dtype": internal.DType,
+		"endianness": internal.Endianness, "input_sha256": internal.InputSHA256, "name": internal.Name,
+		"nbytes": internal.NBytes, "order": internal.Order, "schema_version": internal.SchemaVersion, "shape": internal.Shape,
+	})
+	descriptorJSON := bytes.TrimSuffix(descriptorBuffer.Bytes(), []byte("\n"))
 	if err != nil || len(descriptorJSON) > 4096 {
 		return PreparedNumpyInput{}, ErrPreparedNumpyInput
 	}

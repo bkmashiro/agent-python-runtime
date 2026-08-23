@@ -20,7 +20,7 @@ func runFamilyMember(t *testing.T, runner interface {
 	Run(context.Context, []byte, string) ([]byte, error)
 }, runID string) {
 	t.Helper()
-	request := runtimeconfig.RunRequest{RunID: runID, Code: "dataset.flat[0] = dataset.flat[0] + 10\nresult = int(dataset.sum())\n", Inputs: json.RawMessage(`{}`), Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: "numpy-core", Imports: []string{}}}
+	request := runtimeconfig.RunRequest{RunID: runID, Code: "import numpy\ndataset.flat[0] = dataset.flat[0] + 10\nresult = int(dataset.sum())\n", Inputs: json.RawMessage(`{}`), Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: "numpy-core", Imports: []string{"numpy"}}}
 	raw, err := runtimeconfig.EncodeRunRequest(request)
 	if err != nil {
 		t.Fatal(err)

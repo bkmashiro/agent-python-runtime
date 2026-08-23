@@ -93,9 +93,10 @@ func runPreparedCopy(t *testing.T, artifact []byte, profile *runtimeconfig.Execu
 		t.Fatal(err)
 	}
 	defer runner.Close(context.Background())
+	code = "import numpy\n" + code
 	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
 		RunID: runID, Code: code, Inputs: json.RawMessage(`{}`),
-		Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: "numpy-core", Imports: []string{}},
+		Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: "numpy-core", Imports: []string{"numpy"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -112,7 +113,8 @@ func runPreparedCopy(t *testing.T, artifact []byte, profile *runtimeconfig.Execu
 }
 
 func executePreparedEngine(runner *Engine, runID, code string) (json.RawMessage, error) {
-	request := runtimeconfig.RunRequest{RunID: runID, Code: code, Inputs: json.RawMessage(`{}`), Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: "numpy-core", Imports: []string{}}}
+	code = "import numpy\n" + code
+	request := runtimeconfig.RunRequest{RunID: runID, Code: code, Inputs: json.RawMessage(`{}`), Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: "numpy-core", Imports: []string{"numpy"}}}
 	raw, err := runtimeconfig.EncodeRunRequest(request)
 	if err != nil {
 		return nil, err

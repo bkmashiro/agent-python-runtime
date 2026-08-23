@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 )
 
 // PreparedFamilyMode selects the Host-side physical preparation strategy.
@@ -28,8 +29,10 @@ const (
 )
 
 var (
-	ErrPreparedFamilyConfig = errors.New("invalid prepared family configuration")
-	ErrPreparedFamilyDrift  = errors.New("prepared family runner is incompatible with its image")
+	ErrPreparedFamilyConfig        = errors.New("invalid prepared family configuration")
+	ErrPreparedFamilyDrift         = errors.New("prepared family runner is incompatible with its image")
+	ErrPreparedFamilyIdentityReuse = errors.New("prepared family member identity is already bound")
+	ErrPreparedFamilyBrokerReuse   = errors.New("prepared family Broker was reused across members")
 )
 
 // PreparedFamilyConfig binds an authority-free image config and finite member bounds.
@@ -49,6 +52,8 @@ type PreparedMemberRecord struct {
 	RunID                string                      `json:"run_id,omitempty"`
 	InvocationID         string                      `json:"invocation_id"`
 	ExecutionID          string                      `json:"execution_id"`
+	PlanSHA256           string                      `json:"plan_sha256,omitempty"`
+	GrantsSHA256         string                      `json:"grants_sha256"`
 	PhysicalDisposition  PreparedPhysicalDisposition `json:"physical_disposition"`
 	Outcome              PreparedMemberDisposition   `json:"outcome"`
 	FinalWorkspaceSHA256 string                      `json:"final_workspace_sha256,omitempty"`
@@ -58,7 +63,7 @@ type PreparedMemberRecord struct {
 func (record PreparedMemberRecord) Validate() error {
 	if record.SchemaVersion != "pysolate.prepared-family-member.v1" ||
 		!validPreparedDigest(record.FamilySHA256) || !validPreparedDigest(record.InputSHA256) ||
-		record.MemberID == 0 || record.InvocationID == "" || record.ExecutionID == "" ||
+		record.MemberID == 0 || record.InvocationID == "" || record.ExecutionID == "" || !validPreparedDigest(record.GrantsSHA256) ||
 		(record.PhysicalDisposition != PreparedDispositionPrivateCopy && record.PhysicalDisposition != PreparedDispositionPrivateCOW && record.PhysicalDisposition != PreparedDispositionOrdinaryFresh) {
 		return ErrPreparedFamilyConfig
 	}
@@ -75,6 +80,9 @@ func (record PreparedMemberRecord) Validate() error {
 		return ErrPreparedFamilyConfig
 	}
 	if record.FinalWorkspaceSHA256 != "" && !validPreparedDigest(record.FinalWorkspaceSHA256) {
+		return ErrPreparedFamilyConfig
+	}
+	if record.PlanSHA256 != "" && !validPreparedDigest(record.PlanSHA256) {
 		return ErrPreparedFamilyConfig
 	}
 	return nil
@@ -96,6 +104,10 @@ type PreparedFamily struct {
 	runners       map[uint64]*preparedFamilyRunner
 	invocations   map[uint64]runtimeconfig.InvocationRef
 	records       map[uint64]PreparedMemberRecord
+	invocationIDs map[string]struct{}
+	executionIDs  map[string]struct{}
+	workspaceRefs map[string]struct{}
+	brokers       map[*capability.Broker]struct{}
 	closed        bool
 }
 
@@ -126,6 +138,7 @@ func PrepareNumpyFamily(ctx context.Context, wasm []byte, config PreparedFamilyC
 		wasm: append([]byte(nil), wasm...), imageConfig: imageConfig, input: input, identity: identity,
 		disposition: disposition, lifecycle: lifecycle, runners: make(map[uint64]*preparedFamilyRunner),
 		invocations: make(map[uint64]runtimeconfig.InvocationRef), records: make(map[uint64]PreparedMemberRecord),
+		invocationIDs: make(map[string]struct{}), executionIDs: make(map[string]struct{}), workspaceRefs: make(map[string]struct{}), brokers: make(map[*capability.Broker]struct{}),
 	}
 	if disposition == PreparedDispositionPrivateCOW {
 		parent, err := New(ctx, family.wasm, imageConfig)

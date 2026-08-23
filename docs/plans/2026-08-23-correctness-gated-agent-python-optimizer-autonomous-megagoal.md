@@ -71,6 +71,11 @@ workflow induction are compiler passes.
 13. **Streaming and final transforms are distinct stages.** A complete-prefix AST may
     authorize an overlay or safe physical preparation. Only the sealed complete AST may
     authorize formal execution or a derived execution patch.
+14. **Defer architecture-breaking candidates.** If a pass requires a substantial change
+    to the current authority lifecycle, complete-source gate, fresh/private execution,
+    Host-owned effect truth, Prepared Family ownership, default-off path or no-replay
+    philosophy, mark that pass `Deferred` with the concrete reason. Do not reshape the
+    runtime to rescue it; continue with independent admitted slices.
 
 ## Starting facts to verify from live source
 
@@ -349,8 +354,8 @@ and preparation overhead. A negative result leaves complete-source hoisting unch
 After P6, inspect whether several sibling ASTs expose a useful common pure prefix that
 can be factored without adding shared Python authority or a scheduler.
 
-Stop for Yuzhe's decision before changing Prepared Family architecture if the spike
-requires any of:
+Defer the pass without changing Prepared Family architecture if the spike requires any
+of:
 
 - a shared mutable Python heap;
 - generic heap snapshot/serialization;
@@ -361,7 +366,8 @@ requires any of:
 - a new source language or broad IR.
 
 If none is required, proceed with one bounded multi-AST `cohort_common_prefix` fixture.
-Otherwise record the rejection and leave Prepared Family unchanged.
+Otherwise record `Deferred` with the exact incompatible assumption, leave Prepared
+Family unchanged and continue to Phase 7.
 
 ## Phase 7: Thin pass composition
 
@@ -449,8 +455,8 @@ finish or revert the slice, leave a clean signed checkpoint, and resume from liv
 Stop only when one of these is true:
 
 1. all phases are closed;
-2. a named gate requires changing the authority/effect/Prepared Family architecture and
-   the decision is reserved for Yuzhe;
+2. no independent admitted phase remains after architecture-breaking candidates have
+   been marked `Deferred`, and a new project direction would require Yuzhe's decision;
 3. safe implementation requires arbitrary Python equivalence, generic heap snapshot,
    shared mutable authority, generic transactions or post-effect replay;
 4. a required exact Guest/platform/resource is unavailable after one bounded alternative;
@@ -466,5 +472,5 @@ admitted phases.
 ## Short `/goal`
 
 ```text
-/goal Read docs/plans/2026-08-23-correctness-gated-agent-python-optimizer-autonomous-megagoal.md fully and execute it from live Git state in /Users/yuzhe/projects/agent-python-runtime. Continue through verified source-bound-pass, exact-Guest, evidence, independent-review, signed-commit and push slices; stop only at a named architecture/safety/resource decision gate or complete closeout. Preserve complete-source validation, Host-owned authority/effect truth, private workspace semantics and no post-effect replay. Do not modify thesis/slides, use paid cloud or Docker, or manually trigger CI.
+/goal Read docs/plans/2026-08-23-correctness-gated-agent-python-optimizer-autonomous-megagoal.md fully and execute it from live Git state in /Users/yuzhe/projects/agent-python-runtime. Continue through verified source-bound-pass, exact-Guest, evidence, independent-review, signed-commit and push slices. Defer any pass that requires a substantial architecture change or breaks current design assumptions; record the reason and continue with independent slices. Stop only when no independent admitted work remains, at an unavoidable safety/resource decision, or complete closeout. Preserve complete-source validation, Host-owned authority/effect truth, private workspace semantics and no post-effect replay. Do not modify thesis/slides, use paid cloud or Docker, or manually trigger CI.
 ```

@@ -26,6 +26,21 @@ def request(source, pass_name="pure_scalar_cse", pass_version="pysolate.pure-sca
 
 
 class SourcePassTests(unittest.TestCase):
+    def test_scalar_passes_reject_programs_that_can_observe_compiled_code(self):
+        source = (
+            "left = 1 + 2\nright = 1 + 2\n"
+            "try:\n    1 / 0\nexcept Exception as error:\n"
+            "    result = error.__traceback__.tb_frame.f_code.co_code.hex()\n"
+        )
+        passes = [
+            ("pure_scalar_cse", "pysolate.pure-scalar-cse-pass.v1"),
+            ("pure_scalar_fold", "pysolate.pure-scalar-fold-pass.v1"),
+        ]
+        for pass_name, pass_version in passes:
+            with self.subTest(pass_name=pass_name):
+                raw = emit_source_pass_patch_request_json(request(source, pass_name, pass_version))
+                self.assertEqual("not_applicable", json.loads(raw)["status"])
+
     def test_pure_scalar_fold_replaces_known_total_expression(self):
         source = "seed = 7\nfolded = seed * seed + 3\nresult = folded\n"
         raw = emit_source_pass_patch_request_json(request(

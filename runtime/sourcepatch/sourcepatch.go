@@ -16,10 +16,10 @@ const (
 	SchemaVersion                                    = "pysolate.source-pass-patch.v1"
 	PureScalarCSEName          passregistration.Name = "pure_scalar_cse"
 	PureScalarCSEVersion                             = "pysolate.pure-scalar-cse-pass.v1"
-	PureScalarCSEConfigSHA256                        = "sha256:b5bf35fb21f37dabf3b63a92026ce9192d7f7106e73c5533744bc5653df9c48e"
+	PureScalarCSEConfigSHA256                        = "sha256:48884671a1121cfb21c2b19f79faec1530342a6175ab515c0011ce2074e3057f"
 	PureScalarFoldName         passregistration.Name = "pure_scalar_fold"
 	PureScalarFoldVersion                            = "pysolate.pure-scalar-fold-pass.v1"
-	PureScalarFoldConfigSHA256                       = "sha256:21fd8ed45356fe42c788e176fd0a5bdd61fe14c6375091bf030857e031403ebd"
+	PureScalarFoldConfigSHA256                       = "sha256:ebd1a5f88e49f6170044cc146ad394b9967aa5aad5443f9d2734c86c98b130c6"
 )
 
 var (

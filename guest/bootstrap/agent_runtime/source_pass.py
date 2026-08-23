@@ -93,10 +93,57 @@ def _int64_value(node, scalar_values, operators=None):
     return value
 
 
+def _safe_output_value(node, scalar_names):
+    if isinstance(node, ast.Name):
+        return node.id in scalar_names
+    if isinstance(node, ast.Constant):
+        return node.value is None or type(node.value) in (bool, int, str)
+    if isinstance(node, (ast.List, ast.Tuple)):
+        return all(_safe_output_value(value, scalar_names) for value in node.elts)
+    if isinstance(node, ast.Dict):
+        return all(
+            key is not None
+            and _safe_output_value(key, scalar_names)
+            and _safe_output_value(value, scalar_names)
+            for key, value in zip(node.keys, node.values)
+        )
+    if isinstance(node, ast.Compare) and len(node.ops) == 1:
+        return (
+            isinstance(node.ops[0], (ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE))
+            and _safe_output_value(node.left, scalar_names)
+            and _safe_output_value(node.comparators[0], scalar_names)
+        )
+    return False
+
+
+def _closed_scalar_program(tree):
+    if not tree.body:
+        return False
+    scalar_values = {}
+    last_name = None
+    for index, statement in enumerate(tree.body):
+        assignment = _simple_assignment(statement)
+        if assignment is None:
+            return False
+        name, value = assignment
+        last_name = name
+        result = _int64_value(value, scalar_values)
+        if result is _MISSING:
+            return (
+                index == len(tree.body) - 1
+                and name == "result"
+                and _safe_output_value(value, frozenset(scalar_values))
+            )
+        scalar_values[name] = result
+    return last_name == "result"
+
+
 def _pure_scalar_cse(source):
     if not isinstance(source, str) or not source or len(source.encode("utf-8")) > MAX_SOURCE_BYTES:
         raise ValueError("invalid source pass input")
     tree = ast.parse(source, filename="<agent-run>", mode="exec")
+    if not _closed_scalar_program(tree):
+        return tree, "", 0
     scalar_values = {}
     replacements = []
     index = 0
@@ -150,6 +197,8 @@ def _pure_scalar_fold(source):
     if not isinstance(source, str) or not source or len(source.encode("utf-8")) > MAX_SOURCE_BYTES:
         raise ValueError("invalid source pass input")
     tree = ast.parse(source, filename="<agent-run>", mode="exec")
+    if not _closed_scalar_program(tree):
+        return tree, "", 0
     scalar_values = {}
     replacements = []
     for statement in tree.body:

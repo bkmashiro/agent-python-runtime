@@ -537,9 +537,10 @@ admitted phases.
 
 ## Current execution pointer
 
-`Complete: P0/P0M and P8 are verified; P1-P7 are explicitly Deferred because each would
-require a new source-patch, effect, scheduling, workspace or composition contract. P9
-post-fix review and closeout gates passed with no open Blocking/High/Medium finding.`
+`Complete: P0, P0M, the retained P1S streaming overlay and P8 are verified. The P1-P7
+implementation candidates that require a new source-patch, effect, scheduling, workspace
+or composition contract are explicitly Deferred. P9 post-fix review and closeout gates
+passed with no open Blocking/High/Medium finding.`
 
 ## Short `/goal`
 

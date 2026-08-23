@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""Fail-closed verifier for bounded gpu31 Host-test evidence."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import pathlib
+import re
+
+HEX40 = re.compile(r"^[0-9a-f]{40}$")
+SUM_LINE = re.compile(r"^([0-9a-f]{64})  ([^\n]+)$")
+SUITES = {"baseline", "prepared-family"}
+
+
+def file_digest(path: pathlib.Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def evidence_files(root: pathlib.Path) -> set[str]:
+    files: set[str] = set()
+    for directory, names, filenames in os.walk(root, followlinks=False):
+        parent = pathlib.Path(directory)
+        for name in names:
+            if (parent / name).is_symlink():
+                raise ValueError("symlinked evidence directory")
+        for name in filenames:
+            candidate = parent / name
+            if candidate.is_symlink() or not candidate.is_file():
+                raise ValueError("non-regular evidence file")
+            relative = candidate.relative_to(root).as_posix()
+            if relative != "SHA256SUMS":
+                files.add(relative)
+    return files
+
+
+def write_checksums(root: pathlib.Path) -> None:
+    files = sorted(evidence_files(root))
+    lines = [f"{file_digest(root / relative)}  {relative}" for relative in files]
+    (root / "SHA256SUMS").write_text("\n".join(lines) + "\n")
+
+
+def verify(root: pathlib.Path, source_commit: str | None = None, source_tree: str | None = None, suite: str | None = None) -> dict[str, object]:
+    if root.is_symlink():
+        raise ValueError("evidence root must be a real directory")
+    root = root.resolve()
+    if not root.is_dir():
+        raise ValueError("evidence root must be a real directory")
+    ready_path = root / "RESULT.READY"
+    sums_path = root / "SHA256SUMS"
+    log_path = root / "test.log"
+    for required in (ready_path, sums_path, log_path):
+        if not required.is_file() or required.is_symlink():
+            raise ValueError(f"missing regular evidence file: {required.name}")
+
+    checksums: dict[str, str] = {}
+    for line in sums_path.read_text().splitlines():
+        match = SUM_LINE.fullmatch(line)
+        if match is None:
+            raise ValueError("malformed SHA256SUMS")
+        relative = pathlib.PurePosixPath(match.group(2))
+        if relative.is_absolute() or ".." in relative.parts or relative.as_posix() == "SHA256SUMS":
+            raise ValueError("checksum path escapes or recurses")
+        name = relative.as_posix()
+        if name in checksums:
+            raise ValueError("duplicate checksum path")
+        checksums[name] = match.group(1)
+    if set(checksums) != evidence_files(root):
+        raise ValueError("SHA256SUMS does not cover the exact evidence file set")
+    for relative, expected in checksums.items():
+        if file_digest(root.joinpath(*pathlib.PurePosixPath(relative).parts)) != expected:
+            raise ValueError(f"checksum mismatch: {relative}")
+
+    result = json.loads(ready_path.read_text())
+    exact_keys = {
+        "schema_version", "source_commit", "source_tree", "builder", "target",
+        "suite", "passed", "go_version", "duration_millis",
+    }
+    if set(result) != exact_keys or result.get("schema_version") != "pysolate.workstation-host-test.v1":
+        raise ValueError("invalid Host-test result schema")
+    if not HEX40.fullmatch(str(result.get("source_commit", ""))) or not HEX40.fullmatch(str(result.get("source_tree", ""))):
+        raise ValueError("invalid source identity")
+    if source_commit is not None and result["source_commit"] != source_commit:
+        raise ValueError("source commit mismatch")
+    if source_tree is not None and result["source_tree"] != source_tree:
+        raise ValueError("source tree mismatch")
+    if result.get("builder") != "gpu31.doc.ic.ac.uk" or result.get("target") != "linux/amd64":
+        raise ValueError("unexpected builder or target")
+    if result.get("suite") not in SUITES or (suite is not None and result["suite"] != suite):
+        raise ValueError("suite mismatch")
+    if result.get("passed") is not True:
+        raise ValueError("Host-test suite did not pass")
+    if not isinstance(result.get("go_version"), str) or not re.fullmatch(r"go1\.25(?:\.[0-9]+)?", result["go_version"]):
+        raise ValueError("unexpected Go version")
+    if not isinstance(result.get("duration_millis"), int) or result["duration_millis"] < 0:
+        raise ValueError("invalid duration")
+    return result
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("root", type=pathlib.Path)
+    parser.add_argument("--source-commit")
+    parser.add_argument("--source-tree")
+    parser.add_argument("--suite", choices=sorted(SUITES))
+    args = parser.parse_args()
+    print(json.dumps(verify(args.root, args.source_commit, args.source_tree, args.suite), sort_keys=True, separators=(",", ":")))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

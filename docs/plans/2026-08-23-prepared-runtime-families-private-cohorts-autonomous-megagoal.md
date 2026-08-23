@@ -2,7 +2,9 @@
 
 > **For Hermes:** Execute this plan continuously in `/Users/yuzhe/projects/agent-python-runtime` only after Yuzhe starts it with `/goal`. Read the whole file and live Git/code first. Prefer the thinnest executable vertical slice, use RED -> GREEN -> refactor for behavior, keep the Runtime free of scheduling policy, make coherent signed commits, push after verified phases, and continue without waiting after ordinary checkpoints. Stop only at a named architecture, resource, permission or safety gate below.
 
-**Status:** Prepared on 2026-08-23; implementation not started. Phase 0 architecture and Linux-gate work is startable, but Runtime/COW implementation is forbidden until Gate P0 freezes the binary preparation ABI, per-consumer adapter, lifecycle state machine and compatibility identity below.
+**Status:** Active since 2026-08-23. Product Runtime/COW edits remain forbidden until Gate P0; Phase 0 contract and Linux Host-gate work is in progress.
+
+**Current execution pointer:** Phase 0, freezing t...[truncated]
 
 **Goal:** Turn Pysolate's completed fixed prepared-NumPy/private-COW research prototype into a small reusable Host-owned prepared runtime family. One sealed package/data image may create many fresh single-use Python runners with different program source, Run identity, authority and private workspace while preserving mutation, failure and teardown isolation. Prove the product contract with deterministic acceptance fixtures on macOS and Linux. Do not invent a real evaluation dataset or reopen paper economics.
 

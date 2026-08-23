@@ -619,12 +619,16 @@ func (engine *Engine) closeCOWRuntime() error {
 	var activeErr, parentErr error
 	if engine.cowRuntime != nil {
 		activeErr = engine.cowRuntime.close()
+		if activeErr == nil {
+			engine.cowRuntime = nil
+		}
 	}
 	if engine.cowParentRuntime != nil {
 		parentErr = engine.cowParentRuntime.close()
+		if parentErr == nil {
+			engine.cowParentRuntime = nil
+		}
 	}
-	engine.cowRuntime = nil
-	engine.cowParentRuntime = nil
 	return errors.Join(activeErr, parentErr)
 }
 

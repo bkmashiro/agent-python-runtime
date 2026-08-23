@@ -10,9 +10,11 @@ import (
 )
 
 type fakeCOWPreparedRuntime struct {
-	closed    bool
-	lifecycle cowCloneLifecycle
-	err       error
+	closed     bool
+	closeCalls int
+	closeErr   error
+	lifecycle  cowCloneLifecycle
+	err        error
 }
 
 func (runtime *fakeCOWPreparedRuntime) prepare(context.Context, *Engine) (*preparedInstance, cowCloneLifecycle, error) {
@@ -20,6 +22,12 @@ func (runtime *fakeCOWPreparedRuntime) prepare(context.Context, *Engine) (*prepa
 }
 
 func (runtime *fakeCOWPreparedRuntime) close() error {
+	runtime.closeCalls++
+	if runtime.closeErr != nil {
+		err := runtime.closeErr
+		runtime.closeErr = nil
+		return err
+	}
 	runtime.closed = true
 	return nil
 }
@@ -51,6 +59,18 @@ func TestCOWCloseRetainsRuntimeUntilActiveLeaseReleased(t *testing.T) {
 	}
 	if _, _, _, err := engine.acquireCOWRuntime(); !errors.Is(err, errCOWEngineClosing) {
 		t.Fatalf("acquire after close=%v", err)
+	}
+}
+
+func TestCOWCloseRetainsRuntimeAfterCloseFailureForRetry(t *testing.T) {
+	closeErr := errors.New("close fixture")
+	fake := &fakeCOWPreparedRuntime{closeErr: closeErr}
+	engine := &Engine{cowRuntime: fake}
+	if err := engine.closeCOWRuntime(); !errors.Is(err, closeErr) || engine.cowRuntime == nil {
+		t.Fatalf("first close err=%v retained=%t", err, engine.cowRuntime != nil)
+	}
+	if err := engine.closeCOWRuntime(); err != nil || engine.cowRuntime != nil || fake.closeCalls != 2 || !fake.closed {
+		t.Fatalf("retry err=%v runtime=%v calls=%d closed=%t", err, engine.cowRuntime, fake.closeCalls, fake.closed)
 	}
 }
 

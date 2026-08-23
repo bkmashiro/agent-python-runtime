@@ -6,6 +6,12 @@ Verified at: 2026-08-14T13:45:30Z
 
 This document limits the related-work claims that may be used by the Unified Effect-Aware Runtime project. A source pin proves only the cited public behavior; absence from a public source is not evidence about an unpublished implementation.
 
+The current compiler boundary and candidate AST transformations are defined in
+[Correctness-gated Agent Python passes](correctness-gated-agent-python-passes.md). A
+paper enters that pass lane only through an optimization kernel expressible as a bounded
+AST-to-AST transformation or source-bound overlay. Scheduling, cache retention, model
+selection and learned planning remain related systems rather than passes.
+
 ## Pinned primary sources
 
 | System | Pin | Primary evidence used here |

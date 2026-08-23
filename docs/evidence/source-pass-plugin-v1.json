@@ -3,14 +3,14 @@
   "classification": "SYNTHETIC_EXACT_GUEST_PLUGIN_CORRECTNESS_AND_MATCHED_RUNTIME",
   "artifact": {
     "profile": "base",
-    "source_commit": "234cd70d51e3f05a27f82908c34a3bcddfc89a3c",
-    "source_tree": "d7606282bd48a090c2d5c2b3cca0fa111593eda6",
-    "sha256": "sha256:1d71744a1e1adecd60a607d1352cdee051da96bc59f3e86e58ed18ae00069354",
-    "manifest_sha256": "sha256:e6123226ff970fd79597064083e8d895b8ff2178327c74d5320056bed27821a8"
+    "source_commit": "7b285e87917df3a60659d82dacdab26327b3532f",
+    "source_tree": "0064f0ef69875e0c17fcb8025831359aebaccac9",
+    "sha256": "sha256:4ef73fbcf14c0bf5e4ef0d0dd11740fb56584ca7c742fb89f234e9ab911a9fb0",
+    "manifest_sha256": "sha256:1c5a1adbdf1e1ebff91636b2d03d5929d50f3e5c03c1c4b7ef6d92f613b45827"
   },
   "harness": {
-    "source_commit": "93c7377668eec3f3d8732b173c88962bd38f6bcf",
-    "source_tree": "a464e32d9acb65eb1f429a9ca136e5a59e5e062d",
+    "source_commit": "c61ea0e2198d81b6f83e13b0e82f6848773545da",
+    "source_tree": "f568c106f38c62f659bce63b52f9de00d8c4a0f8",
     "test": "TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest"
   },
   "platform": {
@@ -30,17 +30,19 @@
     "same_original_model_source_identity": true,
     "different_effective_ast_identity": true,
     "inapplicable_call_fixture_used_original_source": true,
-    "inapplicable_call_result": 7
+    "inapplicable_call_result": 7,
+    "self_reference_fixture_used_original_source": true,
+    "self_reference_result": [2, 3]
   },
   "timing": {
     "fixture": "200 repeated int64-safe seed*seed-48 terms in two adjacent assignments",
     "repetitions": 3,
-    "baseline_nanos_sorted": [2476921041, 2479375084, 2489432792],
-    "treatment_nanos_sorted": [2874257458, 2876464667, 2877529333],
-    "baseline_median_nanos": 2479375084,
-    "treatment_median_nanos": 2876464667,
-    "treatment_over_baseline": 1.1601571240924837,
-    "treatment_slowdown_percent": 16.015712409248373
+    "baseline_nanos_sorted": [2442963834, 2444994167, 2470149666],
+    "treatment_nanos_sorted": [2814542417, 2819939459, 2871473250],
+    "baseline_median_nanos": 2444994167,
+    "treatment_median_nanos": 2819939459,
+    "treatment_over_baseline": 1.153352223518822,
+    "treatment_slowdown_percent": 15.335222351882205
   },
   "claim_boundary": [
     "compile-time plugin registration and exact-Guest execution work",

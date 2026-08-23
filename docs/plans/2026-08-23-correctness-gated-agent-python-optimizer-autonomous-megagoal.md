@@ -474,7 +474,7 @@ claim.
 
 **Promise:** Code, evidence, paper notes and product boundary agree.
 
-- [ ] Run independent frozen-target review of each effect-changing pass and the composed
+- [x] Run independent frozen-target review of each effect-changing pass and the composed
   pipeline. Fix every Blocking/High/Medium finding with RED tests and rerun affected
   evidence.
 - [x] Run full Go, focused race, Guest Python, scripts, vet and `git diff --check` gates.
@@ -492,6 +492,15 @@ claim.
 **Gate P9:** No unchecked executable item remains. Each candidate is Current, Rejected
 with evidence, Deferred by explicit non-goal or Blocked by a named owner decision. Final
 post-fix review has no open Blocking/High/Medium finding.
+
+**P9 closeout:** Independent review of frozen target
+`b920e5d162c38a3cc5ec7c129fbda739f8f70e4a` reproduced the four predecessor probes and
+confirmed that frozen-field drift, count overflow, contradictory outcomes and duplicate
+terminal projections now fail closed. Focused race/vet checks, canonical evidence
+recalculation and exact-Guest prepared-region tests passed. The authored census remains
+historical evidence from harness source `5b8329cf32a1320f17df185de32205391072da4d`;
+it was not relabelled as a final-target performance campaign. The review reported no
+open Blocking, High or Medium finding.
 
 ## Per-slice protocol
 
@@ -528,7 +537,9 @@ admitted phases.
 
 ## Current execution pointer
 
-`Phase 9: review the exact P8 target and prepared-region test correction independently, rerun full local and exact-Guest gates, then close documentation, signatures and upstream state.`
+`Complete: P0/P0M and P8 are verified; P1-P7 are explicitly Deferred because each would
+require a new source-patch, effect, scheduling, workspace or composition contract. P9
+post-fix review and closeout gates passed with no open Blocking/High/Medium finding.`
 
 ## Short `/goal`
 

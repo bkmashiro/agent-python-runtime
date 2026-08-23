@@ -2,9 +2,9 @@
 
 > **For Hermes:** Execute this plan continuously in `/Users/yuzhe/projects/agent-python-runtime` only after Yuzhe starts it with `/goal`. Read the whole file and live Git/code first. Prefer the thinnest executable vertical slice, use RED -> GREEN -> refactor for behavior, keep the Runtime free of scheduling policy, make coherent signed commits, push after verified phases, and continue without waiting after ordinary checkpoints. Stop only at a named architecture, resource, permission or safety gate below.
 
-**Status:** Active since 2026-08-23. Product Runtime/COW edits remain forbidden until Gate P0; Phase 0 contract and Linux Host-gate work is in progress.
+**Status:** Active since 2026-08-23. Gate P0 passed; Phase 1 implementation is active.
 
-**Current execution pointer:** Phase 0, freezing t...[truncated]
+**Current execution pointer:** Phase 1, implementing the immutable prepared ndarray contract and portable private-copy path from the observed RED tests.
 
 **Goal:** Turn Pysolate's completed fixed prepared-NumPy/private-COW research prototype into a small reusable Host-owned prepared runtime family. One sealed package/data image may create many fresh single-use Python runners with different program source, Run identity, authority and private workspace while preserving mutation, failure and teardown isolation. Prove the product contract with deterministic acceptance fixtures on macOS and Linux. Do not invent a real evaluation dataset or reopen paper economics.
 
@@ -574,6 +574,7 @@ When stopped, record the exact blocker, modified files, tests, Git status and sm
 - 2026-08-23: Goal prepared from live code and Linux-path archaeology. Current fixed prepared-data/COW, `numpycodec`, `engine.Runner`, workspace and subagent seams were mapped. Local full Go/vet/Guest gates pass. A pre-existing split-bootstrap script-test regression was fixed and pushed at `0eb79b59`. Exact-HEAD focused Host tests passed on gpu31 using the shared Go 1.25 toolchain/caches. No Cohort implementation, real dataset, performance observation or paper change has started.
 - 2026-08-23: Independent read-only implementation audits confirmed that the current 8 MiB body is base64-embedded in research trusted source while `PreparedRegionTable` carries only a scalar claim, and that `PreparedDataContract` is Run-scoped. The prepared goal now requires a body-free promoted source, bounded Host-internal preparation transfer, per-consumer Run bindings, Host-owned cohort joins, unchanged `RunRequest`, and no `MechanismSet.Cohort`.
 - 2026-08-23: Independent launch review found that product implementation was still underspecified at the Guest ABI, runner authority adapter, lifecycle, compatibility identity, portable fallback, Host Linux gate, initialization parity, terminal record, dtype qualification and mutable `RunConfig` seams. Phase 0 now owns explicit contracts and RED gates for all ten; later Runtime/COW phases may not start before Gate P0.
+- 2026-08-23: Phase 0 passed. `docs/prepared-family-v1.md` freezes the copy-or-broker binary ingress, Wazero-owned family API, per-consumer authority adapter, lifecycle, compatibility identity, portable/COW dispositions and terminal-record owner. Commit `81c941e3` added the bounded clean-HEAD gpu31 Host gate; its baseline suite passed on gpu31 with Go 1.25. The exact `numpy-core` artifact qualified all fourteen bounded dtype strings by reconstruction. Guest ABI and family/config/lifecycle tests were observed RED before implementation (`PYTHONPATH=guest/bootstrap python3.13 -m unittest guest.tests.test_prepared_numpy_input guest.tests.test_source_contract`; `go test ./runtime/engine/wazero -run TestPrepared -count=1`).
 
 ## Short prompt to start this mega-goal
 

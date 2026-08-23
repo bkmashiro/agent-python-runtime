@@ -155,7 +155,20 @@ A COW consumer instantiates its fresh module/Host context, then restores the sea
 
 ## Dtype qualification
 
-The Host arithmetic allowlist remains in `numpycodec`. Prepared family v1 admits a dtype only after the exact `numpy-core` Guest proves:
+Prepared family v1 initially admits the existing bounded `numpycodec` set:
+
+```text
+|b1 |i1 |u1 <i2 <u2 <f2 <i4 <u4 <f4 <c8 <i8 <u8 <f8 <c16
+```
+
+The exact `numpy-core` Guest built from source commit `81c941e3` produced
+artifact `sha256:345491cc330f276ec6f1fbc5339b85092bd2479e2d0ea759c908003fa0b657c2`.
+A bounded ordinary fresh Run reconstructed a `(2, 3)` C-order array for every
+entry above and reported exact `np.dtype(dtype).str`, expected `nbytes` and
+`np.array_equal == true`. This is compatibility qualification, not performance
+evidence. Any ABI-changing artifact must repeat the gate.
+
+Prepared family v1 admits a dtype only after the exact `numpy-core` Guest proves:
 
 ```text
 np.dtype(dtype).str == declared dtype

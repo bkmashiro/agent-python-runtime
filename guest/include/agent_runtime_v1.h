@@ -42,6 +42,12 @@ uint32_t runtime_execute_prepared_region_scratch(const char *request, int32_t re
 AGENT_RUNTIME_EXPORT("runtime_select_prepared_region_execution")
 int32_t runtime_select_prepared_region_execution(const char *request, int32_t request_len);
 
+AGENT_RUNTIME_EXPORT("runtime_prepare_numpy_ndarray")
+int32_t runtime_prepare_numpy_ndarray(const char *descriptor,
+                                      int32_t descriptor_len,
+                                      const uint8_t *body,
+                                      int32_t body_len);
+
 AGENT_RUNTIME_EXPORT("runtime_prepare")
 int32_t runtime_prepare(const char *source, int32_t source_len);
 

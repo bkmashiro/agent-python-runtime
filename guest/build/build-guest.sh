@@ -485,6 +485,7 @@ fi
   -Wl,--export=runtime_init \
   -Wl,--export=runtime_validate_source \
   -Wl,--export=runtime_prepare \
+  -Wl,--export=runtime_prepare_numpy_ndarray \
   -Wl,--export=alloc \
   -Wl,--export=dealloc \
   -Wl,--export=execute \

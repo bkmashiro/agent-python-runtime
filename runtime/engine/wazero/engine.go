@@ -201,6 +201,7 @@ type Engine struct {
 	preparedInitErr     error
 	preparedTrustedSHA  string
 	prepared            *preparedInstance
+	preparedNumpyInput  *PreparedNumpyInput
 	preparedState       PreparedState
 	cowMu               sync.Mutex
 	cowRuntime          cowPreparedRuntime
@@ -227,6 +228,7 @@ func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig,
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid run config: %w", err)
 	}
+	config = cloneFamilyRunConfig(config)
 	if config.ColdIO != nil {
 		policy := *config.ColdIO
 		config.ColdIO = &policy
@@ -267,6 +269,22 @@ func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig,
 		engine.workspaceRun = make(chan struct{}, 1)
 	}
 	engine.preparedState = PreparedState{SchemaVersion: "pysolate.prepared-runtime.v1", Selected: config.Mechanisms.PreparedRuntime}
+	return engine, nil
+}
+
+func newPreparedNumpyCopyEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, brokerFactory BrokerFactory, binding *workspaceBinding, input PreparedNumpyInput) (*Engine, error) {
+	if input.identity == "" || len(input.body) == 0 || len(input.descriptorJSON) == 0 {
+		return nil, ErrPreparedNumpyInput
+	}
+	engine, err := newEngine(ctx, wasm, config, brokerFactory, binding, nil)
+	if err != nil {
+		return nil, err
+	}
+	copyInput := input
+	copyInput.body = append([]byte(nil), input.body...)
+	copyInput.descriptorJSON = append([]byte(nil), input.descriptorJSON...)
+	copyInput.descriptor.Shape = append([]uint64(nil), input.descriptor.Shape...)
+	engine.preparedNumpyInput = &copyInput
 	return engine, nil
 }
 
@@ -1029,6 +1047,11 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 			return nil, withGuestDiagnostic(err, stderr.String())
 		}
 		if err := callStatusWithBytes(runContext, module, "runtime_init", []byte("{}")); err != nil {
+			return nil, withGuestDiagnostic(err, stderr.String())
+		}
+	}
+	if engine.preparedNumpyInput != nil {
+		if err := callPreparedNumpyInput(runContext, module, *engine.preparedNumpyInput); err != nil {
 			return nil, withGuestDiagnostic(err, stderr.String())
 		}
 	}

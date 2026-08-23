@@ -17,6 +17,8 @@
 #define AGENT_RUNTIME_RESPONSE_MAX (16 * 1024 * 1024)
 #define AGENT_RUNTIME_TOOL_RESPONSE_MAX (1024 * 1024)
 #define AGENT_RUNTIME_MATERIALIZED_RESPONSE_MAX 256
+#define AGENT_RUNTIME_PREPARED_DESCRIPTOR_MAX 4096
+#define AGENT_RUNTIME_PREPARED_BODY_MAX (8 * 1024 * 1024)
 
 static uint8_t response_buffer[AGENT_RUNTIME_RESPONSE_MAX + 4];
 static PyObject *runtime_module = NULL;
@@ -431,6 +433,47 @@ int32_t runtime_select_prepared_region_execution(const char *request, int32_t re
     }
     PyObject *result = call_with_utf8("_prepare_prepared_region_execution", request,
                                       request_len);
+    if (result == NULL) {
+        PyErr_Print();
+        return -1;
+    }
+    Py_DECREF(result);
+    return 0;
+}
+
+
+int32_t runtime_prepare_numpy_ndarray(const char *descriptor,
+                                      int32_t descriptor_len,
+                                      const uint8_t *body,
+                                      int32_t body_len) {
+    if (!Py_IsInitialized() || runtime_module == NULL || descriptor == NULL ||
+        body == NULL || descriptor_len <= 0 ||
+        descriptor_len > AGENT_RUNTIME_PREPARED_DESCRIPTOR_MAX || body_len <= 0 ||
+        body_len > AGENT_RUNTIME_PREPARED_BODY_MAX) {
+        return -1;
+    }
+    PyObject *function = PyObject_GetAttrString(runtime_module,
+                                                "_prepare_numpy_ndarray");
+    if (function == NULL) {
+        PyErr_Print();
+        return -1;
+    }
+    PyObject *descriptor_value = PyUnicode_DecodeUTF8(
+        descriptor, (Py_ssize_t)descriptor_len, "strict");
+    PyObject *body_value = PyByteArray_FromStringAndSize(
+        (const char *)body, (Py_ssize_t)body_len);
+    if (descriptor_value == NULL || body_value == NULL) {
+        Py_XDECREF(descriptor_value);
+        Py_XDECREF(body_value);
+        Py_DECREF(function);
+        PyErr_Print();
+        return -1;
+    }
+    PyObject *result = PyObject_CallFunctionObjArgs(
+        function, descriptor_value, body_value, NULL);
+    Py_DECREF(descriptor_value);
+    Py_DECREF(body_value);
+    Py_DECREF(function);
     if (result == NULL) {
         PyErr_Print();
         return -1;

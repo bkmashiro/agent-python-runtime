@@ -20,6 +20,7 @@ REQUIRED_EXPORTS = {
     "runtime_execute_prepared_region_scratch",
     "runtime_select_prepared_region_execution",
     "runtime_prepare",
+    "runtime_prepare_numpy_ndarray",
     "alloc",
     "dealloc",
     "execute",

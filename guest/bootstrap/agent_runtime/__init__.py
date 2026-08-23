@@ -26,6 +26,7 @@ _validated_request_json: str | None = None
 _validated_code: types.CodeType | None = None
 _validated_import_globals: dict[str, Any] = {}
 _validated_effective_ast_sha256: str | None = None
+_prepared_numpy_installed = False
 _stream_session: _StreamingSession | None = None
 _SOURCE_CONTRACT_OK = 0
 _SOURCE_CONTRACT_UNSUPPORTED = 1
@@ -363,14 +364,106 @@ def _initialize(config_json: str) -> None:
     value = json.loads(config_json)
     if not isinstance(value, dict):
         raise ValueError("runtime config must be an object")
-    global _runtime_config, _prepared_globals, _validated_request_json, _validated_code, _validated_import_globals, _validated_effective_ast_sha256
+    global _runtime_config, _prepared_globals, _validated_request_json, _validated_code, _validated_import_globals, _validated_effective_ast_sha256, _prepared_numpy_installed
     _runtime_config = dict(value)
     _prepared_globals = {}
+    _prepared_numpy_installed = False
     _validated_request_json = None
     _validated_code = None
     _validated_import_globals = {}
     _validated_effective_ast_sha256 = None
 
+
+
+def _decode_prepared_numpy_descriptor(descriptor_json: str, body: bytes | bytearray) -> dict[str, Any]:
+    if not isinstance(descriptor_json, str) or len(descriptor_json.encode("utf-8")) > 4096:
+        raise ValueError("prepared numpy descriptor exceeds the bound")
+    if not isinstance(body, (bytes, bytearray)) or not body or len(body) > 8 * 1024 * 1024:
+        raise ValueError("prepared numpy body exceeds the bound")
+
+    def unique_object(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError("prepared numpy descriptor has a duplicate field")
+            value[key] = item
+        return value
+
+    value = json.loads(descriptor_json, object_pairs_hook=unique_object)
+    fields = {
+        "schema_version", "name", "codec", "dtype", "shape", "order",
+        "endianness", "nbytes", "body_sha256", "input_sha256",
+    }
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError("prepared numpy descriptor fields are invalid")
+    canonical = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    if canonical != descriptor_json:
+        raise ValueError("prepared numpy descriptor is not canonical")
+    name = value["name"]
+    if (
+        not isinstance(name, str)
+        or not name
+        or len(name) > 128
+        or not (name[0] == "_" or "A" <= name[0] <= "Z" or "a" <= name[0] <= "z")
+        or any(not (character == "_" or "A" <= character <= "Z" or "a" <= character <= "z" or "0" <= character <= "9") for character in name[1:])
+        or name == "__builtins__"
+    ):
+        raise ValueError("prepared numpy name is invalid")
+    dtype_sizes = {
+        "|b1": 1, "|i1": 1, "|u1": 1,
+        "<i2": 2, "<u2": 2, "<f2": 2,
+        "<i4": 4, "<u4": 4, "<f4": 4, "<c8": 8,
+        "<i8": 8, "<u8": 8, "<f8": 8, "<c16": 16,
+    }
+    dtype = value["dtype"]
+    shape = value["shape"]
+    if dtype not in dtype_sizes or not isinstance(shape, list) or not shape or len(shape) > 8:
+        raise ValueError("prepared numpy layout is invalid")
+    elements = 1
+    for dimension in shape:
+        if not isinstance(dimension, int) or isinstance(dimension, bool) or dimension <= 0 or dimension > 1 << 31:
+            raise ValueError("prepared numpy shape is invalid")
+        elements *= dimension
+        if elements > 8 * 1024 * 1024:
+            raise ValueError("prepared numpy shape exceeds the bound")
+    expected_bytes = elements * dtype_sizes[dtype]
+    expected_endianness = "not_applicable" if dtype_sizes[dtype] == 1 else "little"
+    if (
+        value["schema_version"] != "pysolate.prepared-numpy-input.v1"
+        or value["codec"] != "numpy_ndarray_c_v1"
+        or value["order"] != "C"
+        or value["endianness"] != expected_endianness
+        or not isinstance(value["nbytes"], int)
+        or isinstance(value["nbytes"], bool)
+        or value["nbytes"] != expected_bytes
+        or value["nbytes"] != len(body)
+    ):
+        raise ValueError("prepared numpy descriptor does not match the body")
+    for digest_name in ("body_sha256", "input_sha256"):
+        digest = value[digest_name]
+        if not isinstance(digest, str) or len(digest) != 71 or not digest.startswith("sha256:") or any(character not in "0123456789abcdef" for character in digest[7:]):
+            raise ValueError("prepared numpy digest is invalid")
+    actual_body_sha256 = "sha256:" + hashlib.sha256(body).hexdigest()
+    if value["body_sha256"] != actual_body_sha256:
+        raise ValueError("prepared numpy body digest mismatch")
+    return value
+
+
+def _prepare_numpy_ndarray(descriptor_json: str, body: bytes | bytearray) -> None:
+    global _prepared_globals, _prepared_numpy_installed
+    if _prepared_numpy_installed:
+        raise RuntimeError("prepared numpy input was already prepared")
+    descriptor = _decode_prepared_numpy_descriptor(descriptor_json, body)
+    numpy = _ORIGINAL_IMPORT("numpy")
+    dtype = numpy.dtype(descriptor["dtype"])
+    if dtype.str != descriptor["dtype"]:
+        raise ValueError("prepared numpy dtype is not exact on this artifact")
+    backing = body if isinstance(body, bytearray) else bytearray(body)
+    array = numpy.frombuffer(backing, dtype=dtype).reshape(tuple(descriptor["shape"]), order="C")
+    if not array.flags.c_contiguous or array.nbytes != descriptor["nbytes"]:
+        raise ValueError("prepared numpy reconstruction is invalid")
+    _prepared_globals = {"__builtins__": __builtins__, descriptor["name"]: array}
+    _prepared_numpy_installed = True
 
 
 def _prepare(source: str) -> None:

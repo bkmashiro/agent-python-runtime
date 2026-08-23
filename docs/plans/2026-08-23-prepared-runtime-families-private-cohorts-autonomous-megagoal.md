@@ -139,7 +139,8 @@ This is illustrative, not a requirement to expose body bytes in one struct or ad
 ```text
 Host / existing Harness or Orchestrator
   owns program list, concurrency, scheduling, Plan/grants,
-  workspace fork/select/discard and cancellation
+  workspace fork/select/discard, cancellation, cohort/member manifest
+  and the join from each member to its Run and terminal disposition
 
 Prepared family
   owns sealed package/data image, input identity,
@@ -158,6 +159,8 @@ Guest
 
 - Preparing the canonical image runs with no workspace or Broker authority.
 - Sharing a physical image never shares a Broker, capability grant, workspace lease, Python continuation, mutable page, `/tmp`, stdout buffer or response body.
+- The product family contract is Host-authored and immutable, but it is not a reused `PreparedDataContract`: that historical contract is Run-scoped by Run identity, privacy partition, budget reservation and plan epoch. Every family consumer still receives its own Run binding and terminal disposition.
+- The multi-MiB body must not travel in `RunRequest`, Broker JSON, receipts, evidence, the public family handle or the promoted trusted-preparation source. A bounded Host-internal preparation transfer may fill private Guest memory before the image is sealed, after which its staging body must be released.
 - Sharing one Host Wazero runtime and compiled module is allowed if each consumer receives a distinct module instance, private memory mapping, module configuration, Broker and workspace lease; do not require a separate Wazero runtime merely to simulate isolation already enforced below that layer.
 - Each consumer validates its own Run request, profile/import closure, limits and authority before execution.
 - A prepared-family runner rejects any caller-supplied non-empty `trustedPrepare`; only the Host-owned family may install its sealed preparation. The legacy `engine.Runner.Run` parameter must not become a preparation-injection escape hatch.
@@ -220,6 +223,7 @@ Do not implement or claim in this goal:
 - shared mutable memory or a reused interpreter;
 - pandas, Arrow, Parquet, SciPy, tokenizer/model state or multiple prepared values;
 - generic page allocator, object store, durable cache or cross-process image registry;
+- multi-MiB body transport through JSON, evidence, receipts, model source or promoted `trustedPrepare` source;
 - runtime `pip`, package solving or arbitrary user build recipes;
 - public `RunMany`, scheduler, queue, retry engine or workflow language inside Runtime;
 - automatic workspace merge, virtual Git, CRDT or last-writer-wins publication;
@@ -290,6 +294,8 @@ Tasks:
 - [ ] Re-read this plan, live Git/status, current paper source of truth, prepared-data contract and recent prepared/COW commits.
 - [ ] Confirm the current call chain from Host declaration/engine preparation through COW clone, `_initialize`, baseline restore, final Run and teardown.
 - [ ] Freeze the product prepared-input identity fields, variable-name policy, family lifecycle and copy/COW disposition vocabulary.
+- [ ] Freeze the data-plane rule: descriptor/identity may be encoded, but the body uses a bounded Host-internal preparation transfer and is released after seal; do not promote the historical base64-in-trusted-source probe into the product API.
+- [ ] Specify per-consumer bindings and terminal dispositions separately from the shared family identity. Do not reuse a Run-scoped `PreparedDataContract` across consumers.
 - [ ] Decide the narrow package owner. Prefer one lifecycle-owning package or an extension to `runtime/engine`; do not create parallel `prepared`, `cohort`, `family` and `scheduler` packages.
 - [ ] RED-test the public Host contract before implementation: unknown codec/dtype, bad shape/size/digest/name, body mutation after seal, profile/artifact mismatch, zero/over-bound consumers, close with active runners and use after close.
 - [ ] Add one minimal `scripts/test-host-workstation.sh` plus tested internal worker only if no existing script can express exact candidate Host tests. It must stage the current candidate, record base commit and candidate tree/patch identity, use only approved shared Go/cache/config roots, retrieve bounded logs and clean its run-specific remote path.
@@ -317,6 +323,7 @@ Tasks:
 - [ ] Seal one Host-owned prepared input from immutable copied bytes, exact layout, variable name, artifact/profile/import identity, consumer bounds and body digest.
 - [ ] Reject Guest/model-produced attempts to mint or widen this contract.
 - [ ] Implement a bounded private-copy/fresh reference runner that makes the prepared value available under the same Guest-visible name and produces the ordinary response contract.
+- [ ] Keep the reference body out of Run/Broker/evidence JSON. A temporary test-only source renderer may remain only as an oracle while the product path receives an explicit bounded Host transfer and removes staging on every terminal path.
 - [ ] Prove body mutation after Host seal cannot affect the sealed input.
 - [ ] Prove consumer A mutation cannot affect the Host body or consumer B.
 - [ ] Prove error, timeout, cancellation and unconsumed-family close release all private state.
@@ -331,7 +338,8 @@ Tasks:
 Tasks:
 
 - [ ] RED-test at least three supported layout/body identities and two distinct bodies with the same layout.
-- [ ] Generalize trusted derived-source rendering from validated Host layout/name/body; never concatenate unvalidated model source into trusted preparation.
+- [ ] Generalize the bounded trusted loader logic from validated Host layout/name, but move the body itself through a one-shot Host-internal preparation transfer rather than embedding multi-MiB base64 in the promoted trusted source. Never concatenate unvalidated model source into trusted preparation.
+- [ ] Keep `PreparedRegionTable` as its existing scalar one-Run claim table; do not repurpose its 256-byte payload as the family data plane or a cross-Run store.
 - [ ] Bind the sealed image to exact artifact, profile/import closure, layout, body digest, variable name and preparation implementation version.
 - [ ] Retain one immutable package parent, derive each data image from a fresh parent clone and never derive input B from input A's data image.
 - [ ] Create N=0/1/2/4 fresh private consumers from one data image.
@@ -340,7 +348,7 @@ Tasks:
 - [ ] Record body-free mapped/private-copy counters and family/consumer dispositions. Do not run or report a performance campaign.
 - [ ] Keep the historical fixed prepared-data probes passing or adapt them through an exact compatibility wrapper without changing retained evidence files.
 
-**Gate P2:** On gpu31, more than one shape/dtype/body works through the same bounded implementation; all consumers are fresh and private; no per-consumer body copy is reported for the COW lane; copy-reference results match. If safe generalization requires a generic allocator, mutable shared handle, Wazero fork or Python heap transfer, stop and present a compute-only fixed-profile alternative rather than building it automatically.
+**Gate P2:** On gpu31, more than one shape/dtype/body works through the same bounded implementation; all consumers are fresh and private; the promoted prepare source and all response/evidence documents are body-free; staging is released after seal; no per-consumer body copy is reported for the COW lane; copy-reference results match. If safe generalization requires a generic allocator, mutable shared handle, Wazero fork or Python heap transfer, stop and present a compute-only fixed-profile alternative rather than building it automatically.
 
 ## Phase 3: prepared family runner factory
 
@@ -353,9 +361,11 @@ Tasks:
 - [ ] Ensure runner creation cannot widen the family's artifact/profile/import identity or reuse another consumer's RunConfig/Broker.
 - [ ] Wrap or narrow the legacy Runner surface so every prepared-family runner rejects caller-provided non-empty `trustedPrepare`; only the family-internal sealed preparation may be installed.
 - [ ] Review whether existing default-off `PreparedRuntime`/`MemoryCOW` mechanism selection is sufficient before adding any new flag.
+- [ ] Do not add `MechanismSet.Cohort`: cohort membership and scheduling belong to Host/Harness, while physical selection continues to use existing prepared/COW dispositions.
 - [ ] Provide explicit physical disposition: `private_cow`, `private_copy` or `ordinary_fresh`.
 - [ ] Make unsupported platform/mechanism selection fail explicitly or use the tested reference mode according to the frozen P0 contract.
 - [ ] Keep `engine.Runner` ordinary semantics and `RunRequest` untrusted shape unchanged unless a smaller reviewed extension is required.
+- [ ] Keep cohort/member selectors, shared input authority and family handles out of `RunRequest` and Guest inputs.
 - [ ] Add one focused example/test that runs visibly different programs over one family. Do not add a production scheduler CLI.
 - [ ] Run an independent API/lifecycle review before proceeding.
 
@@ -525,6 +535,7 @@ When stopped, record the exact blocker, modified files, tests, Git status and sm
 ## Completion log
 
 - 2026-08-23: Goal prepared from live code and Linux-path archaeology. Current fixed prepared-data/COW, `numpycodec`, `engine.Runner`, workspace and subagent seams were mapped. Local full Go/vet/Guest gates pass. A pre-existing split-bootstrap script-test regression was fixed and pushed at `0eb79b59`. Exact-HEAD focused Host tests passed on gpu31 using the shared Go 1.25 toolchain/caches. No Cohort implementation, real dataset, performance observation or paper change has started.
+- 2026-08-23: Independent read-only implementation audits confirmed that the current 8 MiB body is base64-embedded in research trusted source while `PreparedRegionTable` carries only a scalar claim, and that `PreparedDataContract` is Run-scoped. The prepared goal now requires a body-free promoted source, bounded Host-internal preparation transfer, per-consumer Run bindings, Host-owned cohort joins, unchanged `RunRequest`, and no `MechanismSet.Cohort`.
 
 ## Short prompt to start this mega-goal
 

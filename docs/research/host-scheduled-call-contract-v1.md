@@ -197,8 +197,9 @@ No unmaterialized slot may increment Broker calls or create a receipt.
   later dynamic-occurrence slices.
 - Compensation never qualifies an early write.
 
-The registered `split_phase_sources_read` pass is now v2. It keeps the v1 straight-line
-lane and adds only two source-shaped dynamic forms:
+The registered `split_phase_sources_read` pass is now v3, bound to config
+`sha256:0004f6def2ed5fba58dc90dc6183063b70191614657f68bc0ec7daba3aae588f`.
+It keeps the v1 straight-line lane and adds only two source-shaped dynamic forms:
 
 - a top-level `if` whose condition reads only bounded `inputs` values and whose active
   branch is itself a closed read/result block;
@@ -210,6 +211,11 @@ static source slot to its dynamic Host slot. Generated source still receives no 
 An unselected branch and a zero-iteration loop submit nothing; a repeated loop occurrence
 gets a distinct call identity; `try`, dynamic paths, unknown calls, and arbitrary nested
 control flow remain rejected.
+
+The line-oriented rewriter owns only distinct, single-line, space-indented statements.
+One-line compound suites, multiline calls and tab/mixed-indented blocks return
+`not_applicable` and execute unchanged source. This prevents a patch from erasing an
+activation guard or replacing only the first physical line of a statement.
 
 ## Measurement and retention gates
 
@@ -235,12 +241,13 @@ expected speedup. Phase 2 remains Experimental and default-off unless:
 A correct slowdown closes the performance claim and stops scheduler expansion; it is not a
 reason to add batching, a planner or a richer IR.
 
-The exact `numpy-core` Guest built from `1bcec51f1c1770c09680fdcf761270ae8296b9ee`
+The exact `numpy-core` Guest built from `84520efa7397a23d03cdbf3cdbc4d60c29543e62`
+(`sha256:51e21abe95e2f5790bed431277bdd14b1dcb1da8bd92d0702a594372ddf02598`)
 proved two physical calls overlap with two source-ordered Broker receipts, dynamic branch
-and loop activation, first-failure discard and cancellation/join behavior. Five matched
-two-call repetitions nevertheless measured a `2,567,356,750 ns` baseline median and a
-`7,558,074,834 ns` treatment median. Including source analysis, both fresh Guests,
-scheduling, materialization and cleanup made treatment **194.39% slower**.
+and loop activation, unsafe-layout fallback, first-failure discard and cancellation/join
+behavior. Five matched two-call repetitions nevertheless measured a `2,508,013,500 ns`
+baseline median and a `7,438,827,417 ns` treatment median. Including source analysis, both
+fresh Guests, scheduling, materialization and cleanup made treatment **196.60% slower**.
 
 Therefore Phase 1 keeps only the independently removable hidden ABI/table correctness seam,
 Experimental and default-off. The `split_phase_sources_read` source pass is rejected for

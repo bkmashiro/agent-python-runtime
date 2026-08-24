@@ -35,6 +35,9 @@ new Go byte slice and the Guest reconstructs a new Python scalar or `bytes`
 object. `Table.Close` releases the physical object's consumer reference;
 `CanEvict` becomes true only after every consumer table has closed. No module,
 global, iterator, handle, or mutable Python heap crosses a Run boundary.
+The Runner stores an immutable table template and creates/closes a fresh claim table for
+each Run. Runner construction failure, close-before-run and ordinary Runner close also
+release the transferred template ownership.
 
 ## First data-local adapter
 
@@ -49,7 +52,8 @@ result = int(dataset.sum())
 
 The adapter law is narrower than general NumPy semantics:
 
-- the canonical checked-in NumPy int64 fixture format is decoded by the Host;
+- the canonical checked-in NumPy int64 fixture is admitted only by its exact whole-file
+  digest and fixed Host producer;
 - `io.BytesIO`, binary `open`, `allow_pickle=False`, path, aliases, assignment names,
   and call shape are fixed;
 - the reduction result is a canonical signed-int64 Python `int`;
@@ -61,16 +65,23 @@ The adapter law is narrower than general NumPy semantics:
 Selection and execution are deliberately split:
 
 1. select and validate the static patch;
-2. if selected, read/decode/reduce the immutable workspace input on the Host;
-3. create the Run-private value-slot table;
-4. construct a value-slot-enabled fresh Guest;
-5. execute the already selected patch.
+2. only then invoke the selected-runner factory;
+3. read the immutable workspace input and require the one frozen file digest;
+4. let the named producer construct the fixed scalar and package-owned proof;
+5. construct the Runner-owned immutable template;
+6. clone a fresh Run-private value-slot table and execute the selected patch.
 
 This ordering avoids preparing a value for an ineligible source. Source
 validation for this pass verifies the original import declaration without
 importing NumPy, then imports only modules retained by the derived program. The
 all-off baseline continues through ordinary source validation and imports NumPy
 normally.
+
+Disabled/not-applicable selection, patch mismatch and producer failure construct only an
+ordinary runner. A workspace digest drift discovered after selected construction executes
+the unchanged source before Guest effects and reports the patch as not applied. Failures
+after selected Guest execution begins are never replayed. Fallback retains the patch or
+producer rejection in `PassError` separately from the ordinary Run result.
 
 ## Accounting
 
@@ -97,12 +108,13 @@ research-only unless the treatment median is faster and all results match. A
 positive result applies only to this exact immutable int64 reduction; it is not
 evidence for arbitrary NumPy, table pushdown, or a generic shared-object cache.
 
-The exact `numpy-core` Guest built from `1bcec51f1c1770c09680fdcf761270ae8296b9ee`
-passed private-byte materialization, fresh-consumer isolation, shared physical backing and
-the fixed NumPy sum equivalence controls. Five matched repetitions read an `8,388,736`-byte
-fixture and copied only `12` result bytes to each Guest, but measured a `4,709,831,166 ns`
-baseline median and `5,072,518,333 ns` treatment median. Complete treatment cost was
-**7.70% slower**; Guest peak memory was unavailable and is not inferred.
+The exact `numpy-core` Guest built from `84520efa7397a23d03cdbf3cdbc4d60c29543e62`
+passed private-byte materialization across two Runs on one Runner, fresh-consumer isolation,
+shared physical backing, forged-metadata rejection and workspace-drift fallback. Five
+matched repetitions read an `8,388,736`-byte fixture and copied only `12` result bytes to
+each Guest, but measured a `4,695,289,958 ns` baseline median and `4,990,682,666 ns`
+treatment median. Complete treatment cost was **6.29% slower**; Guest peak memory was
+unavailable and is not inferred.
 
 The fixed data-local pass is therefore a truthful no-go and stays default-off. The small
 ValueSlot seam remains Experimental because it independently supports bounded scalar/byte

@@ -12,26 +12,29 @@
     "semantic_mechanism": "pass"
   },
   "data_local_numpy_int64_sum": {
-    "baseline_median_ns": 4709831166,
+    "adapter_config_sha256": "sha256:391f84660ff12c489c3275ae9073622d1baf4ea6b54a629b51804b331a1b4c7b",
+    "adapter_version": "pysolate.data-local-numpy-sum-pass.v2",
+    "baseline_median_ns": 4695289958,
     "baseline_ns": [
-      4709012750,
-      4638671959,
-      4812602542,
-      4709831166,
-      4771433208
+      4679540750,
+      4674450667,
+      4695289958,
+      4705804834,
+      4703496584
     ],
     "cost_scope": [
+      "source analysis Guest",
       "workspace read",
-      "fixture validation",
-      "Host reduction",
+      "exact fixture digest validation",
+      "Host reduction result construction",
       "slot construction",
       "fresh execution Guest",
       "materialization",
       "response validation",
       "cleanup"
     ],
-    "decision": "reject pass promotion; exact fixed adapter is correct but slower at this incidence",
-    "delta_percent": 7.700640515911017,
+    "decision": "reject pass promotion; exact digest-attested fixed adapter is correct but slower at this incidence",
+    "delta_percent": 6.291255931845052,
     "disposition": "reject",
     "fixture_bytes": 8388736,
     "guest_peak_memory": "unavailable",
@@ -43,15 +46,16 @@
       12
     ],
     "matched_results": true,
-    "ratio": 1.0770064051591102,
+    "producer_attestation": "exact file digest, fixed producer implementation and package-owned proof",
+    "ratio": 1.0629125593184505,
     "slot_claims_per_run": 1,
-    "treatment_median_ns": 5072518333,
+    "treatment_median_ns": 4990682666,
     "treatment_ns": [
-      4940645833,
-      5151940709,
-      5024192750,
-      5135295167,
-      5072518333
+      7256830875,
+      4986834583,
+      4990682666,
+      4989642042,
+      5004465458
     ],
     "workload": "canonical immutable numpy int64 fixture loaded through io.BytesIO and reduced to Python int"
   },
@@ -61,58 +65,83 @@
     "macos_build": "25E253",
     "macos_version": "26.4.1",
     "python": "3.14.3",
-    "recorded_utc": "2026-08-24T03:11:51Z"
+    "recorded_utc": "2026-08-24T04:12:10Z"
   },
   "guest": {
-    "artifact_sha256": "sha256:09aa6bebea5d1767acd730bb73159ff405c443af47b95d7ba99609defdfe703e",
-    "build_millis": 433975,
+    "artifact_bytes": 68215425,
+    "artifact_sha256": "sha256:51e21abe95e2f5790bed431277bdd14b1dcb1da8bd92d0702a594372ddf02598",
+    "build_millis": 646923,
     "cache_disposition": "hit",
     "final_cache_disposition": "miss",
     "profile": "numpy-core",
-    "source_tree": "a6c40cbb28bb794b41f8959d0d8472238a5a73ac"
+    "source_commit": "84520efa7397a23d03cdbf3cdbc4d60c29543e62",
+    "source_tree": "67c0e77a2a71a1562ddc39255a65b9f6d8579c16"
   },
-  "implementation_commit": "1bcec51f1c1770c09680fdcf761270ae8296b9ee",
+  "independent_review": {
+    "findings_resolved_by": "8ee4935882dbac4c27f1f8cb2675dd4f7b8b9177",
+    "initial_reviewed_target": "fc6a011e074ab98651b4ca40a85eff037753a530",
+    "open_blocking_high_medium": 0,
+    "post_fix_reviewed_target": "8ee4935882dbac4c27f1f8cb2675dd4f7b8b9177",
+    "status": "pass"
+  },
+  "measurement_host_commit": "84520efa7397a23d03cdbf3cdbc4d60c29543e62",
   "recorded_date": "2026-08-24",
+  "runtime_host_commit_final": "8ee4935882dbac4c27f1f8cb2675dd4f7b8b9177",
   "schema_version": "pysolate.host-scheduled-reuse-e2e.v1",
   "semantic_exact_guest": {
+    "data_local_digest_drift_unchanged_source_fallback": "pass",
     "dynamic_branch_and_loop_activation": "pass",
     "first_failure_discards_later_physical_work_without_receipt": "pass",
-    "private_byte_materialization": "pass",
-    "shared_physical_immutable_object_with_fresh_isolated_consumers": "pass"
+    "private_byte_materialization_across_two_runs_on_one_runner": "pass",
+    "shared_physical_immutable_object_with_fresh_isolated_consumers": "pass",
+    "unattested_scalar_unchanged_source_fallback": "pass",
+    "unsafe_one_line_branch_unchanged_source_fallback": "pass"
   },
   "split_phase_sources_read": {
-    "baseline_median_ns": 2567356750,
+    "baseline_median_ns": 2508013500,
     "baseline_ns": [
-      2528983833,
-      2576128375,
-      2567356750,
-      2563135291,
-      2583247209
+      2567780333,
+      2508013500,
+      2500038917,
+      2510871667,
+      2492205667
     ],
     "cost_scope": [
-      "source analysis",
-      "fresh analysis Guest",
+      "source analysis Guest",
       "fresh execution Guest",
-      "physical calls",
+      "physical scheduling",
       "materialization",
+      "response validation",
       "cleanup"
     ],
-    "decision": "reject source-pass promotion; keep hidden substrate default-off for semantic research",
-    "delta_percent": 194.39129696330673,
+    "decision": "retain hidden ABI/table correctness seam Experimental/off; reject source pass promotion and scheduler widening",
+    "delta_percent": 196.60236745137135,
     "disposition": "reject",
-    "logical_receipts_in_source_order": true,
+    "later_failure_discards_without_receipt": true,
+    "logical_receipts": 2,
+    "matched_results": true,
     "maximum_concurrent": 2,
-    "physical_overlap_proven": true,
-    "ratio": 2.9439129696330673,
-    "treatment_median_ns": 7558074834,
+    "pass_config_sha256": "sha256:0004f6def2ed5fba58dc90dc6183063b70191614657f68bc0ec7daba3aae588f",
+    "pass_version": "pysolate.split-phase-sources-read-pass.v3",
+    "physical_starts": 2,
+    "ratio": 2.9660236745137136,
+    "treatment_median_ns": 7438827417,
     "treatment_ns": [
-      7542077250,
-      7611782000,
-      7529197708,
-      7558074834,
-      7591655041
+      7459196042,
+      7438827417,
+      7420793500,
+      7442507958,
+      7435401625
     ],
-    "workload": "two independent qualified sources.read calls with 150 ms handlers"
+    "workload": "two independent deterministic 150 ms qualified sources.read calls"
   },
-  "test_harness_commit": "71491d9ae0ef9ee3fa81a0cab45b421630005468"
+  "test_harness_commit": "8ee4935882dbac4c27f1f8cb2675dd4f7b8b9177",
+  "validation": {
+    "focused_race_packages": "pass",
+    "go_test_all_without_forced_guest": "pass",
+    "go_vet_all": "pass",
+    "guest_unit_tests": 188,
+    "mixed_profile_full_exact_suite": "not_applicable: one forced numpy-core artifact conflicts with frozen base/profile-specific controls",
+    "selected_exact_guest_e2e": "pass"
+  }
 }

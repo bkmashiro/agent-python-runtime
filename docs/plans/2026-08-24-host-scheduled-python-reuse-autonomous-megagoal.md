@@ -6,8 +6,8 @@
 > slices. A green test, signed commit, or rejected candidate is a checkpoint, not a stop
 > condition. Stop only at the decision/resource/safety gates below or complete closeout.
 
-**Status:** Planned and approved; implementation has not started. This file becomes the
-active runtime execution source of truth when Yuzhe starts its `/goal`.
+**Status:** Completed experimental campaign. Semantic seams remain Experimental/default-off;
+the tested split-phase pass, fixed data-local pass, cache widening and composition are no-go.
 
 **Prepared:** 2026-08-24
 
@@ -352,7 +352,7 @@ occurrences and exception-visible order.
   discard later physical work when Python would not reach its logical occurrence.
 - [x] Record one physical timeline and one logical occurrence timeline; prove no invented,
   dropped or reordered logical calls.
-- [-] Stop at the preregistered matched two-call economic gate: exact treatment was 194.39%
+- [-] Stop at the preregistered matched two-call economic gate: final exact treatment was 196.60%
   slower after complete costs. Do not spend further Guest builds on one/N widening.
 
 **Gate P2:** At least one preregistered latency-dominated case improves end-to-end time and
@@ -419,7 +419,7 @@ DataOp optimizer.
   framework appears.
 - [x] Measure physical bytes read/returned, Host-to-Guest bytes, Guest peak memory and
   end-to-end latency against unchanged source.
-- [-] Reject the fixed pass after the exact matched treatment was 7.70% slower. Keep it
+- [-] Reject the fixed pass after the final exact matched treatment was 6.29% slower. Keep it
   default-off; Guest peak memory was unavailable and is recorded rather than inferred.
 
 **Gate P5:** One fixed high-frequency pattern either has retained end-to-end benefit under
@@ -475,19 +475,19 @@ new semantic machinery. If not, keep the surviving mechanisms independent.
 **Promise:** Finish with truthful mechanism and performance claims, including negative
 results.
 
-- [ ] Freeze exact source, Guest artifact, configs, workload/capability versions and
+- [x] Freeze exact source, Guest artifact, configs, workload/capability versions and
   environment metadata for retained experiments.
-- [ ] Run deterministic semantic/adversarial matrices and matched end-to-end measurements.
-- [ ] Separate physical work, logical effects and published consumer outcomes in evidence.
-- [ ] Run focused race tests, `go test ./...`, `go vet ./...`, exact-Guest E2E and
+- [x] Run deterministic semantic/adversarial matrices and matched end-to-end measurements.
+- [x] Separate physical work, logical effects and published consumer outcomes in evidence.
+- [x] Run focused race tests, `go test ./...`, `go vet ./...`, exact-Guest E2E and
   platform-specific private-COW gates when touched.
-- [ ] Request independent post-fix review of call lifecycle, exception timing, logical
+- [x] Request independent post-fix review of call lifecycle, exception timing, logical
   effect accounting, value isolation, adapter law and fallback/replay boundaries.
-- [ ] Resolve all Blocking/High/Medium findings and rerun affected gates.
-- [ ] Update Current/Experimental/Proposed docs and related-work wording. Do not promote
+- [x] Resolve all Blocking/High/Medium findings and rerun affected gates.
+- [x] Update Current/Experimental/Proposed docs and related-work wording. Do not promote
   this successor into the existing paper claim source of truth without separate evidence
   review.
-- [ ] Record retained, rejected and deferred candidates; close the roadmap with no
+- [x] Record retained, rejected and deferred candidates; close the roadmap with no
   unchecked executable item.
 
 **Gate P8:** Exact implementation/evidence targets pass their declared gates, final review
@@ -573,10 +573,10 @@ completion.
 
 ## Current execution pointer
 
-`Phase 8: exact-Guest semantic gates pass. Split-phase source lowering is rejected after a
-194.39% slowdown; fixed NumPy data-local reduction is rejected after a 7.70% slowdown;
-cross-Run cache widening and pass composition are closed no-go. Complete independent review,
-global gates, signed push and final clean-state verification.`
+`Completed: exact-Guest semantic gates pass. Split-phase source lowering is rejected after a
+196.60% slowdown; fixed NumPy data-local reduction is rejected after a 6.29% slowdown;
+cross-Run cache widening and pass composition are closed no-go. The retained hidden seams
+remain Experimental/default-off.`
 
 ## Completion log
 
@@ -592,18 +592,24 @@ global gates, signed push and final clean-state verification.`
   `split_phase_sources_read` pass and hidden Guest/Host helper ABI. Capability table,
   runtime/source-pass/engine packages and 178 Guest unit tests pass. Exact rebuilt-Guest
   E2E remains open.
-- 2026-08-24: Phases 1-3 exact semantic checkpoint. Artifact
-  `sha256:09aa6bebea5d1767acd730bb73159ff405c443af47b95d7ba99609defdfe703e`
-  from `1bcec51f1c1770c09680fdcf761270ae8296b9ee` passed dynamic branch/loop
-  activation, source-ordered receipts, first-failure discard and fresh-Run teardown. The
-  five-repetition split-phase treatment was 194.39% slower, so scheduler widening and the
-  source-pass performance claim are rejected.
+- 2026-08-24: Phases 1-3 final exact semantic checkpoint. Artifact
+  `sha256:51e21abe95e2f5790bed431277bdd14b1dcb1da8bd92d0702a594372ddf02598`
+  from `84520efa7397a23d03cdbf3cdbc4d60c29543e62` passed dynamic branch/loop
+  activation, unsafe-layout fallback, source-ordered receipts, first-failure discard and
+  fresh-Run teardown. The five-repetition split-phase treatment was 196.60% slower, so
+  scheduler widening and the source-pass performance claim are rejected.
 - 2026-08-24: Phases 4-7 closed. Exact fresh Guests passed scalar/private-byte slots and
   isolated consumers of one physical immutable object. The fixed 8,388,736-byte NumPy sum
-  adapter copied 12 bytes per result but was 7.70% slower, so the pass is rejected. Existing
+  adapter copied 12 bytes per result but was 6.29% slower, so the pass is rejected. Existing
   240-run/40-cell reuse evidence had zero break-even cells; no cache policy, composed mode,
-  pass manager, DataOp graph or new public API was added. Evidence is frozen in
+  pass manager, DataOp graph or Python-visible API was added. Evidence is frozen in
   `docs/evidence/host-scheduled-reuse-e2e-v1.json`.
+- 2026-08-24: Phase 8 resolved independent review findings for producer attestation,
+  select-before-produce and unchanged-source fallback, constructor/Runner lifecycle, and
+  one-line/multiline/tab source layouts. A final fallback-accounting finding was resolved in
+  `8ee4935882dbac4c27f1f8cb2675dd4f7b8b9177`; exact-target re-review passed with no open
+  Blocking/High/Medium finding. Exact-Guest adversarial gates, package/race/vet gates and
+  artifact verification pass; the final disposition remains no-go on economics.
 
 ## Short `/goal`
 

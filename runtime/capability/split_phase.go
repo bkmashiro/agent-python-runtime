@@ -62,7 +62,7 @@ type splitPhaseEntry struct {
 	discarded     bool
 }
 
-// SplitPhaseTable owns a bounded set of physical read attempts for one Run.
+// SplitPhaseTable owns a bounded set of physical Future attempts for one Run.
 // Broker.Call remains the only owner of logical operation indices and receipts.
 type SplitPhaseTable struct {
 	mu                  sync.Mutex
@@ -89,8 +89,8 @@ func NewSplitPhaseTable(plan *Plan, limits SplitPhaseLimits) (*SplitPhaseTable, 
 	}, nil
 }
 
-// Submit validates and starts one qualified physical read without entering the
-// Broker logical call ledger.
+// Submit validates and starts one physical Future when Python reaches the tool
+// call, without entering the Broker logical call ledger until materialization.
 func (table *SplitPhaseTable) Submit(ctx context.Context, slotID string, raw []byte) error {
 	if table == nil || ctx == nil || !validIdentity(slotID) {
 		return ErrSplitPhaseUnavailable
@@ -99,15 +99,17 @@ func (table *SplitPhaseTable) Submit(ctx context.Context, slotID string, raw []b
 	if err != nil {
 		return err
 	}
-	prepared, err := table.plan.PreparePreDispatch(call.Capability, call.Arguments)
+	prepared, err := table.plan.PrepareFuture(call.Capability, call.Arguments)
 	if err != nil {
 		return ErrSplitPhaseUnavailable
 	}
-	qualification, ok := table.plan.PreDispatch(call.Capability)
-	if !ok || !qualification.Eligible() {
-		return ErrSplitPhaseUnavailable
+	costUnits := uint32(1)
+	maxResultBytes := uint64(maxCallBytes)
+	if qualification, ok := table.plan.PreDispatch(call.Capability); ok && qualification.Eligible() {
+		contract := qualification.Contract()
+		costUnits = contract.CostUnits
+		maxResultBytes = contract.MaxResultBytes
 	}
-	contract := qualification.Contract()
 	canonicalArguments := prepared.Arguments()
 	call.Arguments = canonicalArguments
 	canonicalRequest, err := json.Marshal(call)
@@ -129,8 +131,8 @@ func (table *SplitPhaseTable) Submit(ctx context.Context, slotID string, raw []b
 		return ErrSplitPhaseDuplicate
 	}
 	if uint32(len(table.entriesBySlot)) >= table.limits.MaxCalls ||
-		table.reservedCostUnits+uint64(contract.CostUnits) > table.limits.MaxCostUnits ||
-		table.reservedResultBytes+contract.MaxResultBytes > table.limits.MaxResultBytes {
+		table.reservedCostUnits+uint64(costUnits) > table.limits.MaxCostUnits ||
+		table.reservedResultBytes+maxResultBytes > table.limits.MaxResultBytes {
 		table.mu.Unlock()
 		return ErrSplitPhaseUnavailable
 	}
@@ -141,8 +143,8 @@ func (table *SplitPhaseTable) Submit(ctx context.Context, slotID string, raw []b
 	}
 	table.entriesBySlot[slotID] = entry
 	table.entriesByCall[call.CallID] = entry
-	table.reservedCostUnits += uint64(contract.CostUnits)
-	table.reservedResultBytes += contract.MaxResultBytes
+	table.reservedCostUnits += uint64(costUnits)
+	table.reservedResultBytes += maxResultBytes
 	table.snapshot.Submitted++
 	table.recordLocked(entry, "submitted")
 	table.mu.Unlock()

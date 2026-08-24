@@ -315,8 +315,13 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 	}
 	broker.observeCallLifecycle(ctx, call, operation, CallLifecycleIntent)
 	if broker.config.StagedClaimer != nil {
-		qualification, qualified := broker.config.Plan.PreDispatch(call.Capability)
-		if !qualified || !qualification.Eligible() || registered.spec.Playback != PlaybackLiveOnly || (registered.spec.EffectClass != EffectPure && registered.spec.EffectClass != EffectWorkspaceRead && registered.spec.EffectClass != EffectExternalRead) {
+		qualifiedStaged := registered.spec.Playback == PlaybackLiveOnly
+		if broker.config.SemanticPreDispatch {
+			qualification, qualified := broker.config.Plan.PreDispatch(call.Capability)
+			qualifiedStaged = qualifiedStaged && qualified && qualification.Eligible() &&
+				(registered.spec.EffectClass == EffectPure || registered.spec.EffectClass == EffectWorkspaceRead || registered.spec.EffectClass == EffectExternalRead)
+		}
+		if !qualifiedStaged {
 			broker.record(call, operation, "denied", nil)
 			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "staged_observation_unqualified", Message: "capability is not eligible for staged observation"}})
 		}

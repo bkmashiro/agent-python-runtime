@@ -26,7 +26,7 @@ func TestRealGuestCapabilityFuturesOverlapWithoutAnalyzer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	source := "first = sources.read(\"alpha\")\nsecond = sources.read(\"beta\")\nresult = first + second\n"
+	source := "first = sources.read(\"alpha\")\nsecond = sources.read(\"beta\")\nresult = [first, second]\n"
 	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
 		RunID: "future-overlap-e2e", Code: source, Inputs: json.RawMessage(`{}`),
 	})
@@ -74,7 +74,7 @@ func TestRealGuestCapabilityFuturesOverlapWithoutAnalyzer(t *testing.T) {
 		t.Fatal(err)
 	}
 	baselineResult, err := decodeSuccessfulGuestResult(baseline)
-	if err != nil || string(baselineResult) != `"alpha-bodybeta-body"` || maxActive.Load() != 1 {
+	if err != nil || string(baselineResult) != `["alpha-body","beta-body"]` || maxActive.Load() != 1 {
 		t.Fatalf("baseline result=%s max_active=%d err=%v payload=%s", baselineResult, maxActive.Load(), err, baseline)
 	}
 
@@ -96,6 +96,57 @@ func TestRealGuestCapabilityFuturesOverlapWithoutAnalyzer(t *testing.T) {
 		t.Fatalf("Future path did not reduce latency: baseline=%s treatment=%s", baselineDuration, treatmentDuration)
 	}
 	t.Logf("direct Future evidence: baseline=%s treatment=%s saved=%s ratio=%.4f analyzers=0", baselineDuration, treatmentDuration, baselineDuration-treatmentDuration, float64(treatmentDuration)/float64(baselineDuration))
+}
+
+func TestRealGuestCapabilityFutureDrainsUnobservedWrite(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := capability.NewRegistry()
+	grant, err := capability.NewGrant(json.RawMessage(`{"scope":"future-write-e2e"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var writes atomic.Uint32
+	spec := capability.Spec{
+		Name: "fixture.write", Version: "fixture.write.future-e2e.v1", Description: "Write one fixture.",
+		EffectClass: capability.EffectWorkspaceWrite, Playback: capability.PlaybackLiveOnly, HandlerIdentity: "fixture-write-future-e2e.v1",
+		InputSchema:  json.RawMessage(`{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}`),
+		OutputSchema: json.RawMessage(`{"type":"object","properties":{"written":{"type":"boolean"}},"required":["written"],"additionalProperties":false}`),
+		Python:       &capability.PythonProjection{Module: "fixture", Method: "write", Arguments: []string{"value"}, ResultField: "written"},
+	}
+	if err := registry.Register(spec, grant, capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		writes.Add(1)
+		return json.RawMessage(`{"written":true}`), nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runtimeconfig.DefaultRunConfig()
+	config.Timeout = 90 * time.Second
+	config.Mechanisms = runtimeconfig.MechanismSet{SplitPhaseCalls: true}
+	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+		return capability.NewBroker(capability.Config{RunIdentity: "future-write-e2e", Plan: plan})
+	}}).New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	request, _ := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
+		RunID: "future-write-e2e", Code: "fixture.write(\"value\")\nresult = \"done\"\n", Inputs: json.RawMessage(`{}`),
+	})
+	payload, err := runner.Run(context.Background(), request, plan.FuturePythonPrelude())
+	result, decodeErr := decodeSuccessfulGuestResult(payload)
+	if err != nil || decodeErr != nil || string(result) != `"done"` || writes.Load() != 1 {
+		t.Fatalf("result=%s writes=%d decode_err=%v err=%v payload=%s", result, writes.Load(), decodeErr, err, payload)
+	}
+	if evidence := trustedSemanticRunner(t, runner).SplitPhaseEvidence(); evidence.Submitted != 1 || evidence.Consumed != 1 || evidence.Discarded != 0 {
+		t.Fatalf("write Future evidence=%+v", evidence)
+	}
 }
 
 func TestRealGuestSplitPhaseSourcesReadOverlapsPhysicalWorkAndKeepsLogicalReceipts(t *testing.T) {

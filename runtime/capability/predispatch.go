@@ -32,10 +32,11 @@ func (outcome StagedCapabilityOutcome) Validate() error {
 // sealed Plan. Creating it validates capability eligibility and canonical
 // arguments but starts no work.
 type PreparedPreDispatch struct {
-	mu         sync.Mutex
-	registered registration
-	arguments  json.RawMessage
-	started    bool
+	mu             sync.Mutex
+	registered     registration
+	arguments      json.RawMessage
+	maxResultBytes uint64
+	started        bool
 }
 
 // PreparePreDispatch validates one exact read against the same sealed
@@ -51,7 +52,28 @@ func (plan *Plan) PreparePreDispatch(name string, raw json.RawMessage) (*Prepare
 	if err != nil {
 		return nil, ErrPreDispatchUnavailable
 	}
-	return &PreparedPreDispatch{registered: registered, arguments: append(json.RawMessage(nil), arguments...)}, nil
+	return &PreparedPreDispatch{
+		registered: registered, arguments: append(json.RawMessage(nil), arguments...),
+		maxResultBytes: qualification.Contract().MaxResultBytes,
+	}, nil
+}
+
+// PrepareFuture validates any live capability for direct Future execution.
+// Unlike speculative pre-dispatch, the Future is created only when Python
+// reaches the call, so writes are allowed. Approval-gated and playback calls
+// stay on the synchronous Broker path.
+func (plan *Plan) PrepareFuture(name string, raw json.RawMessage) (*PreparedPreDispatch, error) {
+	registered, ok := plan.lookup(name)
+	if !ok || registered.spec.Playback != PlaybackLiveOnly || registered.spec.Approval != nil || len(raw) == 0 {
+		return nil, ErrPreDispatchUnavailable
+	}
+	arguments, err := canonicalForSchema(registered.inputSchema, raw)
+	if err != nil {
+		return nil, ErrPreDispatchUnavailable
+	}
+	return &PreparedPreDispatch{
+		registered: registered, arguments: append(json.RawMessage(nil), arguments...), maxResultBytes: maxCallBytes,
+	}, nil
 }
 
 func (prepared *PreparedPreDispatch) Arguments() json.RawMessage {
@@ -100,7 +122,7 @@ func (prepared *PreparedPreDispatch) Call(ctx context.Context) (StagedCapability
 	if err == nil {
 		err = validateSpecResultSemantics(registered.spec, canonical)
 	}
-	if err != nil || len(canonical) > maxCallBytes || len(canonical) > int(registered.spec.PreDispatch.MaxResultBytes) ||
+	if err != nil || len(canonical) > maxCallBytes || len(canonical) > int(prepared.maxResultBytes) ||
 		(registered.spec.Playback == PlaybackCaptured && !validLiveTransportEvidence(evidence)) {
 		return StagedCapabilityOutcome{ErrorCode: "invalid_result", PhysicalResultBytes: physicalResultBytes}, nil
 	}

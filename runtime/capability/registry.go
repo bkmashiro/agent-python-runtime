@@ -173,12 +173,13 @@ type PlanConfig struct {
 }
 
 type Plan struct {
-	identity      string
-	maxCalls      uint32
-	specs         []Spec
-	grants        []GrantBinding
-	registrations map[string]registration
-	pythonPrelude string
+	identity            string
+	maxCalls            uint32
+	specs               []Spec
+	grants              []GrantBinding
+	registrations       map[string]registration
+	pythonPrelude       string
+	futurePythonPrelude string
 }
 
 type DelegationReason string
@@ -312,12 +313,13 @@ func (registry *Registry) Seal(config PlanConfig) (*Plan, error) {
 	}
 	digest := sha256.Sum256(encoded)
 	return &Plan{
-		identity:      "sha256:" + hex.EncodeToString(digest[:]),
-		maxCalls:      config.MaxCalls,
-		specs:         cloneSpecs(specs),
-		grants:        append([]GrantBinding(nil), grants...),
-		registrations: registrations,
-		pythonPrelude: generatePythonPrelude(specs),
+		identity:            "sha256:" + hex.EncodeToString(digest[:]),
+		maxCalls:            config.MaxCalls,
+		specs:               cloneSpecs(specs),
+		grants:              append([]GrantBinding(nil), grants...),
+		registrations:       registrations,
+		pythonPrelude:       generatePythonPrelude(specs),
+		futurePythonPrelude: generateFuturePythonPrelude(specs),
 	}, nil
 }
 
@@ -461,7 +463,7 @@ func (plan *Plan) FuturePythonPrelude() string {
 	if plan == nil {
 		return ""
 	}
-	return generateFuturePythonPrelude(plan.specs)
+	return plan.futurePythonPrelude
 }
 
 // StreamingPythonPrelude projects only capabilities that are safe to invoke

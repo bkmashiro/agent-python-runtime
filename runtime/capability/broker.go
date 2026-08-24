@@ -69,6 +69,10 @@ type StagedObservationClaimer interface {
 	Finalize(bool) error
 }
 
+type CallIDStagedObservationClaimer interface {
+	ClaimCall(context.Context, string, string, json.RawMessage) (StagedCapabilityOutcome, error)
+}
+
 type SourceBindingRequest = sourcebindingtrusted.Request
 
 // SourceBindingResolver is an opaque Host-TCB resolver. Its constructor accepts
@@ -182,6 +186,22 @@ func (broker *Broker) AttachCallLifecycleObserver(observer CallLifecycleObserver
 		return ErrInvalidBroker
 	}
 	broker.lifecycleObserver = observer
+	return nil
+}
+
+// AttachStagedClaimer installs one Run-private physical/logical join before the
+// first Broker call. Semantic pre-dispatch still binds its claimer at Broker
+// construction; split-phase derived execution uses this late Host-only join.
+func (broker *Broker) AttachStagedClaimer(claimer StagedObservationClaimer) error {
+	if broker == nil || claimer == nil {
+		return ErrInvalidBroker
+	}
+	broker.mu.Lock()
+	defer broker.mu.Unlock()
+	if broker.calls != 0 || broker.config.StagedClaimer != nil || broker.config.Playback != nil || broker.config.Branch != nil || broker.config.SemanticPreDispatch {
+		return ErrInvalidBroker
+	}
+	broker.config.StagedClaimer = claimer
 	return nil
 }
 
@@ -300,7 +320,13 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 			broker.record(call, operation, "denied", nil)
 			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "staged_observation_unqualified", Message: "capability is not eligible for staged observation"}})
 		}
-		staged, claimErr := broker.config.StagedClaimer.Claim(ctx, call.Capability, append(json.RawMessage(nil), arguments...))
+		var staged StagedCapabilityOutcome
+		var claimErr error
+		if targeted, ok := broker.config.StagedClaimer.(CallIDStagedObservationClaimer); ok {
+			staged, claimErr = targeted.ClaimCall(ctx, call.CallID, call.Capability, append(json.RawMessage(nil), arguments...))
+		} else {
+			staged, claimErr = broker.config.StagedClaimer.Claim(ctx, call.Capability, append(json.RawMessage(nil), arguments...))
+		}
 		if claimErr != nil && !errors.Is(claimErr, ErrStagedObservationNotTargeted) {
 			broker.record(call, operation, "error", nil)
 			if errors.Is(claimErr, context.Canceled) || errors.Is(claimErr, context.DeadlineExceeded) {

@@ -200,6 +200,11 @@ If Guest bootstrap or Wazero/ABI behavior changes, build and verify an exact Gue
 from the implementation commit before claiming E2E behavior. Do not reuse an older Guest
 artifact as proof of new Guest code.
 
+Phase 0 froze the first implementation in
+[`host-scheduled-call-contract-v1.md`](../research/host-scheduled-call-contract-v1.md)
+and
+[`host-scheduled-call-preregistration-v1.json`](../evidence/host-scheduled-call-preregistration-v1.json).
+
 ## Desired future state
 
 ### Source/compiler
@@ -283,21 +288,21 @@ API.
 **Promise:** Do not build an async subsystem or data API before the observable semantics
 and likely value are explicit.
 
-- [ ] Re-audit the live Broker/Guest host-call path, source-pass lowering,
+- [x] Re-audit the live Broker/Guest host-call path, source-pass lowering,
   `PreparedRegionTable`, Prepared Family, single-flight and receipt/effect owners.
-- [ ] Write a runtime-owned split-phase design contract covering hidden helper shape,
+- [x] Write a runtime-owned split-phase design contract covering hidden helper shape,
   lifecycle, dynamic occurrence identity, two-ledger events, exception point,
   cancellation/deadline/orphan behavior and safe fallback.
-- [ ] Freeze adversarial controls for earlier exception, later prepared work, branch not
+- [x] Freeze adversarial controls for earlier exception, later prepared work, branch not
   taken, zero loop iterations, first loop failure, timeout, cancellation, introspection,
   mutable arguments, writes and unknown effects.
-- [ ] Inventory representative current workloads/capabilities for independent high-latency
+- [x] Inventory representative current workloads/capabilities for independent high-latency
   calls, large immutable reads, projection/reduction and repeated deterministic producers.
   Frequency is a selection input, not permission to infer semantics from traces.
-- [ ] Choose the smallest first call capability and, separately, at most one first
+- [x] Choose the smallest first call capability and, separately, at most one first
   data-operation family. Record no-go if no concrete family has an exact adapter law and
   plausible end-to-end savings.
-- [ ] Preregister matched baselines, cost columns and retain/reject criteria. Include
+- [x] Preregister matched baselines, cost columns and retain/reject criteria. Include
   startup, analysis, transfer and cleanup.
 
 **Gate P0:** The contract can explain the result/error/logical-effect trace of every
@@ -310,16 +315,16 @@ only if one named capability family passes the workload/law gate.
 **Promise:** Establish the Host ABI and lifecycle without changing source ordering or
 claiming concurrency benefit.
 
-- [ ] Add RED tests for one straight-line qualified pure/read call lowered to adjacent
+- [x] Add RED tests for one straight-line qualified pure/read call lowered to adjacent
   hidden submit and materialize operations.
-- [ ] Implement a small Host-owned pending-call table with bounded entries, deadlines,
+- [x] Implement a small Host-owned pending-call table with bounded entries, deadlines,
   explicit terminal states and deterministic close/discard.
-- [ ] Add Guest/Host helpers keyed by a source-bound decision and dynamic occurrence;
+- [x] Add Guest/Host helpers keyed by a source-bound decision and dynamic occurrence;
   no Agent-visible token or public Python API.
 - [ ] Keep submit and materialize adjacent. Prove value, exception, Broker budget,
   receipt, Plan/freshness/privacy/workspace and cleanup equivalence against the original
   synchronous call.
-- [ ] Reject writes, mutable argument capture, introspection, loops and unsupported control
+- [x] Reject writes, mutable argument capture, introspection, loops and unsupported control
   in v1 rather than generalizing early.
 - [ ] Prove all-off and pre-effect failure select the unchanged path; no fallback replays a
   possibly started external effect.
@@ -568,14 +573,24 @@ completion.
 
 ## Current execution pointer
 
-`Planned: begin with Phase 0 contract/workload discovery after Yuzhe starts the /goal. No
-runtime implementation from this roadmap has begun.`
+`Phase 1: the bounded Host table, default-off mechanism, exact-Guest source transform and
+Guest/Host helper code pass local unit/package gates. Build a new exact Guest artifact from
+the implementation commit, then run adjacent/overlap/failure E2E before closing P1/P2.`
 
 ## Completion log
 
 - 2026-08-24: Successor roadmap prepared from live clean baseline
   `37ab006e06c6d107b364d69fcb14f01328aa99d6`. Direction approved; implementation not
   started.
+- 2026-08-24: Phase 0 closed. Live owners, the fixed `sources.read(path) -> body` call
+  adapter, fixed NumPy data-local reduction candidate, adversarial matrix, cost columns and
+  retain/reject rules are frozen in the linked contract and preregistration. Baseline
+  runtime packages, exact-Guest E2E and vet passed before implementation.
+- 2026-08-24: Phase 1 local RED/GREEN checkpoint. Added a bounded Run-private
+  `SplitPhaseTable`, call-ID-targeted Broker join, default-off mechanism, static
+  `split_phase_sources_read` pass and hidden Guest/Host helper ABI. Capability table,
+  runtime/source-pass/engine packages and 178 Guest unit tests pass. Exact rebuilt-Guest
+  E2E remains open.
 
 ## Short `/goal`
 

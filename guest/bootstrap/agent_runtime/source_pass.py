@@ -12,6 +12,8 @@ PURE_SCALAR_CSE = "pure_scalar_cse"
 PURE_SCALAR_CSE_VERSION = "pysolate.pure-scalar-cse-pass.v1"
 PURE_SCALAR_FOLD = "pure_scalar_fold"
 PURE_SCALAR_FOLD_VERSION = "pysolate.pure-scalar-fold-pass.v1"
+SPLIT_PHASE_SOURCES_READ = "split_phase_sources_read"
+SPLIT_PHASE_SOURCES_READ_VERSION = "pysolate.split-phase-sources-read-pass.v1"
 _REQUEST_KEYS = {"pass_name", "pass_version", "registration_sha256", "source"}
 _PATCH_KEYS = {
     "schema_version", "status", "pass_name", "pass_version", "registration_sha256",
@@ -225,13 +227,88 @@ def _pure_scalar_fold(source):
     for start, end, replacement in reversed(replacements):
         derived[start:end] = replacement
     derived_source = derived.decode("utf-8")
-    ast.parse(derived_source, filename="<agent-run>", mode="exec")
+    derived_tree = ast.parse(derived_source, filename="<agent-run>", mode="exec")
     return tree, derived_source, len(replacements)
+
+
+def _split_phase_sources_read(source):
+    if (
+        not isinstance(source, str)
+        or not source
+        or "\r" in source
+        or len(source.encode("utf-8")) > MAX_SOURCE_BYTES
+    ):
+        raise ValueError("invalid source pass input")
+    tree = ast.parse(source, filename="<agent-run>", mode="exec")
+    lines = source.splitlines(keepends=True)
+    if not 2 <= len(tree.body) <= 5 or len(lines) != len(tree.body):
+        return tree, "", 0
+
+    reads = []
+    names = set()
+    for index, statement in enumerate(tree.body[:-1]):
+        assignment = _simple_assignment(statement)
+        if assignment is None or statement.lineno != index + 1 or statement.end_lineno != statement.lineno:
+            return tree, "", 0
+        name, value = assignment
+        if (
+            name in names
+            or not isinstance(value, ast.Call)
+            or not isinstance(value.func, ast.Attribute)
+            or value.func.attr != "read"
+            or not isinstance(value.func.value, ast.Name)
+            or value.func.value.id != "sources"
+            or len(value.args) != 1
+            or value.keywords
+            or not isinstance(value.args[0], ast.Constant)
+            or type(value.args[0].value) is not str
+            or not value.args[0].value
+            or len(value.args[0].value.encode("utf-8")) > 256
+        ):
+            return tree, "", 0
+        names.add(name)
+        reads.append((name, value.args[0].value))
+
+    result = _simple_assignment(tree.body[-1])
+    if (
+        not reads
+        or result is None
+        or result[0] != "result"
+        or tree.body[-1].lineno != len(tree.body)
+        or tree.body[-1].end_lineno != tree.body[-1].lineno
+        or not _safe_output_value(result[1], frozenset(names))
+    ):
+        return tree, "", 0
+
+    source_identity = _digest(source.encode("utf-8"))[7:]
+    submit_parts = []
+    materialize_lines = []
+    for index, (name, path) in enumerate(reads, start=1):
+        slot_id = "slot-" + source_identity[:16] + "-" + str(index)
+        call_id = "split-" + source_identity[:16] + "-" + str(index)
+        request = _canonical({
+            "call_id": call_id,
+            "capability": "sources.read",
+            "arguments": {"path": path},
+        })
+        submit_parts.append("_pysolate_call_submit(" + repr(slot_id) + ", " + repr(request) + ")")
+        materialize_lines.append(name + " = _pysolate_call_materialize(" + repr(slot_id) + ")[\"body\"]")
+
+    derived_lines = list(lines)
+    newline = "\n" if lines[0].endswith("\n") else ""
+    derived_lines[0] = "; ".join(submit_parts + [materialize_lines[0]]) + newline
+    for index in range(1, len(materialize_lines)):
+        newline = "\n" if lines[index].endswith("\n") else ""
+        derived_lines[index] = materialize_lines[index] + newline
+    derived_source = "".join(derived_lines)
+    ast.parse(derived_source, filename="<agent-run>", mode="exec")
+    return tree, derived_source, len(reads)
 
 
 _TRANSFORMS = {
     (PURE_SCALAR_CSE, PURE_SCALAR_CSE_VERSION): _pure_scalar_cse,
     (PURE_SCALAR_FOLD, PURE_SCALAR_FOLD_VERSION): _pure_scalar_fold,
+    (SPLIT_PHASE_SOURCES_READ, SPLIT_PHASE_SOURCES_READ_VERSION): _split_phase_sources_read,
 }
 
 

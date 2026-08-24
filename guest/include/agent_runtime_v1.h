@@ -24,6 +24,18 @@ int32_t agent_runtime_materialize_value(const char *decision,
                                         char *response,
                                         int32_t response_cap);
 
+AGENT_RUNTIME_IMPORT("agent_runtime_v1", "submit_call")
+int32_t agent_runtime_submit_call(const char *slot,
+                                  int32_t slot_len,
+                                  const char *request,
+                                  int32_t request_len);
+
+AGENT_RUNTIME_IMPORT("agent_runtime_v1", "materialize_call")
+int32_t agent_runtime_materialize_call(const char *slot,
+                                       int32_t slot_len,
+                                       char *response,
+                                       int32_t response_cap);
+
 AGENT_RUNTIME_EXPORT("runtime_init")
 int32_t runtime_init(const char *config, int32_t config_len);
 

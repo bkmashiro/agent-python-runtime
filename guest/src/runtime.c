@@ -17,6 +17,7 @@
 #define AGENT_RUNTIME_RESPONSE_MAX (16 * 1024 * 1024)
 #define AGENT_RUNTIME_TOOL_RESPONSE_MAX (1024 * 1024)
 #define AGENT_RUNTIME_MATERIALIZED_RESPONSE_MAX 256
+#define AGENT_RUNTIME_SPLIT_PHASE_SLOT_MAX 96
 #define AGENT_RUNTIME_PREPARED_DESCRIPTOR_MAX 4096
 #define AGENT_RUNTIME_PREPARED_BODY_MAX (8 * 1024 * 1024)
 
@@ -160,6 +161,56 @@ static PyObject *python_materialize_value(PyObject *self, PyObject *args) {
     return PyUnicode_DecodeUTF8(response, response_len, "strict");
 }
 
+static PyObject *python_submit_call(PyObject *self, PyObject *args) {
+    (void)self;
+    const char *slot = NULL;
+    const char *request = NULL;
+    Py_ssize_t slot_len = 0;
+    Py_ssize_t request_len = 0;
+    if (!PyArg_ParseTuple(args, "s#s#:submit_call", &slot, &slot_len,
+                          &request, &request_len)) {
+        return NULL;
+    }
+    if (slot_len <= 0 || slot_len > AGENT_RUNTIME_SPLIT_PHASE_SLOT_MAX ||
+        request_len <= 0 || request_len > AGENT_RUNTIME_REQUEST_MAX ||
+        agent_runtime_submit_call(slot, (int32_t)slot_len, request,
+                                  (int32_t)request_len) != 0) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "Host split-phase submission rejected the call");
+        return NULL;
+    }
+    Py_RETURN_NONE;
+}
+
+static PyObject *python_materialize_call(PyObject *self, PyObject *args) {
+    (void)self;
+    const char *slot = NULL;
+    Py_ssize_t slot_len = 0;
+    if (!PyArg_ParseTuple(args, "s#:materialize_call", &slot, &slot_len)) {
+        return NULL;
+    }
+    if (slot_len <= 0 || slot_len > AGENT_RUNTIME_SPLIT_PHASE_SLOT_MAX) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "Host split-phase slot identity is invalid");
+        return NULL;
+    }
+    char *response = malloc(AGENT_RUNTIME_TOOL_RESPONSE_MAX);
+    if (response == NULL) {
+        return PyErr_NoMemory();
+    }
+    int32_t response_len = agent_runtime_materialize_call(
+        slot, (int32_t)slot_len, response, AGENT_RUNTIME_TOOL_RESPONSE_MAX);
+    if (response_len <= 0 || response_len > AGENT_RUNTIME_TOOL_RESPONSE_MAX) {
+        free(response);
+        PyErr_SetString(PyExc_RuntimeError,
+                        "Host split-phase materialization failed");
+        return NULL;
+    }
+    PyObject *result = PyUnicode_DecodeUTF8(response, response_len, "strict");
+    free(response);
+    return result;
+}
+
 static PyObject *python_seal_imports(PyObject *self, PyObject *names) {
     (void)self;
     if (import_policy_sealed) {
@@ -215,6 +266,8 @@ static PyObject *python_import_receipts(PyObject *self, PyObject *unused) {
 static PyMethodDef agent_runtime_host_methods[] = {
     {"call", python_host_call, METH_VARARGS, "Perform a bounded Host capability call."},
     {"materialize_value", python_materialize_value, METH_VARARGS, "Claim one exact prepared scalar value."},
+    {"submit_call", python_submit_call, METH_VARARGS, "Submit one hidden Host-owned read."},
+    {"materialize_call", python_materialize_call, METH_VARARGS, "Materialize one hidden Host-owned read."},
     {"seal_imports", python_seal_imports, METH_O, "Seal the exact per-Run import set."},
     {"import_receipts", python_import_receipts, METH_NOARGS, "Read bounded native import receipts."},
     {NULL, NULL, 0, NULL},

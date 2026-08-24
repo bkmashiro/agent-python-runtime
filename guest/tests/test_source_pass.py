@@ -26,6 +26,61 @@ def request(source, pass_name="pure_scalar_cse", pass_version="pysolate.pure-sca
 
 
 class SourcePassTests(unittest.TestCase):
+    def test_split_phase_sources_read_keeps_submit_and_materialize_adjacent_for_one_call(self):
+        source = 'first = sources.read("alpha")\nresult = first\n'
+        raw = emit_source_pass_patch_request_json(request(
+            source,
+            "split_phase_sources_read",
+            "pysolate.split-phase-sources-read-pass.v1",
+        ))
+        patch = json.loads(raw)
+        self.assertEqual("applied", patch["status"])
+        self.assertEqual(1, patch["replacement_count"])
+        self.assertEqual(source.count("\n"), patch["derived_source"].count("\n"))
+        first_line = patch["derived_source"].splitlines()[0]
+        self.assertLess(first_line.index("_pysolate_call_submit"), first_line.index("_pysolate_call_materialize"))
+        self.assertIn('["body"]', first_line)
+        validate_source_pass_execution_request(source, raw)
+
+    def test_split_phase_sources_read_stages_two_calls_before_source_order_materialization(self):
+        source = (
+            'first = sources.read("alpha")\n'
+            'second = sources.read("beta")\n'
+            'result = [first, second]\n'
+        )
+        raw = emit_source_pass_patch_request_json(request(
+            source,
+            "split_phase_sources_read",
+            "pysolate.split-phase-sources-read-pass.v1",
+        ))
+        patch = json.loads(raw)
+        self.assertEqual("applied", patch["status"])
+        self.assertEqual(2, patch["replacement_count"])
+        lines = patch["derived_source"].splitlines()
+        self.assertEqual(2, lines[0].count("_pysolate_call_submit"))
+        self.assertEqual(1, lines[0].count("_pysolate_call_materialize"))
+        self.assertEqual(1, lines[1].count("_pysolate_call_materialize"))
+        self.assertNotIn("_pysolate_call_submit", lines[1])
+        self.assertEqual(source.count("\n"), patch["derived_source"].count("\n"))
+
+    def test_split_phase_sources_read_rejects_dynamic_or_observable_programs(self):
+        cases = [
+            'path = "alpha"\nfirst = sources.read(path)\nresult = first\n',
+            'if True:\n    first = sources.read("alpha")\nresult = first\n',
+            'first = sources.read("alpha")\nprint("visible")\nresult = first\n',
+            'first = sources.read("alpha")\nresult = locals()\n',
+            'first = sources.read(path="alpha")\nresult = first\n',
+            'first = other.read("alpha")\nresult = first\n',
+        ]
+        for source in cases:
+            with self.subTest(source=source):
+                patch = json.loads(emit_source_pass_patch_request_json(request(
+                    source,
+                    "split_phase_sources_read",
+                    "pysolate.split-phase-sources-read-pass.v1",
+                )))
+                self.assertEqual("not_applicable", patch["status"])
+
     def test_scalar_passes_reject_programs_that_can_observe_compiled_code(self):
         source = (
             "left = 1 + 2\nright = 1 + 2\n"

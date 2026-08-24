@@ -31,6 +31,8 @@ func TestMechanismDependenciesFailClosed(t *testing.T) {
 		{"staged observation without streaming", runtime.MechanismSet{StagedObservation: true}},
 		{"semantic pre-dispatch without analysis", runtime.MechanismSet{SemanticPreDispatch: true, StagedObservation: true}},
 		{"semantic pre-dispatch without staged observation", runtime.MechanismSet{SemanticPreDispatch: true, SemanticAnalysis: true}},
+		{"split-phase calls without analysis", runtime.MechanismSet{SplitPhaseCalls: true, StagedObservation: true}},
+		{"split-phase calls without staged observation", runtime.MechanismSet{SplitPhaseCalls: true, SemanticAnalysis: true}},
 		{"fanout without streaming", runtime.MechanismSet{ImmutableBranches: true, ChildFanout: true}},
 		{"fanout without branches", runtime.MechanismSet{Streaming: true, ChildFanout: true}},
 		{"function cache without branches", runtime.MechanismSet{FunctionCache: true}},
@@ -117,6 +119,7 @@ func TestResolveMechanismsReportsSelectedFallbackAndOff(t *testing.T) {
 		ColdIOContinuation: true,
 		SemanticAnalysis:   true,
 		SemanticReuse:      true,
+		SplitPhaseCalls:    true,
 	}
 	available := requested
 	available.ChildFanout = false
@@ -129,7 +132,7 @@ func TestResolveMechanismsReportsSelectedFallbackAndOff(t *testing.T) {
 		t.Fatal(err)
 	}
 	if resolved.ChildFanout || resolved.MemoryCOW || resolved.ColdIOContinuation || resolved.SemanticReuse ||
-		!resolved.Streaming || !resolved.SingleFlight || !resolved.SemanticAnalysis {
+		!resolved.Streaming || !resolved.SingleFlight || !resolved.SemanticAnalysis || !resolved.SplitPhaseCalls {
 		t.Fatalf("unexpected resolved set: %#v", resolved)
 	}
 	if err := evidence.Validate(); err != nil {

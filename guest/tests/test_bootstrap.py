@@ -321,6 +321,17 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual("ok", response["status"])
         self.assertEqual(1, response["result"])
 
+    def test_agent_source_cannot_name_split_phase_runtime_helpers(self):
+        for helper in ("_pysolate_call_submit", "_pysolate_call_materialize"):
+            with self.subTest(helper=helper):
+                runtime = load_bootstrap()
+                runtime._initialize("{}")
+                request = {"run_id": "reserved-helper", "code": f"result = {helper}('slot-a', '{{}}')", "inputs": {}}
+                raw = json.dumps(request)
+                self.assertEqual(2, runtime._validate_request_source(raw))
+                response = json.loads(runtime._execute(raw))
+                self.assertEqual("source_invalid", response["error"]["code"])
+
     def test_rejects_non_static_agent_import_forms_before_execution(self):
         cases = {
             "dunder": "result = __import__(inputs['module'])",

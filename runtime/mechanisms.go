@@ -28,6 +28,7 @@ const (
 	MechanismSemanticAnalysis    MechanismName = "semantic_analysis"
 	MechanismSemanticPreDispatch MechanismName = "semantic_pre_dispatch"
 	MechanismSemanticReuse       MechanismName = "semantic_reuse"
+	MechanismSplitPhaseCalls     MechanismName = "split_phase_calls"
 
 	MechanismOff      MechanismDisposition = "off"
 	MechanismSelected MechanismDisposition = "selected"
@@ -57,6 +58,7 @@ var mechanismNames = []MechanismName{
 	MechanismSemanticPreDispatch,
 	MechanismSemanticReuse,
 	MechanismSingleFlight,
+	MechanismSplitPhaseCalls,
 	MechanismStagedObservation,
 	MechanismStreaming,
 }
@@ -80,16 +82,23 @@ type MechanismSet struct {
 	SemanticAnalysis        bool
 	SemanticPreDispatch     bool
 	SemanticReuse           bool
+	SplitPhaseCalls         bool `json:"SplitPhaseCalls,omitempty"`
 }
 
 func (set MechanismSet) Validate() error {
 	if set.Streaming && !set.PrivateWorkspace {
 		return ErrInvalidMechanismSet
 	}
-	if set.StagedObservation && !set.Streaming && !set.SemanticPreDispatch {
+	if set.StagedObservation && !set.Streaming && !set.SemanticPreDispatch && !set.SplitPhaseCalls {
 		return ErrInvalidMechanismSet
 	}
 	if set.SemanticPreDispatch && (!set.SemanticAnalysis || !set.StagedObservation) {
+		return ErrInvalidMechanismSet
+	}
+	if set.SplitPhaseCalls && (!set.SemanticAnalysis || !set.StagedObservation) {
+		return ErrInvalidMechanismSet
+	}
+	if set.SplitPhaseCalls && set.SemanticPreDispatch {
 		return ErrInvalidMechanismSet
 	}
 	if set.ChildFanout && (!set.Streaming || !set.ImmutableBranches) {
@@ -157,6 +166,8 @@ func (set MechanismSet) enabled(name MechanismName) bool {
 		return set.SemanticPreDispatch
 	case MechanismSemanticReuse:
 		return set.SemanticReuse
+	case MechanismSplitPhaseCalls:
+		return set.SplitPhaseCalls
 	default:
 		return false
 	}
@@ -196,6 +207,8 @@ func (set *MechanismSet) set(name MechanismName, enabled bool) {
 		set.SemanticPreDispatch = enabled
 	case MechanismSemanticReuse:
 		set.SemanticReuse = enabled
+	case MechanismSplitPhaseCalls:
+		set.SplitPhaseCalls = enabled
 	}
 }
 

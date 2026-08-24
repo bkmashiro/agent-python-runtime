@@ -13,13 +13,16 @@ import (
 )
 
 const (
-	SchemaVersion                                    = "pysolate.source-pass-patch.v1"
-	PureScalarCSEName          passregistration.Name = "pure_scalar_cse"
-	PureScalarCSEVersion                             = "pysolate.pure-scalar-cse-pass.v1"
-	PureScalarCSEConfigSHA256                        = "sha256:48884671a1121cfb21c2b19f79faec1530342a6175ab515c0011ce2074e3057f"
-	PureScalarFoldName         passregistration.Name = "pure_scalar_fold"
-	PureScalarFoldVersion                            = "pysolate.pure-scalar-fold-pass.v1"
-	PureScalarFoldConfigSHA256                       = "sha256:ebd1a5f88e49f6170044cc146ad394b9967aa5aad5443f9d2734c86c98b130c6"
+	SchemaVersion                                           = "pysolate.source-pass-patch.v1"
+	PureScalarCSEName                 passregistration.Name = "pure_scalar_cse"
+	PureScalarCSEVersion                                    = "pysolate.pure-scalar-cse-pass.v1"
+	PureScalarCSEConfigSHA256                               = "sha256:48884671a1121cfb21c2b19f79faec1530342a6175ab515c0011ce2074e3057f"
+	PureScalarFoldName                passregistration.Name = "pure_scalar_fold"
+	PureScalarFoldVersion                                   = "pysolate.pure-scalar-fold-pass.v1"
+	PureScalarFoldConfigSHA256                              = "sha256:ebd1a5f88e49f6170044cc146ad394b9967aa5aad5443f9d2734c86c98b130c6"
+	SplitPhaseSourcesReadName         passregistration.Name = "split_phase_sources_read"
+	SplitPhaseSourcesReadVersion                            = "pysolate.split-phase-sources-read-pass.v1"
+	SplitPhaseSourcesReadConfigSHA256                       = "sha256:2a402e54fb4a0dc196737b03d8f2e03c9b1a8509bd729563b1f24f95a0ae1d7f"
 )
 
 var (
@@ -57,6 +60,10 @@ type PureScalarCSE struct {
 }
 
 type PureScalarFold struct {
+	registration passregistration.Registration
+}
+
+type SplitPhaseSourcesRead struct {
 	registration passregistration.Registration
 }
 
@@ -98,12 +105,37 @@ func (pass PureScalarFold) Registration() passregistration.Registration {
 	return pass.registration
 }
 
+func NewSplitPhaseSourcesRead(analyzerSHA256 string) (SplitPhaseSourcesRead, error) {
+	definition, err := passregistration.Define(
+		SplitPhaseSourcesReadName, SplitPhaseSourcesReadVersion, passregistration.StageWholeProgramPatch,
+		passregistration.ExecutionPatch, passregistration.PatchBindings(),
+	)
+	if err != nil {
+		return SplitPhaseSourcesRead{}, err
+	}
+	registration, err := definition.Register(analyzerSHA256, SplitPhaseSourcesReadConfigSHA256)
+	if err != nil {
+		return SplitPhaseSourcesRead{}, err
+	}
+	return SplitPhaseSourcesRead{registration: registration}, nil
+}
+
+func (pass SplitPhaseSourcesRead) Registration() passregistration.Registration {
+	return pass.registration
+}
+
+func (pass SplitPhaseSourcesRead) HostScheduled() bool { return true }
+
 func (pass PureScalarFold) Transform(ctx context.Context, transformer Transformer, source string) (Patch, error) {
 	return transform(ctx, transformer, source, pass.registration, PureScalarFoldName)
 }
 
 func (pass PureScalarCSE) Transform(ctx context.Context, transformer Transformer, source string) (Patch, error) {
 	return transform(ctx, transformer, source, pass.registration, PureScalarCSEName)
+}
+
+func (pass SplitPhaseSourcesRead) Transform(ctx context.Context, transformer Transformer, source string) (Patch, error) {
+	return transform(ctx, transformer, source, pass.registration, SplitPhaseSourcesReadName)
 }
 
 func transform(ctx context.Context, transformer Transformer, source string, registration passregistration.Registration, expectedName passregistration.Name) (Patch, error) {

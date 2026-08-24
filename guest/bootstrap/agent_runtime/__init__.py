@@ -46,6 +46,8 @@ _STDOUT_MAX_LINES = 256
 _STDOUT_TRUNCATION_MARKER = "[pysolate stdout truncated]"
 _PREPARED_REGION_HELPER = "__pysolate_materialize_value__"
 _PREPARED_REGION_PAYLOAD_MAX = 256
+_SPLIT_PHASE_SUBMIT_HELPER = "_pysolate_call_submit"
+_SPLIT_PHASE_MATERIALIZE_HELPER = "_pysolate_call_materialize"
 _FUTURE_FLAGS = sum(getattr(__future__, name).compiler_flag for name in __future__.all_feature_names)
 
 
@@ -678,15 +680,19 @@ class _ModuleAssignedNameCollector(ast.NodeVisitor):
         self._visit_comprehensions(node.generators)
 
 
-def _compile_agent_wrapper(body: list[ast.stmt], preamble: list[ast.stmt]) -> tuple[types.CodeType, str]:
+def _compile_agent_wrapper(
+    body: list[ast.stmt],
+    preamble: list[ast.stmt],
+    allowed_runtime_names: frozenset[str] = frozenset(),
+) -> tuple[types.CodeType, str]:
     validate_ast_recursion_shape_bounded(ast.Module(body=body, type_ignores=[]))
     collector = _ModuleAssignedNameCollector()
     for node in (*preamble, *body):
         collector.visit(node)
-    if any(name.startswith("_pysolate_") for name in collector.names):
+    if any(name.startswith("_pysolate_") and name not in allowed_runtime_names for name in collector.names):
         raise SyntaxError("agent source binds a reserved runtime name")
     for node in walk_ast_bounded(ast.Module(body=body, type_ignores=[])):
-        if isinstance(node, ast.Name) and node.id.startswith("_pysolate_"):
+        if isinstance(node, ast.Name) and node.id.startswith("_pysolate_") and node.id not in allowed_runtime_names:
             raise SyntaxError("agent source uses a reserved runtime name")
     future_annotations = any(
         isinstance(node, ast.ImportFrom) and node.module == "__future__" and any(alias.name == "annotations" for alias in node.names)
@@ -870,7 +876,11 @@ def _validate_request_source(request_json: str) -> int:
     return _SOURCE_CONTRACT_OK
 
 
-def _install_derived_tree(tree: ast.Module, request: dict[str, Any]) -> None:
+def _install_derived_tree(
+    tree: ast.Module,
+    request: dict[str, Any],
+    allowed_runtime_names: frozenset[str] = frozenset(),
+) -> None:
     global _validated_code, _validated_effective_ast_sha256
     compatibility = request.get("compatibility")
     if compatibility is None:
@@ -891,7 +901,7 @@ def _install_derived_tree(tree: ast.Module, request: dict[str, Any]) -> None:
         import_ids = {id(node) for node in import_nodes}
         body = [node for node in tree.body if id(node) not in import_ids]
         preamble = [node for node in import_nodes if isinstance(node, ast.ImportFrom) and node.module == "__future__"]
-    code, digest = _compile_agent_wrapper(body, preamble)
+    code, digest = _compile_agent_wrapper(body, preamble, allowed_runtime_names)
     _validated_code = code
     _validated_effective_ast_sha256 = digest
 
@@ -915,7 +925,17 @@ def _prepare_source_pass_execution(patch_json: str) -> None:
         raise RuntimeError("validated original request is unavailable")
     from .source_pass import validate_source_pass_execution_request
     tree = validate_source_pass_execution_request(request["code"], patch_json)
-    _install_derived_tree(tree, request)
+    try:
+        patch = json.loads(patch_json)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("source pass patch is invalid") from exc
+    allowed_runtime_names = frozenset()
+    if (
+        patch.get("pass_name") == "split_phase_sources_read"
+        and patch.get("pass_version") == "pysolate.split-phase-sources-read-pass.v1"
+    ):
+        allowed_runtime_names = frozenset({_SPLIT_PHASE_SUBMIT_HELPER, _SPLIT_PHASE_MATERIALIZE_HELPER})
+    _install_derived_tree(tree, request, allowed_runtime_names)
 
 
 def _encode(response: dict[str, Any]) -> str:
@@ -951,6 +971,43 @@ def _materialize_prepared_region(decision: str) -> bool | int:
     if json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False) != raw:
         raise RuntimeError("prepared region payload is not canonical")
     return value
+
+
+def _submit_split_phase_call(slot_id: str, request_json: str) -> None:
+    if (
+        not isinstance(slot_id, str)
+        or not slot_id.startswith("slot-")
+        or len(slot_id) > 96
+        or not isinstance(request_json, str)
+        or not request_json
+    ):
+        raise RuntimeError("split-phase call submission is invalid")
+    import _agent_runtime_host  # type: ignore[import-not-found]
+    _agent_runtime_host.submit_call(slot_id, request_json)
+
+
+def _materialize_split_phase_call(slot_id: str) -> dict[str, Any]:
+    if not isinstance(slot_id, str) or not slot_id.startswith("slot-") or len(slot_id) > 96:
+        raise RuntimeError("split-phase call materialization is invalid")
+    import _agent_runtime_host  # type: ignore[import-not-found]
+    raw = _agent_runtime_host.materialize_call(slot_id)
+    try:
+        response = json.loads(raw)
+        if not isinstance(response, dict) or response.get("status") not in {"ok", "denied", "error"}:
+            raise ValueError("invalid status")
+        if response["status"] != "ok":
+            error = response.get("error")
+            if not isinstance(error, dict) or not isinstance(error.get("message"), str):
+                raise ValueError("invalid error")
+            raise RuntimeError(error["message"])
+        result = response.get("result")
+        if not isinstance(result, dict):
+            raise ValueError("invalid result")
+        return result
+    except RuntimeError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("split-phase Host response is invalid") from exc
 
 
 def _execute(request_json: str) -> str:
@@ -999,6 +1056,8 @@ def _execute(request_json: str) -> str:
         sys.__stdout__ = capture
         exec(code, namespace, namespace)
         namespace[_PREPARED_REGION_HELPER] = _materialize_prepared_region
+        namespace[_SPLIT_PHASE_SUBMIT_HELPER] = _submit_split_phase_call
+        namespace[_SPLIT_PHASE_MATERIALIZE_HELPER] = _materialize_split_phase_call
         main = namespace.get(_WRAPPER_MAIN)
         if not isinstance(main, types.FunctionType):
             raise RuntimeError("agent output wrapper is unavailable")

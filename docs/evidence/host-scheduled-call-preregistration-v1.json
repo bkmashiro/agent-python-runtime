@@ -1,0 +1,171 @@
+{
+  "baseline": {
+    "branch": "main",
+    "guest_requirement": "new exact artifact from the first Guest/ABI implementation commit",
+    "platform": "darwin_arm64",
+    "source_commit": "fde07939f3d1865a83bfb59b16a3ac16abf46e8f"
+  },
+  "excluded": [
+    "user-visible Future/proxy",
+    "full Python/DataOp IR",
+    "Stratum replica",
+    "generic batching/fusion",
+    "AWO/meta-tool trace synthesis",
+    "AAFLOW distributed runtime",
+    "cheap scalar pass expansion",
+    "early writes or compensation-backed speculation",
+    "page-composed ownership transfer"
+  ],
+  "experiments": {
+    "p1_adjacent": {
+      "expected_speedup": false,
+      "required": [
+        "pass-off/pass-on result parity",
+        "handler and invalid-result parity",
+        "one physical start",
+        "one Broker logical call",
+        "one receipt",
+        "single consume",
+        "clean close",
+        "default-off fallback"
+      ]
+    },
+    "p2_overlap": {
+      "baseline": "unchanged source with two sequential Broker calls in a fresh Guest",
+      "handler_delay_ms": 750,
+      "no_claim_if": "correctness fails, overlap is absent, or treatment median is not lower",
+      "primary_metric": "complete Run wall time in nanoseconds",
+      "repetitions": 5,
+      "retention_rule": "retain Experimental/default-off only if both physical reads overlap, semantic gates pass, and treatment median complete-Run latency is lower than baseline after all overhead",
+      "secondary_metrics": [
+        "physical overlap interval",
+        "maximum concurrent handlers",
+        "physical starts/finishes/discards",
+        "logical claims",
+        "Broker calls",
+        "receipt order",
+        "result/error parity"
+      ],
+      "treatment": "exact-Guest derived source with two submits before first materialization",
+      "warmups": 1
+    },
+    "p5_data_local": {
+      "baseline": "ordinary or existing prepared NumPy load plus dataset.sum in a fresh Guest",
+      "primary_metrics": [
+        "complete Run wall time",
+        "physical bytes read",
+        "Host-to-Guest bytes"
+      ],
+      "retention_rule": "result/error parity and strictly lower intended physical bytes; performance claim requires lower complete-Run median",
+      "secondary_metrics": [
+        "Guest peak memory when available",
+        "analysis/materialization/cleanup time"
+      ],
+      "treatment": "adapter-qualified Host data-local exact reduction materialized as a scalar"
+    },
+    "p6_cross_run": {
+      "consumers": [
+        1,
+        2,
+        4
+      ],
+      "required": [
+        "one qualified physical producer for matching requests",
+        "fresh independent Guests",
+        "separate Run identities and terminal outcomes",
+        "revision/implementation/privacy near-miss separation",
+        "consumer mutation isolation",
+        "failed/cancelled/unclaimed cleanup"
+      ],
+      "retention_rule": "no positive economic claim unless matched end-to-end cost improves over recompute/copy baselines"
+    }
+  },
+  "global_gates": [
+    "go test ./... -count=1",
+    "go vet ./...",
+    "focused go test -race for table/scheduler packages",
+    "new exact Guest artifact verification and exact-Guest E2E when Guest/ABI changes",
+    "git diff --check",
+    "independent post-fix review with no open Blocking/High/Medium finding"
+  ],
+  "identity": "sha256:d8c06925538a4fe4effcd827ac29a127c8063cef3c30a5c226ec7cad2138aa7a",
+  "ledger_invariants": [
+    "physical readiness does not create a logical call or receipt",
+    "Broker materialization owns each logical operation index and receipt",
+    "an unmaterialized later read is cancelled or discarded after an earlier failure",
+    "a targeted mismatch never falls back to a second live physical request",
+    "writes/approvals/captured playback never enter the split-phase table",
+    "no post-effect replay or mutable Python state reuse"
+  ],
+  "schema_version": "pysolate.host-scheduled-call-preregistration.v1",
+  "scope": {
+    "cross_run_candidate": "existing sealed immutable numpy_npy_c_v1 object; prior copy/private-COW economics remain negative until new evidence",
+    "data_local_candidate": {
+      "body_bytes": 8388608,
+      "contract": "numpy_npy_c_v1",
+      "dtype": "<i8",
+      "expected_sum": 549755289600,
+      "operation": "signed int64 sum with NumPy wraparound then Python int projection",
+      "shape": [
+        1024,
+        1024
+      ],
+      "source": "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\nresult = int(dataset.sum())"
+    },
+    "split_phase_adapter": {
+      "argument_lane": "one static UTF-8 path string",
+      "capability": "sources.read",
+      "capability_version": "pysolate.sources.read.split-phase-research.v1",
+      "effect_classes": [
+        "pure",
+        "external_read"
+      ],
+      "max_calls": 2,
+      "playback": "live_only",
+      "pre_dispatch_required": true,
+      "public_api_claim": false,
+      "python_projection": {
+        "arguments": [
+          "path"
+        ],
+        "method": "read",
+        "module": "sources",
+        "result_field": "body"
+      },
+      "result_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "maxLength": 1048576,
+            "type": "string"
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "source_lanes": {
+    "adjacent": "first = sources.read('alpha')\nresult = first",
+    "first_failure": "first = sources.read('fail')\nsecond = sources.read('beta')\nresult = [first, second]",
+    "overlap": "first = sources.read('alpha')\nsecond = sources.read('beta')\nresult = [first, second]",
+    "rejections": [
+      "alias",
+      "extra call",
+      "attribute escape",
+      "branch",
+      "loop",
+      "try/finally",
+      "context manager",
+      "mutation",
+      "dynamic path",
+      "dynamic namespace/frame/source/code introspection",
+      "write or approval capability",
+      "captured playback",
+      "programmatic parent"
+    ]
+  },
+  "status": "preregistered_before_implementation"
+}

@@ -25,9 +25,19 @@ type SourcePatchPlugin interface {
 	Transform(context.Context, sourcepatch.Transformer, string) (sourcepatch.Patch, error)
 }
 
+type HostScheduledSourcePatchPlugin interface {
+	SourcePatchPlugin
+	HostScheduled() bool
+}
+
 type SourcePatchRunner interface {
 	Run(context.Context, []byte, string) ([]byte, error)
 	RunSourcePatchDerived(context.Context, []byte, sourcepatch.Patch, passregistration.Registration) ([]byte, error)
+}
+
+type HostScheduledSourcePatchRunner interface {
+	Run(context.Context, []byte, string) ([]byte, error)
+	RunHostScheduledSourcePatchDerived(context.Context, []byte, sourcepatch.Patch, passregistration.Registration) ([]byte, error)
 }
 
 type Execution struct {
@@ -141,6 +151,9 @@ func (registry *Registry) Execute(ctx context.Context, name passregistration.Nam
 	if !sourcePatch || plugin.Registration().Stage() != passregistration.StageWholeProgramPatch {
 		return Execution{}, ErrUnsupportedStage
 	}
+	if scheduled, ok := plugin.(HostScheduledSourcePatchPlugin); ok && scheduled.HostScheduled() {
+		return Execution{}, ErrUnsupportedStage
+	}
 	if !registry.enabled[name] {
 		payload, runErr := runner.Run(ctx, request, "")
 		return Execution{Payload: payload}, runErr
@@ -151,5 +164,38 @@ func (registry *Registry) Execute(ctx context.Context, name passregistration.Nam
 		return Execution{Payload: payload, Patch: patch, PassError: passErr}, runErr
 	}
 	payload, runErr := runner.RunSourcePatchDerived(ctx, request, patch, plugin.Registration())
+	return Execution{Payload: payload, Patch: patch, Applied: runErr == nil}, runErr
+}
+
+// ExecuteHostScheduled runs one explicitly Host-scheduled source patch. The
+// separate entry point prevents an effect-owning pass from entering the
+// authority-free RunSourcePatchDerived seam.
+func (registry *Registry) ExecuteHostScheduled(ctx context.Context, name passregistration.Name, transformer sourcepatch.Transformer, runner HostScheduledSourcePatchRunner, request []byte, trustedPrepare string) (Execution, error) {
+	if runner == nil {
+		return Execution{}, ErrInvalidPlugin
+	}
+	runRequest, err := runtimeconfig.DecodeRunRequest(request)
+	if err != nil {
+		return Execution{}, err
+	}
+	plugin, exists := registry.Lookup(name)
+	if !exists {
+		return Execution{}, ErrInvalidPlugin
+	}
+	patchPlugin, sourcePatch := plugin.(SourcePatchPlugin)
+	scheduled, hostScheduled := plugin.(HostScheduledSourcePatchPlugin)
+	if !sourcePatch || !hostScheduled || !scheduled.HostScheduled() || plugin.Registration().Stage() != passregistration.StageWholeProgramPatch {
+		return Execution{}, ErrUnsupportedStage
+	}
+	if !registry.enabled[name] {
+		payload, runErr := runner.Run(ctx, request, trustedPrepare)
+		return Execution{Payload: payload}, runErr
+	}
+	patch, passErr := patchPlugin.Transform(ctx, transformer, runRequest.Code)
+	if passErr != nil || !patch.Applied() {
+		payload, runErr := runner.Run(ctx, request, trustedPrepare)
+		return Execution{Payload: payload, Patch: patch, PassError: passErr}, runErr
+	}
+	payload, runErr := runner.RunHostScheduledSourcePatchDerived(ctx, request, patch, plugin.Registration())
 	return Execution{Payload: payload, Patch: patch, Applied: runErr == nil}, runErr
 }

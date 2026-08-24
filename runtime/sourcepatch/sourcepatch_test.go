@@ -61,3 +61,15 @@ func TestPureScalarFoldIsAStaticWholeProgramPlugin(t *testing.T) {
 		t.Fatalf("registration=%+v", registration)
 	}
 }
+
+func TestSplitPhaseSourcesReadIsAStaticHostScheduledPlugin(t *testing.T) {
+	pass, err := NewSplitPhaseSourcesRead(passregistration.SemanticAnalyzerSHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registration := pass.Registration()
+	if registration.Name() != SplitPhaseSourcesReadName || registration.Stage() != passregistration.StageWholeProgramPatch ||
+		registration.Consumer() != passregistration.ExecutionPatch || !pass.HostScheduled() {
+		t.Fatalf("registration=%+v", registration)
+	}
+}

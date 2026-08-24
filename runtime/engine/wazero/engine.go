@@ -58,8 +58,8 @@ func (factory Factory) validatedBinding(config runtimeconfig.RunConfig) (*worksp
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
-	if config.Mechanisms.SemanticPreDispatch && factory.BrokerFactory == nil {
-		return nil, errors.New("semantic pre-dispatch requires a capability Broker factory")
+	if (config.Mechanisms.SemanticPreDispatch || config.Mechanisms.SplitPhaseCalls) && factory.BrokerFactory == nil {
+		return nil, errors.New("Host scheduling requires a capability Broker factory")
 	}
 	if (config.Mechanisms.ProgrammaticToolCalling || config.Mechanisms.ApprovalSuspension) && factory.BrokerFactory == nil {
 		return nil, errors.New("programmatic tool calling and approval suspension require a capability Broker factory")
@@ -965,6 +965,30 @@ func (engine *Engine) RunSourcePatchDerived(ctx context.Context, request []byte,
 	return engine.runWithPrepares(ctx, request, prepares, false, &derivedSelection{export: "runtime_select_source_pass_execution", payload: append(patchRaw, '\n')})
 }
 
+// RunHostScheduledSourcePatchDerived executes the single v1 split-phase read
+// adapter. Unlike the authority-free source-patch seam, this path requires a
+// Broker and the explicit default-off split-phase mechanism.
+func (engine *Engine) RunHostScheduledSourcePatchDerived(ctx context.Context, request []byte, patch sourcepatch.Patch, registration passregistration.Registration) ([]byte, error) {
+	if !engine.config.Mechanisms.SplitPhaseCalls || engine.brokerFactory == nil || engine.config.ProgramSurface != runtimeconfig.ProgramSurfaceDirect {
+		return nil, runtimeconfig.ErrMechanismDisabled
+	}
+	runRequest, err := runtimeconfig.DecodeRunRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	if registration.Name() != sourcepatch.SplitPhaseSourcesReadName || registration.Stage() != passregistration.StageWholeProgramPatch ||
+		!patch.Applied() || patch.Validate(runRequest.Code, registration) != nil {
+		return nil, sourcepatch.ErrInvalidPatch
+	}
+	patchRaw, err := json.Marshal(patch)
+	if err != nil {
+		return nil, err
+	}
+	prepares := make(chan string)
+	close(prepares)
+	return engine.runWithPrepares(ctx, request, prepares, false, &derivedSelection{export: "runtime_select_source_pass_execution", payload: append(patchRaw, '\n')})
+}
+
 // RunStream keeps one fresh Guest alive while Host-trusted preparation chunks
 // arrive. It is an internal streaming seam; Agent source still enters only
 // through the final validated request.
@@ -1183,6 +1207,18 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 				return nil, fmt.Errorf("attach capability lifecycle observer: %w", err)
 			}
 		}
+		if engine.config.Mechanisms.SplitPhaseCalls {
+			table, tableErr := capability.NewSplitPhaseTable(broker.CapabilityPlan(), capability.SplitPhaseLimits{
+				MaxCalls: 4, MaxCostUnits: 4, MaxResultBytes: uint64(engine.config.MaxResponseBytes) * 4,
+			})
+			if tableErr != nil {
+				return nil, fmt.Errorf("create split-phase call table: %w", tableErr)
+			}
+			if tableErr = broker.AttachStagedClaimer(table); tableErr != nil {
+				return nil, fmt.Errorf("attach split-phase call table: %w", tableErr)
+			}
+			runContext = context.WithValue(runContext, splitPhaseContextKey{}, table)
+		}
 		runContext = context.WithValue(runContext, brokerContextKey{}, broker)
 	}
 	defer func() {
@@ -1285,6 +1321,7 @@ prepareComplete:
 type brokerContextKey struct{}
 type streamingContextKey struct{}
 type preparedRegionContextKey struct{}
+type splitPhaseContextKey struct{}
 
 const hostCallPayloadMax = 1024 * 1024
 
@@ -1296,6 +1333,12 @@ func instantiateCapabilityHost(ctx context.Context, runtime wazerort.Runtime) er
 		NewFunctionBuilder().
 		WithFunc(hostMaterializeValue).
 		Export("materialize_value").
+		NewFunctionBuilder().
+		WithFunc(hostSubmitCall).
+		Export("submit_call").
+		NewFunctionBuilder().
+		WithFunc(hostMaterializeCall).
+		Export("materialize_call").
 		Instantiate(ctx)
 	return err
 }
@@ -1320,6 +1363,52 @@ func hostMaterializeValue(ctx context.Context, module api.Module, decisionPointe
 		return -1
 	}
 	return int32(len(payload))
+}
+
+func hostSubmitCall(ctx context.Context, module api.Module, slotPointer, slotLength, requestPointer, requestLength uint32) int32 {
+	enginecontract.MarkHostCallAttempt(ctx)
+	if slotLength == 0 || slotLength > 96 || requestLength == 0 || requestLength > hostCallPayloadMax {
+		return -1
+	}
+	table, ok := ctx.Value(splitPhaseContextKey{}).(*capability.SplitPhaseTable)
+	if !ok || table == nil {
+		return -1
+	}
+	slotView, ok := module.Memory().Read(slotPointer, slotLength)
+	if !ok {
+		return -1
+	}
+	requestView, ok := module.Memory().Read(requestPointer, requestLength)
+	if !ok {
+		return -1
+	}
+	if err := table.Submit(ctx, string(append([]byte(nil), slotView...)), append([]byte(nil), requestView...)); err != nil {
+		return -1
+	}
+	return 0
+}
+
+func hostMaterializeCall(ctx context.Context, module api.Module, slotPointer, slotLength, responsePointer, responseCapacity uint32) int32 {
+	if slotLength == 0 || slotLength > 96 || responseCapacity == 0 || responseCapacity > hostCallPayloadMax {
+		return -1
+	}
+	table, tableOK := ctx.Value(splitPhaseContextKey{}).(*capability.SplitPhaseTable)
+	broker, brokerOK := ctx.Value(brokerContextKey{}).(*capability.Broker)
+	if !tableOK || table == nil || !brokerOK || broker == nil {
+		return -1
+	}
+	slotView, ok := module.Memory().Read(slotPointer, slotLength)
+	if !ok {
+		return -1
+	}
+	response, err := table.Materialize(ctx, string(append([]byte(nil), slotView...)), broker)
+	if err != nil || len(response) == 0 || len(response) > int(responseCapacity) {
+		return -1
+	}
+	if !module.Memory().Write(responsePointer, response) {
+		return -1
+	}
+	return int32(len(response))
 }
 
 func hostCall(

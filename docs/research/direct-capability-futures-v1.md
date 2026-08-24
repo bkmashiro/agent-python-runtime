@@ -26,9 +26,11 @@ sealed Plan
   -> Python use or final result encoding materializes it
 ```
 
-It runs **zero analyzer Guests**. If prefix analysis is also selected for an unrelated
-streaming experiment, that experiment keeps its one existing private COW analyzer; the
-Future lane does not create another.
+It runs **zero analyzer Guests**. The direct lowering is now registered as the analyzer-free
+`capability_future_projection` `plan_projection` pass in the
+[stage-aware catalog](stage-aware-pass-catalog-v1.md). If prefix analysis is also selected for
+an unrelated streaming experiment, that experiment keeps its one existing private COW
+analyzer; the Future lane does not create another.
 
 ```go
 config.Mechanisms.SplitPhaseCalls = true

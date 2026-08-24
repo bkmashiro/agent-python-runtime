@@ -1,12 +1,32 @@
-# Source pass plugins
+# Stage-aware pass plugins
 
-Status: implemented compile-time plugin seam
+Status: implemented static multi-stage plugin seam
 
-Pysolate source passes are ordinary Go values registered in `runtime/passplugin`. The registry is static for one Host build: it does not load shared libraries or execute untrusted Host code.
+Pysolate passes are ordinary Go values registered in `runtime/passplugin`. The registry is
+static for one Host build: it does not load shared libraries, execute untrusted Host code or
+run a generic fixed-point pass manager.
 
-## Minimal API
+## Pass stages
 
-A plugin exposes an immutable `passregistration.Registration`. A source-patch plugin additionally implements:
+The catalog distinguishes when a transformation owns enough information to act:
+
+| stage | input | output |
+|---|---|---|
+| `plan_projection` | sealed capability Plan | generated capability projection |
+| `prefix_overlay` | admitted source prefix plus Host contracts | staged physical work without a source patch |
+| `hybrid_prepare_patch` | prefix candidate, then sealed final source | preparation followed by a final patch/claim |
+| `whole_program_patch` | complete source/AST | derived source and runtime requirements |
+| `multi_program_patch` | multiple complete programs | bounded cross-program patch |
+| `run_binding` | sealed prepared object and fresh Run identity | one private Guest binding |
+
+`runtime/passpipeline` records these stages with
+`pysolate.stage-aware-pass-outcome.v2`. Plan and Run stages do not invent source or AST
+identities, and Run-binding outcome keys include the fresh Run identity.
+
+## Stage-specific API
+
+Every plugin exposes an immutable `passregistration.Registration`. Whole-program source
+plugins additionally implement:
 
 ```go
 type SourcePatchPlugin interface {
@@ -15,28 +35,63 @@ type SourcePatchPlugin interface {
 }
 ```
 
-`passregistration.Define` creates a new name, version, stage, consumer and binding set without editing a central pass-name switch. `passplugin.Registry` stores plugins by name, starts all of them disabled and dispatches explicitly enabled source-patch transforms. Its `Execute` method runs the unchanged original request when a pass is disabled, fails before execution or returns not-applicable. Body-free terminal outcomes remain in `runtime/passpipeline`.
+Analyzer-free direct passes use their own narrow dispatch surfaces:
 
-This is deliberately compile-time extensibility. It has no dynamic loader, generic IR, dependency solver, cost model, automatic reordering or fixed-point loop.
+```go
+registry.ProjectPlan("capability_future_projection", plan)
+registry.BindRunValue("prepared_value_binding", slotID)
+```
 
-## Current plugins
+Both are default-off, as are the streaming-stage adapters. `plan_projection` and
+`run_binding` registrations carry no analyzer identity; source-bound stages still require the
+exact target-Guest analyzer identity.
+
+## Unified four-pass mechanism catalog
+
+`passplugin.NewUnifiedCatalog` registers:
+
+| name | stage | analyzer | runtime owner |
+|---|---|---:|---|
+| `capability_future_projection` | `plan_projection` | 0 | sealed Plan projection plus bounded Future table |
+| `semantic_pre_dispatch` | `prefix_overlay` | exact prefix analyzer | existing staged-observation owner |
+| `prepared_numpy_load` | `hybrid_prepare_patch` | exact prefix/final analyzer | existing PreparedDataContract and prepared-object owner |
+| `prepared_value_binding` | `run_binding` | 0 | immutable ValueSlot template plus per-Run `Fresh()` table |
+
+The two streaming entries are typed adapters over their established lifecycle owners; the
+registry does not duplicate those state machines. The two direct entries execute through the
+same registry and produce byte-identical preludes to their pre-catalog implementations.
+
+This is a uniform pass catalog, not a claim that every pass is `AST -> AST`. Authority-bearing
+eligibility comes from the sealed Plan/contracts, while AST and prefix analysis only identify
+source occurrences.
+
+## Source-patch plugins
+
+`passregistration.Define` still permits additional source transformations without editing a
+central pass-name switch. The registry dispatches explicitly enabled source patches. Its
+`Execute` method runs unchanged source when a pass is disabled, fails before execution or
+returns not-applicable.
+
+Runnable source-patch plugins ask an authority-free exact Guest to transform the complete
+source. The Guest returns a patch containing original and derived source/AST identities and
+the derived source body. Final execution receives the unchanged original `RunRequest`; after
+normal validation, a fresh Guest re-derives and selects the patch through
+`runtime_select_source_pass_execution`.
+
+The generic source-patch seam intentionally admits no capability Broker or mounted workspace.
+A pass that owns external effects, batching, parallel calls or workspace projection uses its
+typed stage adapter rather than pretending to be a pure rewrite. There is no runtime fallback
+after derived execution begins.
+
+## Existing narrow source transforms
 
 | name | stage | implementation |
 |---|---|---|
-| `semantic_pre_dispatch` | `prefix_overlay` | adapter to the existing semantic pre-dispatch owner |
 | `prepared_pure_region` | `whole_program_patch` | adapter to the existing prepared-region owner |
 | `pure_scalar_cse` | `whole_program_patch` | runnable source-patch plugin |
-| `pure_scalar_fold` | `whole_program_patch` | runnable source-patch plugin; narrow constant-fold kernel absorbed from stratum |
-
-The two adapters preserve their current lifecycle and execution paths. The registry does not duplicate or replace those implementations.
-
-## Generic source-patch seam
-
-Runnable source-patch plugins ask an authority-free exact Guest to transform the complete source. The Guest returns a patch containing the original and derived source/AST identities and the derived source body. Final execution receives the unchanged original `RunRequest`; after normal source validation, a fresh Guest re-derives and selects the patch through `runtime_select_source_pass_execution`.
-
-The first generic seam intentionally admits no capability Broker or mounted workspace. A paper pass that owns external effects, batching, parallel calls or workspace projection must provide a stage adapter with the corresponding Host contract rather than pretending to be a pure source rewrite.
-
-There is no runtime fallback after a derived execution begins. A transform that is not applicable returns unchanged/not-applicable before final execution.
+| `pure_scalar_fold` | `whole_program_patch` | runnable source-patch plugin |
+| `split_phase_sources_read` | `whole_program_patch` | historical analyzer-driven Future route; rejected on cost |
+| `data_local_numpy_sum` | `whole_program_patch` | historical analyzer-driven ValueSlot route; superseded by direct binding |
 
 ## `pure_scalar_cse` v1
 

@@ -1,0 +1,111 @@
+{
+  "schema_version": "pysolate.stage-aware-pass-catalog.v1",
+  "decision": "retain_experimental_default_off",
+  "implementation": {
+    "commit": "b0a377cf36c25f9f3952c7112564b701cbe111e2",
+    "tree": "544525bc9d1202229e90f678da13b32e60132f45",
+    "core_commit": "16ce0b46710652f46083a309106c1378fbfded20",
+    "outcome_schema": "pysolate.stage-aware-pass-outcome.v2"
+  },
+  "catalog": [
+    {
+      "name": "capability_future_projection",
+      "version": "pysolate.capability-future-projection-pass.v1",
+      "stage": "plan_projection",
+      "consumer": "plan_projection",
+      "analyzer_required": false,
+      "owner": "runtime/capability"
+    },
+    {
+      "name": "semantic_pre_dispatch",
+      "version": "pysolate.semantic-pre-dispatch-pass.v0",
+      "stage": "prefix_overlay",
+      "consumer": "overlay_only",
+      "analyzer_required": true,
+      "owner": "existing streaming staged-observation lifecycle"
+    },
+    {
+      "name": "prepared_numpy_load",
+      "version": "pysolate.prepared-numpy-load-pass.v1",
+      "stage": "hybrid_prepare_patch",
+      "consumer": "execution_patch",
+      "analyzer_required": true,
+      "owner": "existing PreparedDataContract and prepared-object lifecycle"
+    },
+    {
+      "name": "prepared_value_binding",
+      "version": "pysolate.prepared-value-binding-pass.v1",
+      "stage": "run_binding",
+      "consumer": "run_binding",
+      "analyzer_required": false,
+      "owner": "runtime/valueslot"
+    }
+  ],
+  "dispatch": {
+    "default_enabled": false,
+    "future": "passplugin.Registry.ProjectPlan",
+    "prepared_value": "passplugin.Registry.BindRunValue",
+    "streaming_entries": "registered adapters preserving existing lifecycle owners",
+    "direct_preludes_byte_equivalent": true
+  },
+  "freshness": {
+    "formal_guests_per_run": 1,
+    "future_analyzer_guests": 0,
+    "prepared_value_analyzer_guests": 0,
+    "run_binding_identity_required": true,
+    "prepared_value_table_per_run": "Table.Fresh()"
+  },
+  "exact_guest": {
+    "artifact": "/Users/yuzhe/.hermes/evidence/pysolate/guest-build-7bb75647-numpy-core/dist/agent-python-runtime-numpy-core.wasm",
+    "artifact_sha256": "15f5e415d19acc95eb2f304e881cde22e5fd657a532edad3d67c8e5ac608382c",
+    "future_gates": [
+      "overlap_without_analyzer",
+      "drain_unobserved_write",
+      "drain_after_earlier_error",
+      "materialize_json_shapes",
+      "whole_plan_call_budget"
+    ],
+    "prepared_value_gates": [
+      "matched_numpy_sum",
+      "fresh_private_byte_consumers"
+    ],
+    "pass_dispatch_measurement": {
+      "future": {
+        "repetitions": 5,
+        "baseline_ns": [2524578959, 2534064542, 2595218250, 2565213166, 2595284000],
+        "treatment_ns": [2414761625, 2408895042, 2464882292, 2442455000, 2471186833],
+        "baseline_median_ns": 2565213166,
+        "treatment_median_ns": 2442455000,
+        "saved_ns": 122758166,
+        "speedup_percent": 4.7854957095600685,
+        "all_treatment_trials_faster": true,
+        "pass_projection_outside_run_timer": true
+      },
+      "prepared_value": {
+        "pairs": 15,
+        "baseline_ns": [4749780750, 4876072583, 4744369875, 4760805208, 4774196458, 4878979041, 4774664500, 4768548208, 4808388459, 4759801541, 4798191292, 4806028541, 4815037292, 4868124125, 4814432125],
+        "treatment_ns": [2234243250, 2228951291, 2444680167, 2250391791, 2257120792, 2234466250, 2273253666, 2251360625, 2246327625, 2235783334, 2260728708, 2249645875, 2248548875, 2278148792, 2241742916],
+        "baseline_median_ns": 4798191292,
+        "treatment_median_ns": 2249645875,
+        "saved_ns": 2548545417,
+        "speedup_percent": 53.1147105628985,
+        "all_treatment_trials_faster": true,
+        "producer_median_ns": 2547000,
+        "pass_binding_outside_run_timer": true
+      }
+    }
+  },
+  "evidence_links": {
+    "direct_future": "direct-capability-futures-e2e-v1.json",
+    "direct_prepared_value": "direct-prepared-values-e2e-v1.json",
+    "streaming_pre_dispatch": "source-bound-pass-authored-workload-evidence-v2.json",
+    "prepared_numpy": "prepared-data-phase6-linux-v1.json"
+  },
+  "claim_boundary": {
+    "automatic_ast_optimizer": false,
+    "generic_pass_manager": false,
+    "automatic_composition": false,
+    "source_analysis_shared_across_all_passes": false,
+    "note": "V1 unifies registration, stages, outcome records and direct dispatch; streaming adapters retain established owners. Existing mechanism evidence is not relabeled as automatic AST-pass economics."
+  }
+}

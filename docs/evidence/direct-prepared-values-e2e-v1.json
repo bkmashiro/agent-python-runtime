@@ -2,6 +2,12 @@
   "schema_version": "pysolate.direct-prepared-values-e2e.v1",
   "study_id": "direct-prepared-values-v1",
   "decision": "retain_experimental",
+  "stage_aware_successor": {
+    "pass": "prepared_value_binding",
+    "stage": "run_binding",
+    "evidence": "stage-aware-pass-catalog-v1.json",
+    "claim": "the pass dispatch returns the same direct ValueSlot prelude; historical timing remains mechanism evidence"
+  },
   "supersedes": {
     "scope": "paper performance story for the analyzer-driven fixed NumPy ValueSlot pass; historical measurements remain unchanged",
     "historical_evidence": "host-scheduled-reuse-e2e-v1.json"

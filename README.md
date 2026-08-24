@@ -55,7 +55,13 @@ median speedup. The [direct prepared-value lane](docs/research/direct-prepared-v
 reuses one immutable ValueSlot template across fresh Guests through an explicit
 `prepared_value` binding; its matched NumPy fixture moved from the historical `6.29%`
 source-pass regression to a **53.06%** median speedup with zero analyzer invocations. Both
-lanes remain Experimental/default-off; the analyzer-based rewrites remain rejected.
+lanes remain Experimental/default-off; the analyzer-based rewrites remain rejected. The
+[stage-aware pass catalog](docs/research/stage-aware-pass-catalog-v1.md) now registers those
+two direct lowerings beside the existing streaming pre-dispatch and prepared NumPy owners.
+It distinguishes Plan, prefix, hybrid and fresh-Run stages rather than forcing every mechanism
+through an `AST -> AST` rewrite. The direct preludes remain byte-identical and exact-Guest
+gates now reach them through pass dispatch; prior mechanism timings are not relabeled as
+automatic AST-pass economics.
 The completed foundation records bounded Experimental target-Guest AST planning,
 exact whole-Run single-flight/retention, continuation-preserving cold-I/O evidence and a
 small static source-pass seam while keeping every mechanism off by default.

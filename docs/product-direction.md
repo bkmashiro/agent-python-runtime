@@ -59,8 +59,12 @@ use/final output, retaining a `5.17%` exact-Guest median speedup. The
 [direct prepared-value lane](research/direct-prepared-values-v1.md) reuses one immutable
 ValueSlot template across fresh Guests through an explicit binding, retaining a `53.06%`
 median speedup on the fixed NumPy fixture. Both lanes use zero analyzer Guests and remain
-Experimental/off. Broader automatic scheduling, source rewriting and reuse claims remain
-rejected.
+Experimental/off. The
+[stage-aware pass catalog](research/stage-aware-pass-catalog-v1.md) now places these direct
+lowerings beside streaming pre-dispatch and prepared NumPy loading under explicit Plan,
+prefix, hybrid and fresh-Run stages. It remains a static default-off catalog, not an automatic
+AST optimizer, cost model or pass-order solver. Broader automatic scheduling, source rewriting
+and reuse claims remain rejected.
 
 Optional mechanisms must remain orthogonal at their public contract boundaries.
 Result caching, single-flight, workflow re-evaluation, immutable workspace

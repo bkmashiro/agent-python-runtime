@@ -2,6 +2,12 @@
   "schema_version": "pysolate.direct-capability-futures-e2e.v1",
   "study_id": "direct-capability-futures-v1",
   "decision": "retain_experimental",
+  "stage_aware_successor": {
+    "pass": "capability_future_projection",
+    "stage": "plan_projection",
+    "evidence": "stage-aware-pass-catalog-v1.json",
+    "claim": "the pass dispatch returns the same precomputed direct prelude; historical timing remains mechanism evidence"
+  },
   "root_cause": {
     "rejected_path": "exact Guest source-pass analysis followed by a separate formal Guest execution",
     "rejected_baseline_median_nanos": 2508013500,

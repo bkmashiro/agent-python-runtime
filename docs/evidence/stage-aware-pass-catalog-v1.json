@@ -2,10 +2,11 @@
   "schema_version": "pysolate.stage-aware-pass-catalog.v1",
   "decision": "retain_experimental_default_off",
   "implementation": {
-    "commit": "bedc894115adb6354660f9e9beab335160d8f97d",
-    "tree": "39a6018de3b10491a0c6b533226602feb03a0009",
+    "commit": "becadb3061320f1ed08957ce13984df77f456ea7",
+    "tree": "46a69285196e61dd09de454599a74035297b384c",
     "core_commit": "16ce0b46710652f46083a309106c1378fbfded20",
     "timer_boundary_commit": "b0a377cf36c25f9f3952c7112564b701cbe111e2",
+    "sealed_plan_validation_commit": "becadb3061320f1ed08957ce13984df77f456ea7",
     "registration_schema": "pysolate.stage-aware-pass-registration.v3",
     "outcome_schema": "pysolate.stage-aware-pass-outcome.v2"
   },

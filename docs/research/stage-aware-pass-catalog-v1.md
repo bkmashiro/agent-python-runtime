@@ -7,7 +7,7 @@ independent evidence. Do not force them through one `AST -> AST` interface and d
 generic IR, dynamic plugin loader, dependency solver or fixed-point manager.
 
 The implementation target is Host commit
-`bedc894115adb6354660f9e9beab335160d8f97d`. It adds two analyzer-free stages to the
+`becadb3061320f1ed08957ce13984df77f456ea7`. It adds two analyzer-free stages to the
 existing source-bound stages and routes the two direct mechanisms through the same
 `passplugin.Registry` used by source plugins.
 
@@ -65,9 +65,10 @@ Every catalog entry starts disabled. Dispatch through the wrong stage fails with
 
 ## Direct mechanism preservation
 
-The Future pass returns the same precomputed `Plan.FuturePythonPrelude()` string as the direct
-mechanism. The prepared-value pass returns the same `valueslot.PythonPrelude(slotID)` string.
-Exact-Guest gates now obtain both preludes through `passplugin.Registry`:
+The Future pass rejects nil and unsealed zero-value Plans, then returns the same precomputed
+`Plan.FuturePythonPrelude()` string as the direct mechanism. The prepared-value pass returns the
+same `valueslot.PythonPrelude(slotID)` string. Exact-Guest gates now obtain both preludes through
+`passplugin.Registry`:
 
 - two independent live calls still overlap with zero analyzers;
 - ignored writes drain exactly once;

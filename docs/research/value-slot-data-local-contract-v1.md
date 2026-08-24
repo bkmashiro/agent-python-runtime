@@ -96,3 +96,28 @@ The baseline performs the same fresh-Guest run with ordinary NumPy import,
 research-only unless the treatment median is faster and all results match. A
 positive result applies only to this exact immutable int64 reduction; it is not
 evidence for arbitrary NumPy, table pushdown, or a generic shared-object cache.
+
+## Cross-Run reuse disposition
+
+`PreparedObject` may back more than one fresh Run-private `ValueSlot` table. Each
+consumer still receives detached Python bytes, keeps its own slot claims and
+terminal Run state, and releases its own consumer reference. Producer identity,
+input identity, privacy partition, backing identity, and consumer count must all
+match before the physical object can be reused or evicted.
+
+This is a semantic mechanism proof, not a production cache decision. The existing
+NumPy reuse campaign already contains 240 records and 40 matched economic cells;
+every cell was negative and no break-even was observed. Therefore this roadmap
+does not add a durable cache, cache lookup policy, or automatic cross-tenant
+reuse. The shared-object lane remains default-off and is rejected for production
+promotion unless a materially different workload is separately preregistered.
+
+## Composition disposition
+
+No admitted workload in this roadmap simultaneously contains the fixed
+`sources.read` overlap pattern and the fixed NumPy reduction pattern. Enabling
+both mechanisms in configuration would therefore add bookkeeping without a
+measured joint path. The runtime keeps Host scheduling and value materialization
+as independent mechanisms and does not add a generic pass manager, ordering
+graph, or combined policy layer. Composition is a no-go until a real workload
+requires both and independently retained evidence predicts a benefit.

@@ -80,7 +80,9 @@ func TestRealGuestSplitPhaseSourcesReadOverlapsPhysicalWorkAndKeepsLogicalReceip
 	defer runner.Close(context.Background())
 	engine := trustedSemanticRunner(t, runner)
 
+	baselineStarted := time.Now()
 	baseline, err := runner.Run(context.Background(), request, prelude)
+	baselineDuration := time.Since(baselineStarted)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,11 +104,13 @@ func TestRealGuestSplitPhaseSourcesReadOverlapsPhysicalWorkAndKeepsLogicalReceip
 	if err != nil {
 		t.Fatal(err)
 	}
+	treatmentStarted := time.Now()
 	session, closeAnalysis := splitPhaseAnalysisSession(t, artifact, 4)
 	defer closeAnalysis()
 	execution, err := plugins.ExecuteHostScheduled(
 		context.Background(), sourcepatch.SplitPhaseSourcesReadName, session, engine, request, prelude,
 	)
+	treatmentDuration := time.Since(treatmentStarted)
 	if err != nil || !execution.Applied || execution.Patch.ReplacementCount != 2 {
 		t.Fatalf("execution=%+v err=%v", execution, err)
 	}
@@ -135,6 +139,7 @@ func TestRealGuestSplitPhaseSourcesReadOverlapsPhysicalWorkAndKeepsLogicalReceip
 	if physicalEvidence.Submitted != 2 || physicalEvidence.PhysicalStarts != 2 || physicalEvidence.PhysicalFinishes != 2 || physicalEvidence.LogicalClaims != 2 || physicalEvidence.Consumed != 2 || physicalEvidence.MaximumConcurrent != 2 {
 		t.Fatalf("physical evidence=%+v", physicalEvidence)
 	}
+	t.Logf("split-phase matched durations: baseline_ns=%d treatment_ns=%d", baselineDuration.Nanoseconds(), treatmentDuration.Nanoseconds())
 }
 
 func TestRealGuestSplitPhasePreservesDynamicActivation(t *testing.T) {

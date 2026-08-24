@@ -264,6 +264,34 @@ func TestSplitPhaseTableRejectsUnqualifiedWritesAndDuplicateSlots(t *testing.T) 
 	}
 }
 
+func TestSplitPhaseTableFinalizeCancelsAndJoinsUnclaimedWork(t *testing.T) {
+	started := make(chan struct{})
+	plan := splitPhasePlan(t, 1, func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		close(started)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+	table, err := capability.NewSplitPhaseTable(plan, capability.SplitPhaseLimits{
+		MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := []byte(`{"call_id":"split-cancel","capability":"workspace.read_text","arguments":{"path":"a"}}`)
+	if err := table.Submit(context.Background(), "slot-cancel", request); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	if err := table.Finalize(false); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := table.Snapshot()
+	if snapshot.Submitted != 1 || snapshot.PhysicalStarts != 1 || snapshot.PhysicalFinishes != 1 ||
+		snapshot.Cancelled != 1 || snapshot.Discarded != 1 || snapshot.LogicalClaims != 0 || snapshot.Consumed != 0 {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+}
+
 func splitPhasePlan(t *testing.T, maxCalls uint32, handler capability.HandlerFunc) *capability.Plan {
 	t.Helper()
 	registry := capability.NewRegistry()

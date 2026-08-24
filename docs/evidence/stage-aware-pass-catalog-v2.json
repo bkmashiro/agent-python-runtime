@@ -2,11 +2,12 @@
   "schema_version": "pysolate.stage-aware-pass-catalog.v2",
   "decision": "all_retained_optimizations_pass_selected_default_off",
   "implementation": {
-    "commit": "d793acdc2fbe26ea640b46336610c9f12bd9d813",
-    "tree": "df72d9ab8ede752cd2830b1a23413ae0afad09fe",
+    "commit": "3a502fac306b04e342c55bd8585fef008310286c",
+    "tree": "30f8a911ff8820080eca8d6cbe08fa9a49e4c71c",
     "core_migration_commit": "f997821a9faf7b0c1661c0603101314d74706a80",
     "selection_validation_commit": "f07b7e52c9e63d4e6eec6ab798dee2d8be31f27e",
     "entrypoint_and_selection_schema_fix_commit": "d793acdc2fbe26ea640b46336610c9f12bd9d813",
+    "prepared_region_relowering_fix_commit": "3a502fac306b04e342c55bd8585fef008310286c",
     "registration_schemas": [
       "pysolate.semantic-pass-registration.v2",
       "pysolate.stage-aware-pass-registration.v3"

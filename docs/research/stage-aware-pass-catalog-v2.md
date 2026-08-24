@@ -8,8 +8,8 @@ passes. It gives each optimization an explicit stage, immutable registration and
 to the existing Runtime owner.
 
 The code target is Host commit
-`d793acdc2fbe26ea640b46336610c9f12bd9d813`, tree
-`df72d9ab8ede752cd2830b1a23413ae0afad09fe`.
+`3a502fac306b04e342c55bd8585fef008310286c`, tree
+`30f8a911ff8820080eca8d6cbe08fa9a49e4c71c`.
 
 V2 extends the four-pass catalog from v1. It registers the runnable source transforms, the
 prepared-region adapter and all optional execution-cost mechanisms represented in
@@ -133,6 +133,10 @@ A fresh exact-Guest verification on the code target observed:
 The one-pair rows are correctness/performance smoke checks, not replacement campaigns. The
 original multi-sample Future, prepared-value, semantic pre-dispatch and prepared-data evidence
 remains authoritative for their bounded claims.
+
+The prepared-region exact-Guest gate also covers configuration reuse across baseline,
+derived and source-drift controls. Pass lowering occurs once before those copies are made;
+the copied configurations are not lowered a second time.
 
 The same target passed:
 

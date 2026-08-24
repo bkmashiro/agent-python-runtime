@@ -3,6 +3,12 @@
 Status: **Deterministic implementation decision record.**
 Date: 2026-08-15
 
+Optimization selection now enters through the
+[stage-aware pass catalog v2](research/stage-aware-pass-catalog-v2.md). The matrix below still
+names Runtime mechanisms because those are the lowering targets and evidence records. Workspace,
+identity, approval, playback and verification rows remain direct substrates rather than fake
+optimization passes.
+
 | Mechanism | Decision | Exact bounded result | Primary evidence | Smallest next decision |
 |---|---|---|---|---|
 | Typed feature/mode resolution | Implemented Experimental | Zero-default `MechanismSet`; invalid dependencies fail before artifact parsing; stable selected/fallback/off evidence | `runtime/mechanisms_test.go` | Decide public names only after real acceptance |

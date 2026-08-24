@@ -31,7 +31,7 @@ payload, err := runner.Run(ctx, request, prelude)
 
 `ValueSlots` no longer depends on `SemanticAnalysis`. The analyzer-free
 `prepared_value_binding` `run_binding` pass in the
-[stage-aware catalog](stage-aware-pass-catalog-v1.md) dispatches the same direct prelude. This
+[stage-aware catalog](stage-aware-pass-catalog-v2.md) dispatches the same direct prelude. This
 lane creates zero analyzer Guests and performs no source transform. The prior analyzer-driven
 source-pass entry point can still select both mechanisms when that historical route is tested.
 

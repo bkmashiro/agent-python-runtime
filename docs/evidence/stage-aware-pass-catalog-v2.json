@@ -1,0 +1,121 @@
+{
+  "schema_version": "pysolate.stage-aware-pass-catalog.v2",
+  "decision": "all_retained_optimizations_pass_selected_default_off",
+  "implementation": {
+    "commit": "f997821a9faf7b0c1661c0603101314d74706a80",
+    "tree": "62c65d5befaf5d95e918e08b2bf792766601d260",
+    "registration_schemas": [
+      "pysolate.semantic-pass-registration.v2",
+      "pysolate.stage-aware-pass-registration.v3"
+    ],
+    "outcome_schema": "pysolate.stage-aware-pass-outcome.v2",
+    "selection_schema": "pysolate.optimization-pass-selection.v1"
+  },
+  "catalog": [
+    {"name": "capability_future_projection", "stage": "plan_projection", "status": "experimental_retained"},
+    {"name": "semantic_pre_dispatch", "stage": "prefix_overlay", "status": "experimental_narrow_positive"},
+    {"name": "prepared_numpy_load", "stage": "hybrid_prepare_patch", "status": "experimental_mixed"},
+    {"name": "prepared_pure_region", "stage": "whole_program_patch", "status": "experimental"},
+    {"name": "pure_scalar_cse", "stage": "whole_program_patch", "status": "no_go_cost"},
+    {"name": "pure_scalar_fold", "stage": "whole_program_patch", "status": "no_go_cost"},
+    {"name": "split_phase_sources_read", "stage": "whole_program_patch", "status": "historical_no_go_cost"},
+    {"name": "data_local_numpy_sum", "stage": "whole_program_patch", "status": "historical_no_go_cost"},
+    {"name": "prepared_value_binding", "stage": "run_binding", "status": "experimental_retained"},
+    {"name": "source_streaming_execution", "stage": "runtime_lowering", "status": "experimental"},
+    {"name": "streamed_child_fanout", "stage": "runtime_lowering", "status": "experimental"},
+    {"name": "agent_function_retention", "stage": "runtime_lowering", "status": "experimental"},
+    {"name": "agent_function_singleflight", "stage": "runtime_lowering", "status": "experimental"},
+    {"name": "fresh_workflow_reevaluation", "stage": "runtime_lowering", "status": "experimental"},
+    {"name": "prepared_runtime_instantiation", "stage": "runtime_lowering", "status": "experimental"},
+    {"name": "private_memory_cow", "stage": "runtime_lowering", "status": "experimental_linux"},
+    {"name": "cold_io_residency", "stage": "runtime_lowering", "status": "experimental_linux"},
+    {"name": "semantic_whole_run_reuse", "stage": "runtime_lowering", "status": "experimental"}
+  ],
+  "selection_contract": {
+    "default_off": true,
+    "selection_before_guest_effect": true,
+    "factory_rejects_direct_optimization_flags_when_catalog_bound": true,
+    "host_availability_fallback_after_lowering": true,
+    "source_mutation_limit": 1,
+    "generic_ir": false,
+    "automatic_ordering": false,
+    "dependency_solver": false,
+    "dynamic_plugin_loading": false
+  },
+  "exact_guest": {
+    "artifact": "/Users/yuzhe/.hermes/evidence/pysolate/guest-build-7bb75647-numpy-core/dist/agent-python-runtime-numpy-core.wasm",
+    "profile": "numpy-core",
+    "sha256": "15f5e415d19acc95eb2f304e881cde22e5fd657a532edad3d67c8e5ac608382c",
+    "measurements": {
+      "capability_future_projection": {
+        "samples": 1,
+        "baseline_median_ns": 2572503292,
+        "treatment_median_ns": 2449303000,
+        "treatment_ratio": 0.9521087913,
+        "change_percent": -4.7891208685,
+        "analyzer_invocations": 0
+      },
+      "prepared_value_binding": {
+        "samples": 5,
+        "baseline_ns": [5052820875, 5030993167, 5045085458, 5051680709, 5031170917],
+        "treatment_ns": [2287064417, 2296858584, 2289597125, 2285304292, 2298296041],
+        "baseline_median_ns": 5045085458,
+        "treatment_median_ns": 2289597125,
+        "treatment_ratio": 0.4538272234,
+        "change_percent": -54.6172776644,
+        "analyzer_invocations": 0,
+        "host_to_guest_bytes": 12
+      },
+      "pure_scalar_cse": {
+        "samples": 3,
+        "baseline_ns": [2485210333, 2489043417, 2524269375],
+        "treatment_ns": [2887876292, 2889853541, 2895547708],
+        "baseline_median_ns": 2489043417,
+        "treatment_median_ns": 2889853541,
+        "treatment_ratio": 1.1610297841,
+        "change_percent": 16.1029784078
+      },
+      "pure_scalar_fold": {
+        "samples": 3,
+        "baseline_ns": [2274241333, 2290189708, 2291763209],
+        "treatment_ns": [2386179167, 2386377083, 2391487250],
+        "baseline_median_ns": 2290189708,
+        "treatment_median_ns": 2386377083,
+        "treatment_ratio": 1.0419997412,
+        "change_percent": 4.1999741185
+      },
+      "split_phase_sources_read": {
+        "samples": 1,
+        "baseline_median_ns": 2573928125,
+        "treatment_median_ns": 7600940500,
+        "treatment_ratio": 2.9530507966,
+        "change_percent": 195.305079663
+      },
+      "data_local_numpy_sum": {
+        "samples": 5,
+        "baseline_ns": [4888527833, 4842048542, 4846106500, 5090785209, 5076106333],
+        "treatment_ns": [7588453250, 5190182166, 5219105208, 5206578625, 5142406250],
+        "baseline_median_ns": 4888527833,
+        "treatment_median_ns": 5206578625,
+        "treatment_ratio": 1.0650606487,
+        "change_percent": 6.5060648699,
+        "host_to_guest_bytes": [12, 12, 12, 12, 12]
+      }
+    }
+  },
+  "verification": {
+    "go_test_all": "pass",
+    "go_test_race_migrated_owners": "pass",
+    "go_vet_all": "pass",
+    "guest_bootstrap_tests": 189,
+    "guest_bootstrap_status": "pass",
+    "artifact_verifier": "pass",
+    "git_diff_check": "pass"
+  },
+  "claim_boundary": [
+    "Runtime lowering passes select existing owners and do not make cache or scheduling behavior AST transformations.",
+    "One-pair timing rows are migration smoke checks, not replacement economics campaigns.",
+    "Historical no-go and mixed economics remain unchanged.",
+    "Low-level substrate tests may still construct MechanismSet directly without representing the compositional Runtime path."
+  ]
+}

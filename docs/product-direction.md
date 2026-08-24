@@ -60,11 +60,12 @@ use/final output, retaining a `5.17%` exact-Guest median speedup. The
 ValueSlot template across fresh Guests through an explicit binding, retaining a `53.06%`
 median speedup on the fixed NumPy fixture. Both lanes use zero analyzer Guests and remain
 Experimental/off. The
-[stage-aware pass catalog](research/stage-aware-pass-catalog-v1.md) now places these direct
-lowerings beside streaming pre-dispatch and prepared NumPy loading under explicit Plan,
-prefix, hybrid and fresh-Run stages. It remains a static default-off catalog, not an automatic
-AST optimizer, cost model or pass-order solver. Broader automatic scheduling, source rewriting
-and reuse claims remain rejected.
+[stage-aware pass catalog v2](research/stage-aware-pass-catalog-v2.md) registers all 18 retained
+or historically measured optimizations. Plan, prefix, hybrid, whole-program and fresh-Run passes
+keep their source/authority contracts; cache, streaming, workflow, prepared-memory, COW and
+residency policies use an explicit Runtime-lowering stage. Selection remains static and
+default-off, with no generic IR, automatic order solver or cost model. Broader automatic
+scheduling, source rewriting and reuse claims remain rejected.
 
 Optional mechanisms must remain orthogonal at their public contract boundaries.
 Result caching, single-flight, workflow re-evaluation, immutable workspace

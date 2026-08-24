@@ -1,5 +1,8 @@
 # Stage-aware optimization pass catalog v1
 
+> Historical four-pass tranche. The current complete catalog is
+> [stage-aware optimization pass catalog v2](stage-aware-pass-catalog-v2.md).
+
 ## Decision
 
 Retain one static, default-off pass catalog for the four runtime mechanisms that have

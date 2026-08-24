@@ -18,6 +18,7 @@ The catalog distinguishes when a transformation owns enough information to act:
 | `whole_program_patch` | complete source/AST | derived source and runtime requirements |
 | `multi_program_patch` | multiple complete programs | bounded cross-program patch |
 | `run_binding` | sealed prepared object and fresh Run identity | one private Guest binding |
+| `runtime_lowering` | explicit optimization selection | typed `MechanismSet` requirements for an existing Runtime owner |
 
 `runtime/passpipeline` records these stages with
 `pysolate.stage-aware-pass-outcome.v2`. Plan and Run stages do not invent source or AST
@@ -46,24 +47,33 @@ Both are default-off, as are the streaming-stage adapters. `plan_projection` and
 `run_binding` registrations carry no analyzer identity; source-bound stages still require the
 exact target-Guest analyzer identity.
 
-## Unified four-pass mechanism catalog
+## Unified optimization catalog
 
-`passplugin.NewUnifiedCatalog` registers:
+`passplugin.NewDefaultUnifiedCatalog` registers 18 default-off entries:
 
-| name | stage | analyzer | runtime owner |
-|---|---|---:|---|
-| `capability_future_projection` | `plan_projection` | 0 | sealed Plan projection plus bounded Future table |
-| `semantic_pre_dispatch` | `prefix_overlay` | exact prefix analyzer | existing staged-observation owner |
-| `prepared_numpy_load` | `hybrid_prepare_patch` | exact prefix/final analyzer | existing PreparedDataContract and prepared-object owner |
-| `prepared_value_binding` | `run_binding` | 0 | immutable ValueSlot template plus per-Run `Fresh()` table |
+- the four stage adapters introduced in v1;
+- `prepared_pure_region`, `pure_scalar_cse`, `pure_scalar_fold`,
+  `split_phase_sources_read` and `data_local_numpy_sum`;
+- nine `runtime_lowering` passes for source streaming, child fanout, Agent Function retention,
+  single-flight, fresh workflow re-evaluation, prepared Runtime instantiation, private-memory COW,
+  cold-I/O residency and semantic whole-Run reuse.
 
-The two streaming entries are typed adapters over their established lifecycle owners; the
-registry does not duplicate those state machines. The two direct entries execute through the
-same registry and produce byte-identical preludes to their pre-catalog implementations.
+`LowerMechanisms` maps selected passes to the existing typed `MechanismSet`; Runtime owners retain
+all mutable state and lifecycle logic. `ResolveRuntime` applies Host availability after lowering
+and records `pysolate.optimization-pass-selection.v1`. `wazero.Factory.Passes` rejects direct
+optimization flags when a catalog is bound, so selection finishes before Runtime initialization
+or Guest effects.
+
+Two source-mutating execution patches cannot be enabled together because the repository has no
+automatic ordering contract. Conflicting capability scheduling owners also fail before execution.
+Plan projection, one source patch and Run binding may compose when their lowered mechanism set is
+valid.
 
 This is a uniform pass catalog, not a claim that every pass is `AST -> AST`. Authority-bearing
-eligibility comes from the sealed Plan/contracts, while AST and prefix analysis only identify
-source occurrences.
+eligibility comes from sealed Plans and contracts. Cache, workflow, prepared-memory and residency
+passes are Runtime lowerings rather than source rewrites. Full inventory, exclusions and evidence
+are in
+[`stage-aware-pass-catalog-v2.md`](research/stage-aware-pass-catalog-v2.md).
 
 ## Source-patch plugins
 

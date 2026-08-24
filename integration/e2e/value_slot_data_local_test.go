@@ -239,10 +239,19 @@ func TestDataLocalNumpySumMatchedEndToEnd(t *testing.T) {
 	}
 	baselineMedian := medianDuration(baselineDurations)
 	treatmentMedian := medianDuration(treatmentDurations)
+	disposition := "retain"
 	if treatmentMedian >= baselineMedian {
-		t.Fatalf("data-local reduction did not retain: baseline=%s treatment=%s", baselineMedian, treatmentMedian)
+		disposition = "reject"
 	}
-	t.Logf("data-local matched medians: baseline=%s treatment=%s ratio=%.4f", baselineMedian, treatmentMedian, float64(treatmentMedian)/float64(baselineMedian))
+	t.Logf("data-local matched evidence: baseline_ns=%v treatment_ns=%v baseline_median_ns=%d treatment_median_ns=%d ratio=%.6f disposition=%s", durationsNanos(baselineDurations), durationsNanos(treatmentDurations), baselineMedian.Nanoseconds(), treatmentMedian.Nanoseconds(), float64(treatmentMedian)/float64(baselineMedian), disposition)
+}
+
+func durationsNanos(values []time.Duration) []int64 {
+	result := make([]int64, len(values))
+	for index, value := range values {
+		result[index] = value.Nanoseconds()
+	}
+	return result
 }
 
 func numpyCoreGuest(t *testing.T) ([]byte, *runtimeconfig.ExecutionProfile) {

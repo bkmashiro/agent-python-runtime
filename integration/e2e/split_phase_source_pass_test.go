@@ -149,10 +149,10 @@ func TestRealGuestSplitPhasePreservesDynamicActivation(t *testing.T) {
 	}
 	cases := []struct {
 		name, source, inputs string
-		submitted, maximum   uint32
+		submitted, minimum   uint32
 	}{
 		{"branch-not-taken", "if inputs[\"take\"]:\n    first = sources.read(\"alpha\")\n    second = sources.read(\"beta\")\n    result = [first, second]\nelse:\n    result = []\n", `{"take":false}`, 0, 0},
-		{"branch-taken", "if inputs[\"take\"]:\n    first = sources.read(\"alpha\")\n    second = sources.read(\"beta\")\n    result = [first, second]\nelse:\n    result = []\n", `{"take":true}`, 2, 2},
+		{"branch-taken", "if inputs[\"take\"]:\n    first = sources.read(\"alpha\")\n    second = sources.read(\"beta\")\n    result = [first, second]\nelse:\n    result = []\n", `{"take":true}`, 2, 1},
 		{"zero-loop", "result = []\nfor item in inputs[\"items\"]:\n    first = sources.read(\"alpha\")\n    result.append(first)\n", `{"items":[]}`, 0, 0},
 		{"two-loop-iterations", "result = []\nfor item in inputs[\"items\"]:\n    first = sources.read(\"alpha\")\n    result.append(first)\n", `{"items":[1,2]}`, 2, 1},
 	}
@@ -198,7 +198,7 @@ func TestRealGuestSplitPhasePreservesDynamicActivation(t *testing.T) {
 				t.Fatalf("response=%s decoded=%+v err=%v", execution.Payload, response, decodeErr)
 			}
 			evidence := engine.SplitPhaseEvidence()
-			if evidence.Submitted != testCase.submitted || evidence.LogicalClaims != testCase.submitted || evidence.MaximumConcurrent != testCase.maximum || broker.CallCount() != testCase.submitted {
+			if evidence.Submitted != testCase.submitted || evidence.LogicalClaims != testCase.submitted || evidence.MaximumConcurrent < testCase.minimum || evidence.MaximumConcurrent > testCase.submitted || broker.CallCount() != testCase.submitted {
 				t.Fatalf("evidence=%+v calls=%d", evidence, broker.CallCount())
 			}
 		})

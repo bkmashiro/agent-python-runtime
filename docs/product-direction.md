@@ -49,7 +49,10 @@ explicit single-wait fresh re-evaluation, one never-served single-use prepared
 module, bounded Linux private-memory COW, and continuation-preserving cold-I/O.
 General arbitrary-Python purity, production fan-out scheduling, automatic
 cold/reuse policy, generalized write commit/reconciliation, and broad performance
-claims remain Deferred or Proposed as documented by the active Megagoal.
+claims remain Deferred or Proposed. The next approved runtime work is bounded by the
+[Host-Scheduled Calls and Immutable Value Reuse Mega-Goal](plans/2026-08-24-host-scheduled-python-reuse-autonomous-megagoal.md),
+which explicitly rejects a user-visible Future, a full Python/DataOp IR and broad
+performance claims without retained end-to-end evidence.
 
 Optional mechanisms must remain orthogonal at their public contract boundaries.
 Result caching, single-flight, workflow re-evaluation, immutable workspace

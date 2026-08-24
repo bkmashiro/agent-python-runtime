@@ -1,5 +1,11 @@
 # Correctness-Gated Source-Bound Agent Python Optimizer Autonomous Mega-Goal
 
+> **Historical/completed roadmap:** Do not resume this file. Its planned runtime
+> successor is the
+> [Host-Scheduled Calls and Immutable Value Reuse Mega-Goal](2026-08-24-host-scheduled-python-reuse-autonomous-megagoal.md),
+> which starts from the negative scalar-pass results and targets high-latency calls,
+> data-local operations and immutable values shared across fresh Runs.
+
 > **For Hermes:** This is the execution handoff for the next Pysolate optimizer lane.
 > Read this file and the linked correctness contract fully, inspect live Git state, and
 > proceed through successive verified slices. Do not stop after writing infrastructure,

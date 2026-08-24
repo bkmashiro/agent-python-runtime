@@ -1,6 +1,12 @@
 # Correctness-gated source-bound Agent Python passes
 
-Status: **design contract for the next optimizer lane**
+Status: **implemented predecessor contract; its candidate ordering is historical**
+
+The completed lane retained the static pass seam and two narrow scalar kernels, with
+negative end-to-end timing evidence. Future execution now follows the
+[Host-Scheduled Calls and Immutable Value Reuse Mega-Goal](../plans/2026-08-24-host-scheduled-python-reuse-autonomous-megagoal.md):
+it selects common high-cost Python/capability patterns, does not reproduce Stratum's
+DataOp IR, and does not resume the batching/meta-tool queue below.
 
 The body-free v1 study is frozen by
 [`source-bound-pass-preregistration-v1.json`](../evidence/source-bound-pass-preregistration-v1.json).
@@ -269,7 +275,10 @@ lane:
 A paper that combines one eligible transformation with these mechanisms is related only
 through the eligible kernel.
 
-## Initial implementation order
+## Historical initial implementation order
+
+This was the predecessor lane's candidate order. It is retained as design history, not
+as an active queue. The successor roadmap supersedes it.
 
 The minimum coherent sequence is:
 

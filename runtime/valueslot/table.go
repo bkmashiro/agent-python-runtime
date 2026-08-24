@@ -215,11 +215,37 @@ func (table *Table) Describe(slotID string) (SlotSpec, Strategy, string, error) 
 }
 
 type Table struct {
-	mu       sync.Mutex
-	entries  map[string]*tableEntry
-	objects  map[*PreparedObject]struct{}
-	evidence Evidence
-	closed   bool
+	mu           sync.Mutex
+	entries      map[string]*tableEntry
+	objects      map[*PreparedObject]struct{}
+	adapterProof string
+	evidence     Evidence
+	closed       bool
+}
+
+// Fresh returns a Run-private claim table backed by the same immutable physical
+// objects. The receiver remains a template and is closed only with its Runner.
+func (table *Table) Fresh() (*Table, error) {
+	if table == nil {
+		return nil, ErrInvalidEntry
+	}
+	table.mu.Lock()
+	if table.closed {
+		table.mu.Unlock()
+		return nil, ErrClosed
+	}
+	entries := make([]Entry, 0, len(table.entries))
+	for _, entry := range table.entries {
+		entries = append(entries, Entry{Spec: entry.spec, Object: entry.object, Strategy: entry.strategy})
+	}
+	proof := table.adapterProof
+	table.mu.Unlock()
+	fresh, err := NewTable(entries)
+	if err != nil {
+		return nil, err
+	}
+	fresh.adapterProof = proof
+	return fresh, nil
 }
 
 func NewTable(entries []Entry) (*Table, error) {

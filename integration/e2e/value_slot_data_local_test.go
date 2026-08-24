@@ -4,11 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
+
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +25,40 @@ import (
 )
 
 const dataLocalSource = "import io\nimport numpy as np\ndataset = np.load(io.BytesIO(open('/workspace/input.npy', 'rb').read()), allow_pickle=False)\nresult = int(dataset.sum())\n"
+
+func TestDataLocalNumpySumRejectsUnattestedScalarBeforeGuest(t *testing.T) {
+	artifact, profile := numpyCoreGuest(t)
+	object, err := valueslot.NewPreparedObject(valueslot.KindJSONScalar, []byte("0"), "numpy-int64-sum-v1", valueslot.CanonicalNumpyInt64FileSHA256, "private-cohort")
+	if err != nil {
+		t.Fatal(err)
+	}
+	table, err := valueslot.NewTable([]valueslot.Entry{{
+		Spec: valueslot.SlotSpec{
+			ID: "slot-numpy-sum-v1", SourceOccurrence: "line-4:result",
+			ProducerIdentity: "numpy-int64-sum-v1", InputIdentity: valueslot.CanonicalNumpyInt64FileSHA256,
+			Kind: valueslot.KindJSONScalar, MaxBytes: 32, PrivacyPartition: "private-cohort",
+			ClaimPolicy: valueslot.ClaimSingleUse, MaxClaims: 1,
+		},
+		Object: object, Strategy: valueslot.StrategyInlineJSON,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runtimeconfig.DefaultRunConfig()
+	config.ExecutionProfile = profile
+	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, ValueSlots: true}
+	runner, err := (wazeroengine.Factory{ValueSlots: table}).New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := trustedSemanticRunner(t, runner)
+	if _, err := engine.RunValueSlotSourcePatchDerived(context.Background(), nil, sourcepatch.Patch{}, passregistration.Registration{}); !errors.Is(err, valueslot.ErrInvalidEntry) {
+		t.Fatalf("unattested scalar error=%v", err)
+	}
+	if err := runner.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestValueSlotExactGuestMaterializesPrivateBytes(t *testing.T) {
 	artifact, _ := numpyCoreGuest(t)
@@ -47,24 +82,32 @@ func TestValueSlotExactGuestMaterializesPrivateBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer runner.Close(context.Background())
-	request := runtimeconfig.RunRequest{RunID: "value-slot-bytes", Code: "result = prepared_blob.hex()", Inputs: json.RawMessage(`{}`)}
-	raw, err := runtimeconfig.EncodeRunRequest(request)
-	if err != nil {
-		t.Fatal(err)
-	}
 	prepare := "import _agent_runtime_host\n_raw_slot = _agent_runtime_host.materialize_slot('slot-bytes')\nif _raw_slot[:1] != b'\\x02': raise RuntimeError('wrong value-slot strategy')\nprepared_blob = bytes(_raw_slot[1:])\n"
-	response, err := runner.Run(context.Background(), raw, prepare)
-	if err != nil {
+	engine := trustedSemanticRunner(t, runner)
+	for index := 0; index < 2; index++ {
+		request := runtimeconfig.RunRequest{RunID: fmt.Sprintf("value-slot-bytes-%d", index), Code: "result = prepared_blob.hex()", Inputs: json.RawMessage(`{}`)}
+		raw, encodeErr := runtimeconfig.EncodeRunRequest(request)
+		if encodeErr != nil {
+			t.Fatal(encodeErr)
+		}
+		response, runErr := runner.Run(context.Background(), raw, prepare)
+		if runErr != nil {
+			t.Fatal(runErr)
+		}
+		decoded, decodeErr := runtimeconfig.DecodeAndValidateRunResponse(request, response)
+		if decodeErr != nil || decoded.Status != runtimeconfig.RunResponseOK || string(decoded.Result) != `"616263"` {
+			t.Fatalf("run=%d response=%s decoded=%+v err=%v", index, response, decoded, decodeErr)
+		}
+		evidence := engine.ValueSlotEvidence()
+		if evidence.Claims != 1 || evidence.CopiedBytes != 3 || evidence.Discarded != 0 || !evidence.Closed {
+			t.Fatalf("run=%d evidence=%+v", index, evidence)
+		}
+	}
+	if err := runner.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	decoded, err := runtimeconfig.DecodeAndValidateRunResponse(request, response)
-	if err != nil || decoded.Status != runtimeconfig.RunResponseOK || string(decoded.Result) != `"616263"` {
-		t.Fatalf("response=%s decoded=%+v err=%v", response, decoded, err)
-	}
-	evidence := table.Evidence()
-	if evidence.Claims != 1 || evidence.CopiedBytes != 3 || evidence.Discarded != 0 || !evidence.Closed {
-		t.Fatalf("evidence=%+v", evidence)
+	if evidence := table.Evidence(); !evidence.Closed || evidence.Claims != 0 {
+		t.Fatalf("template evidence=%+v", evidence)
 	}
 }
 
@@ -208,11 +251,10 @@ func TestDataLocalNumpySumMatchedEndToEnd(t *testing.T) {
 		}
 		started = time.Now()
 		producerBytes := readWorkspaceInput(t, manager, ref, treatmentOwner+"-producer")
-		metadata, err := preparedfixture.Decode(producerBytes)
+		table, err := valueslot.NewCanonicalNumpyInt64SumTable(producerBytes, treatmentOwner)
 		if err != nil {
 			t.Fatal(err)
 		}
-		table := dataLocalValueTable(t, strconv.FormatInt(metadata.Metadata.Sum, 10), metadata.Metadata.FileSHA256, treatmentOwner)
 		treatmentConfig := runtimeconfig.DefaultRunConfig()
 		treatmentConfig.ExecutionProfile = profile
 		treatmentConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, ValueSlots: true}
@@ -233,7 +275,7 @@ func TestDataLocalNumpySumMatchedEndToEnd(t *testing.T) {
 		if !execution.Applied || execution.Patch.ReplacementCount != 1 {
 			t.Fatalf("execution=%+v", execution)
 		}
-		evidence := table.Evidence()
+		evidence := engine.ValueSlotEvidence()
 		if evidence.Claims != 1 || evidence.Discarded != 0 || !evidence.Closed {
 			t.Fatalf("evidence=%+v", evidence)
 		}
@@ -306,25 +348,6 @@ func readWorkspaceInput(t *testing.T, manager *workspace.Manager, ref workspace.
 		t.Fatalf("read=%v release=%v", readErr, releaseErr)
 	}
 	return payload
-}
-
-func dataLocalValueTable(t *testing.T, sum, inputIdentity, privacy string) *valueslot.Table {
-	t.Helper()
-	object, err := valueslot.NewPreparedObject(valueslot.KindJSONScalar, []byte(sum), "numpy-int64-sum-v1", inputIdentity, privacy)
-	if err != nil {
-		t.Fatal(err)
-	}
-	table, err := valueslot.NewTable([]valueslot.Entry{{
-		Spec: valueslot.SlotSpec{
-			ID: "slot-numpy-sum-v1", SourceOccurrence: "line-4:result", ProducerIdentity: "numpy-int64-sum-v1", InputIdentity: inputIdentity,
-			Kind: valueslot.KindJSONScalar, MaxBytes: 32, PrivacyPartition: privacy, ClaimPolicy: valueslot.ClaimSingleUse, MaxClaims: 1,
-		},
-		Object: object, Strategy: valueslot.StrategyInlineJSON,
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return table
 }
 
 func assertDataLocalResult(t *testing.T, request runtimeconfig.RunRequest, response []byte, runErr error) {

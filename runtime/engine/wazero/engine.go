@@ -233,7 +233,25 @@ type Engine struct {
 	semanticLifecycle   semanticAnalysisLifecycleStore
 	preparedRegions     *preparedregion.PreparedRegionTable
 	valueSlots          *valueslot.Table
+	valueSlotEvidence   valueSlotEvidenceStore
 	splitPhaseEvidence  splitPhaseEvidenceStore
+}
+
+type valueSlotEvidenceStore struct {
+	mu       sync.Mutex
+	snapshot valueslot.Evidence
+}
+
+func (store *valueSlotEvidenceStore) set(snapshot valueslot.Evidence) {
+	store.mu.Lock()
+	store.snapshot = snapshot
+	store.mu.Unlock()
+}
+
+func (store *valueSlotEvidenceStore) get() valueslot.Evidence {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	return store.snapshot
 }
 
 type splitPhaseEvidenceStore struct {
@@ -262,6 +280,14 @@ func (engine *Engine) SplitPhaseEvidence() capability.SplitPhaseSnapshot {
 		return capability.SplitPhaseSnapshot{}
 	}
 	return engine.splitPhaseEvidence.get()
+}
+
+// ValueSlotEvidence returns the last completed Run's private claim/copy lifecycle.
+func (engine *Engine) ValueSlotEvidence() valueslot.Evidence {
+	if engine == nil {
+		return valueslot.Evidence{}
+	}
+	return engine.valueSlotEvidence.get()
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
@@ -691,11 +717,12 @@ func (engine *Engine) Close(ctx context.Context) error {
 		engine.preparedNumpyInput = nil
 	}
 	runtimeErr := engine.runtime.Close(ctx)
+	valueSlotErr := engine.valueSlots.Close()
 	var workspaceErr error
 	if engine.workspaceLease != nil {
 		workspaceErr = engine.workspaceLease.Release()
 	}
-	return errors.Join(preparedErr, runtimeErr, workspaceErr, engine.preparedRegions.Close())
+	return errors.Join(preparedErr, runtimeErr, workspaceErr, valueSlotErr, engine.preparedRegions.Close())
 }
 
 func (engine *Engine) baseModuleConfig(stderr io.Writer, stdout io.Writer) wazerort.ModuleConfig {
@@ -1034,7 +1061,7 @@ func (engine *Engine) RunValueSlotSourcePatchDerived(ctx context.Context, reques
 		return nil, runtimeconfig.ErrMechanismDisabled
 	}
 	spec, strategy, backingIdentity, err := engine.valueSlots.Describe("slot-numpy-sum-v1")
-	if err != nil || spec.ID != "slot-numpy-sum-v1" || spec.SourceOccurrence != "line-4:result" ||
+	if !engine.valueSlots.IsCanonicalNumpyInt64Sum() || err != nil || spec.ID != "slot-numpy-sum-v1" || spec.SourceOccurrence != "line-4:result" ||
 		spec.ProducerIdentity != "numpy-int64-sum-v1" || spec.InputIdentity == "" || spec.PrivacyPartition == "" ||
 		spec.Kind != valueslot.KindJSONScalar || spec.MaxBytes > 32 || spec.ClaimPolicy != valueslot.ClaimSingleUse ||
 		spec.MaxClaims != 1 || strategy != valueslot.StrategyInlineJSON || backingIdentity == "" {
@@ -1115,8 +1142,15 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		defer func() { runErr = errors.Join(runErr, engine.preparedRegions.Close()) }()
 	}
 	if engine.valueSlots != nil {
-		runContext = context.WithValue(runContext, valueSlotContextKey{}, engine.valueSlots)
-		defer func() { runErr = errors.Join(runErr, engine.valueSlots.Close()) }()
+		runSlots, slotErr := engine.valueSlots.Fresh()
+		if slotErr != nil {
+			return nil, slotErr
+		}
+		runContext = context.WithValue(runContext, valueSlotContextKey{}, runSlots)
+		defer func() {
+			runErr = errors.Join(runErr, runSlots.Close())
+			engine.valueSlotEvidence.set(runSlots.Evidence())
+		}()
 	}
 	if engine.workspaceRun != nil {
 		select {

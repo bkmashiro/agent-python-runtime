@@ -5,8 +5,67 @@ import (
 	"errors"
 	"testing"
 
+	preparedfixture "github.com/bkmashiro/agent-python-runtime/research/prepareddataset"
 	"github.com/bkmashiro/agent-python-runtime/runtime/valueslot"
 )
+
+func TestCanonicalNumpySumProducerAttestsPayloadAndFreshRuns(t *testing.T) {
+	fixture := preparedfixture.CanonicalFixture()
+	template, err := valueslot.NewCanonicalNumpyInt64SumTable(fixture, "private-cohort")
+	if err != nil || !template.IsCanonicalNumpyInt64Sum() {
+		t.Fatalf("template=%v attested=%t", err, template != nil && template.IsCanonicalNumpyInt64Sum())
+	}
+	first, err := template.Fresh()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := template.Fresh()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, table := range []*valueslot.Table{first, second} {
+		payload, strategy, claimErr := table.Claim("slot-numpy-sum-v1")
+		if claimErr != nil || string(payload) != valueslot.CanonicalNumpyInt64Sum || strategy != valueslot.StrategyInlineJSON {
+			t.Fatalf("run=%d payload=%q strategy=%s err=%v", index, payload, strategy, claimErr)
+		}
+		if err := table.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := template.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCanonicalNumpySumRejectsDriftAndGenericMetadataForgery(t *testing.T) {
+	fixture := preparedfixture.CanonicalFixture()
+	fixture[len(fixture)-1] ^= 1
+	if _, err := valueslot.NewCanonicalNumpyInt64SumTable(fixture, "private-cohort"); !errors.Is(err, valueslot.ErrInvalidObject) {
+		t.Fatalf("drift error=%v", err)
+	}
+	object, err := valueslot.NewPreparedObject(valueslot.KindJSONScalar, []byte("0"), "numpy-int64-sum-v1", valueslot.CanonicalNumpyInt64FileSHA256, "private-cohort")
+	if err != nil {
+		t.Fatal(err)
+	}
+	forged, err := valueslot.NewTable([]valueslot.Entry{{
+		Spec: valueslot.SlotSpec{
+			ID: "slot-numpy-sum-v1", SourceOccurrence: "line-4:result",
+			ProducerIdentity: "numpy-int64-sum-v1", InputIdentity: valueslot.CanonicalNumpyInt64FileSHA256,
+			Kind: valueslot.KindJSONScalar, MaxBytes: 32, PrivacyPartition: "private-cohort",
+			ClaimPolicy: valueslot.ClaimSingleUse, MaxClaims: 1,
+		},
+		Object: object, Strategy: valueslot.StrategyInlineJSON,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if forged.IsCanonicalNumpyInt64Sum() {
+		t.Fatal("generic metadata forged an adapter proof")
+	}
+	if err := forged.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestInlineJSONScalarIsCanonicalAndSingleUse(t *testing.T) {
 	spec := scalarSpec()

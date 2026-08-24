@@ -71,8 +71,12 @@ func (plan *Plan) PrepareFuture(name string, raw json.RawMessage) (*PreparedPreD
 	if err != nil {
 		return nil, ErrPreDispatchUnavailable
 	}
+	maxResultBytes := uint64(maxCallBytes)
+	if qualification, qualified := preDispatchQualification(registered.spec); qualified && qualification.Eligible() {
+		maxResultBytes = qualification.Contract().MaxResultBytes
+	}
 	return &PreparedPreDispatch{
-		registered: registered, arguments: append(json.RawMessage(nil), arguments...), maxResultBytes: maxCallBytes,
+		registered: registered, arguments: append(json.RawMessage(nil), arguments...), maxResultBytes: maxResultBytes,
 	}, nil
 }
 

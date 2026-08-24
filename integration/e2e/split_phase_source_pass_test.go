@@ -149,6 +149,133 @@ func TestRealGuestCapabilityFutureDrainsUnobservedWrite(t *testing.T) {
 	}
 }
 
+func TestRealGuestCapabilityFutureDrainsAfterEarlierError(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := capability.NewRegistry()
+	grant, err := capability.NewGrant(json.RawMessage(`{"scope":"future-drain-error-e2e"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var writes atomic.Uint32
+	spec := capability.Spec{
+		Name: "fixture.write", Version: "fixture.write.future-error-e2e.v1", Description: "Write one fixture.",
+		EffectClass: capability.EffectWorkspaceWrite, Playback: capability.PlaybackLiveOnly, HandlerIdentity: "fixture-write-future-error-e2e.v1",
+		InputSchema:  json.RawMessage(`{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}`),
+		OutputSchema: json.RawMessage(`{"type":"object","properties":{"written":{"type":"boolean"}},"required":["written"],"additionalProperties":false}`),
+		Python:       &capability.PythonProjection{Module: "fixture", Method: "write", Arguments: []string{"value"}, ResultField: "written"},
+	}
+	if err := registry.Register(spec, grant, capability.HandlerFunc(func(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
+		writes.Add(1)
+		var arguments struct {
+			Value string `json:"value"`
+		}
+		_ = json.Unmarshal(raw, &arguments)
+		if arguments.Value == "error" {
+			return nil, errors.New("first write failed")
+		}
+		return json.RawMessage(`{"written":true}`), nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runtimeconfig.DefaultRunConfig()
+	config.Timeout = 90 * time.Second
+	config.Mechanisms = runtimeconfig.MechanismSet{SplitPhaseCalls: true}
+	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+		return capability.NewBroker(capability.Config{RunIdentity: "future-drain-error-e2e", Plan: plan})
+	}}).New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	request, _ := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
+		RunID:  "future-drain-error-e2e",
+		Code:   "fixture.write(\"error\")\nfixture.write(\"ok\")\nresult = \"done\"\n",
+		Inputs: json.RawMessage(`{}`),
+	})
+	payload, runErr := runner.Run(context.Background(), request, plan.FuturePythonPrelude())
+	var response struct {
+		Status string `json:"status"`
+		Error  *struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeErr := json.Unmarshal(payload, &response)
+	if runErr != nil || decodeErr != nil || response.Status != "error" || response.Error == nil || response.Error.Code != "python_exception" || writes.Load() != 2 {
+		t.Fatalf("response=%+v writes=%d decode_err=%v run_err=%v payload=%s", response, writes.Load(), decodeErr, runErr, payload)
+	}
+	if evidence := trustedSemanticRunner(t, runner).SplitPhaseEvidence(); evidence.Submitted != 2 || evidence.Consumed != 2 || evidence.Discarded != 0 {
+		t.Fatalf("error drain evidence=%+v", evidence)
+	}
+}
+
+func TestRealGuestCapabilityFutureMaterializesAnyJSONResultShape(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := capability.NewRegistry()
+	grant, err := capability.NewGrant(json.RawMessage(`{"scope":"future-json-shapes-e2e"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := capability.Spec{
+		Name: "fixture.value", Version: "fixture.value.future-e2e.v1", Description: "Return one JSON shape.",
+		EffectClass: capability.EffectPure, Playback: capability.PlaybackLiveOnly, HandlerIdentity: "fixture-value-future-e2e.v1",
+		InputSchema:  json.RawMessage(`{"type":"object","properties":{"kind":{"type":"string"}},"required":["kind"],"additionalProperties":false}`),
+		OutputSchema: json.RawMessage(`{}`),
+		Python:       &capability.PythonProjection{Module: "fixture", Method: "value", Arguments: []string{"kind"}},
+	}
+	if err := registry.Register(spec, grant, capability.HandlerFunc(func(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
+		var arguments struct {
+			Kind string `json:"kind"`
+		}
+		_ = json.Unmarshal(raw, &arguments)
+		switch arguments.Kind {
+		case "scalar":
+			return json.RawMessage(`7`), nil
+		case "array":
+			return json.RawMessage(`[1,2]`), nil
+		case "null":
+			return json.RawMessage(`null`), nil
+		default:
+			return nil, errors.New("unknown shape")
+		}
+	})); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runtimeconfig.DefaultRunConfig()
+	config.Timeout = 90 * time.Second
+	config.Mechanisms = runtimeconfig.MechanismSet{SplitPhaseCalls: true}
+	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+		return capability.NewBroker(capability.Config{RunIdentity: "future-json-shapes-e2e", Plan: plan})
+	}}).New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	request, _ := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
+		RunID:  "future-json-shapes-e2e",
+		Code:   "scalar = fixture.value(\"scalar\")\narray = fixture.value(\"array\")\nnone = fixture.value(\"null\")\nresult = [scalar, array, none]\n",
+		Inputs: json.RawMessage(`{}`),
+	})
+	payload, runErr := runner.Run(context.Background(), request, plan.FuturePythonPrelude())
+	result, decodeErr := decodeSuccessfulGuestResult(payload)
+	if runErr != nil || decodeErr != nil || string(result) != `[7,[1,2],null]` {
+		t.Fatalf("result=%s decode_err=%v run_err=%v payload=%s", result, decodeErr, runErr, payload)
+	}
+}
+
 func TestRealGuestSplitPhaseSourcesReadOverlapsPhysicalWorkAndKeepsLogicalReceipts(t *testing.T) {
 	artifact, err := os.ReadFile(guestArtifact(t))
 	if err != nil {

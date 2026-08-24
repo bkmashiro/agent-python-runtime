@@ -425,13 +425,24 @@ func TestPreparedPreDispatchEnforcesHostResultByteLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := plan.PreparePreDispatch(spec.Name, json.RawMessage(`{"path":"note.txt"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	outcome, err := prepared.Call(context.Background())
-	if err != nil || outcome.ErrorCode != "invalid_result" || len(outcome.Result) != 0 || outcome.PhysicalResultBytes <= 16 {
-		t.Fatalf("outcome=%+v err=%v", outcome, err)
+	for name, prepare := range map[string]func() (*capability.PreparedPreDispatch, error){
+		"pre-dispatch": func() (*capability.PreparedPreDispatch, error) {
+			return plan.PreparePreDispatch(spec.Name, json.RawMessage(`{"path":"note.txt"}`))
+		},
+		"Future": func() (*capability.PreparedPreDispatch, error) {
+			return plan.PrepareFuture(spec.Name, json.RawMessage(`{"path":"note.txt"}`))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			prepared, err := prepare()
+			if err != nil {
+				t.Fatal(err)
+			}
+			outcome, err := prepared.Call(context.Background())
+			if err != nil || outcome.ErrorCode != "invalid_result" || len(outcome.Result) != 0 || outcome.PhysicalResultBytes <= 16 {
+				t.Fatalf("outcome=%+v err=%v", outcome, err)
+			}
+		})
 	}
 }
 

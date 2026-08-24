@@ -796,9 +796,20 @@ def _resolve_capability_value(value):
     return value
 
 def _resolve_capability_futures(value):
-    resolved = _resolve_capability_value(value)
+    first_error = None
+    try:
+        resolved = _resolve_capability_value(value)
+    except BaseException as error:
+        resolved = None
+        first_error = error
     for future in _capability_futures:
-        future.result()
+        try:
+            future.result()
+        except BaseException as error:
+            if first_error is None:
+                first_error = error
+    if first_error is not None:
+        raise first_error
     return resolved
 `)
 	if len(synchronousSpecs) != 0 {

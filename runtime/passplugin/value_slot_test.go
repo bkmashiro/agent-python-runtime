@@ -47,6 +47,20 @@ type valueSlotRunner struct {
 	closed       int
 }
 
+type invalidValueSlotPlugin struct {
+	registration passregistration.Registration
+}
+
+func (plugin invalidValueSlotPlugin) Registration() passregistration.Registration {
+	return plugin.registration
+}
+
+func (invalidValueSlotPlugin) ValueSlotBound() bool { return true }
+
+func (invalidValueSlotPlugin) Transform(context.Context, sourcepatch.Transformer, string) (sourcepatch.Patch, error) {
+	return sourcepatch.Patch{Status: "applied"}, nil
+}
+
 func (runner *valueSlotRunner) Run(context.Context, []byte, string) ([]byte, error) {
 	runner.baselineRuns++
 	return []byte("baseline"), nil
@@ -125,6 +139,32 @@ func TestExecuteValueSlotSelectsBeforeFactoryAndFallsBackBeforeEffects(t *testin
 		)
 		if runErr != nil || string(execution.Payload) != "derived" || !execution.Applied || baselineFactories != 0 || selected.derivedRuns != 1 || selected.closed != 1 {
 			t.Fatalf("execution=%+v err=%v baseline_factories=%d selected=%+v", execution, runErr, baselineFactories, selected)
+		}
+	})
+
+	t.Run("invalid applied patch records fallback reason", func(t *testing.T) {
+		invalidRegistry, createErr := New(invalidValueSlotPlugin{registration: pass.Registration()})
+		if createErr != nil {
+			t.Fatal(createErr)
+		}
+		invalidRegistry, createErr = invalidRegistry.Enable(sourcepatch.DataLocalNumpySumName)
+		if createErr != nil {
+			t.Fatal(createErr)
+		}
+		baseline := &valueSlotRunner{}
+		selectedFactories := 0
+		execution, runErr := invalidRegistry.ExecuteValueSlot(
+			context.Background(), sourcepatch.DataLocalNumpySumName, valueSlotTransformer{applied: true},
+			func(context.Context) (ValueSlotSourcePatchRunner, error) { return baseline, nil },
+			func(context.Context) (ValueSlotSourcePatchRunner, error) {
+				selectedFactories++
+				return &valueSlotRunner{}, nil
+			},
+			request, "",
+		)
+		if runErr != nil || string(execution.Payload) != "baseline" || execution.Applied ||
+			!errors.Is(execution.PassError, sourcepatch.ErrInvalidPatch) || selectedFactories != 0 || baseline.closed != 1 {
+			t.Fatalf("execution=%+v err=%v selected_factories=%d baseline=%+v", execution, runErr, selectedFactories, baseline)
 		}
 	})
 }

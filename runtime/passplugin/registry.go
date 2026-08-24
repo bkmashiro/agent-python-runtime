@@ -253,9 +253,13 @@ func (registry *Registry) ExecuteValueSlot(
 		return Execution{Payload: payload}, runErr
 	}
 	patch, passErr := slotPlugin.Transform(ctx, transformer, runRequest.Code)
-	if passErr != nil || !patch.Applied() || patch.Validate(runRequest.Code, plugin.Registration()) != nil {
+	if passErr != nil || !patch.Applied() {
 		payload, runErr := runValueSlotBaseline(ctx, baselineFactory, request, trustedPrepare)
 		return Execution{Payload: payload, Patch: patch, PassError: passErr}, runErr
+	}
+	if validationErr := patch.Validate(runRequest.Code, plugin.Registration()); validationErr != nil {
+		payload, runErr := runValueSlotBaseline(ctx, baselineFactory, request, trustedPrepare)
+		return Execution{Payload: payload, Patch: patch, PassError: validationErr}, runErr
 	}
 	runner, factoryErr := selectedFactory(ctx)
 	if factoryErr != nil || runner == nil {

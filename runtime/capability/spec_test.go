@@ -34,6 +34,17 @@ func TestFutureProjectionIsAnAnalyzerFreePlanPass(t *testing.T) {
 	}
 }
 
+func TestFutureProjectionRejectsUnsealedPlan(t *testing.T) {
+	pass, err := capability.NewFutureProjectionPass()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var plan capability.Plan
+	if projected, err := pass.Project(&plan); err != capability.ErrInvalidFutureProjectionPass || projected != "" {
+		t.Fatalf("projected=%q err=%v", projected, err)
+	}
+}
+
 func TestCapabilitySpecCanonicalizationAndPlanIdentity(t *testing.T) {
 	first := capability.NewRegistry()
 	firstSpec := testSpec()

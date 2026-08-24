@@ -29,7 +29,7 @@ func (pass FutureProjectionPass) Registration() passregistration.Registration {
 
 // Project lowers one sealed capability Plan to its analyzer-free Future projection.
 func (pass FutureProjectionPass) Project(plan *Plan) (string, error) {
-	if pass.registration.IdentitySHA256() == "" || plan == nil {
+	if pass.registration.IdentitySHA256() == "" || plan == nil || plan.Identity() == "" {
 		return "", ErrInvalidFutureProjectionPass
 	}
 	return plan.FuturePythonPrelude(), nil

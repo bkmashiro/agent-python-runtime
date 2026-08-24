@@ -110,6 +110,10 @@ func TestUnifiedCatalogRegistersFourStageAwarePassesDefaultOff(t *testing.T) {
 	if _, err := registry.ProjectPlan(passregistration.CapabilityFutureProjection, (*capability.Plan)(nil)); err == nil {
 		t.Fatal("nil Plan projected")
 	}
+	var unsealed capability.Plan
+	if projected, err := registry.ProjectPlan(passregistration.CapabilityFutureProjection, &unsealed); err != capability.ErrInvalidFutureProjectionPass || projected != "" {
+		t.Fatalf("unsealed Plan projection=%q err=%v", projected, err)
+	}
 	prelude, err := registry.BindRunValue(passregistration.PreparedValueBinding, "slot-numpy-sum-v1")
 	if err != nil || !strings.Contains(prelude, "prepared_value") || !strings.Contains(prelude, "materialize_slot") {
 		t.Fatalf("prelude=%q err=%v", prelude, err)

@@ -8,8 +8,8 @@ passes. It gives each optimization an explicit stage, immutable registration and
 to the existing Runtime owner.
 
 The code target is Host commit
-`f997821a9faf7b0c1661c0603101314d74706a80`, tree
-`62c65d5befaf5d95e918e08b2bf792766601d260`.
+`f07b7e52c9e63d4e6eec6ab798dee2d8be31f27e`, tree
+`75f344ad785cc432248119fa5da6b3de98a0fcc4`.
 
 V2 extends the four-pass catalog from v1. It registers the runnable source transforms, the
 prepared-region adapter and all optional execution-cost mechanisms represented in
@@ -65,8 +65,9 @@ selection, _ := passes.LowerMechanisms(runtime.MechanismSet{})
 ```
 
 `ResolveRuntime` then applies Host availability to the lowered mechanisms and records
-`pysolate.optimization-pass-selection.v1`. A requested Linux COW pass can therefore fall back on
-another Host without rewriting the selected pass identity or pretending COW ran.
+`pysolate.optimization-pass-selection.v1`, including each selected pass version, stage and
+registration identity. A requested Linux COW pass can therefore fall back on another Host without
+rewriting the selected pass identity or pretending COW ran.
 
 `wazero.Factory.Passes` is the canonical formal-Guest entry point. When a catalog is bound, the
 factory rejects direct optimization booleans with `ErrDirectOptimizationSelection`; this keeps
@@ -122,8 +123,8 @@ A fresh exact-Guest verification on the code target observed:
 
 | pass or lane | baseline median | treatment median | change | decision |
 |---|---:|---:|---:|---|
-| Future projection, one paired verification | `2.573 s` | `2.449 s` | `-4.79%` | retained Experimental |
-| prepared-value, five pairs | `5.045 s` | `2.290 s` | `-54.62%` | retained Experimental |
+| Future projection, one paired verification | `2.598 s` | `2.498 s` | `-3.84%` | retained Experimental |
+| prepared-value, five pairs | `4.876 s` | `2.285 s` | `-53.14%` | retained Experimental |
 | scalar CSE, three pairs | `2.489 s` | `2.890 s` | `+16.10%` | no-go |
 | scalar fold, three pairs | `2.290 s` | `2.386 s` | `+4.20%` | no-go |
 | analyzer-driven split-phase read, one paired verification | `2.574 s` | `7.601 s` | `+195.31%` | no-go |

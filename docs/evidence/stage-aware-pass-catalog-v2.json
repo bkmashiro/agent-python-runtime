@@ -2,8 +2,9 @@
   "schema_version": "pysolate.stage-aware-pass-catalog.v2",
   "decision": "all_retained_optimizations_pass_selected_default_off",
   "implementation": {
-    "commit": "f997821a9faf7b0c1661c0603101314d74706a80",
-    "tree": "62c65d5befaf5d95e918e08b2bf792766601d260",
+    "commit": "f07b7e52c9e63d4e6eec6ab798dee2d8be31f27e",
+    "tree": "75f344ad785cc432248119fa5da6b3de98a0fcc4",
+    "core_migration_commit": "f997821a9faf7b0c1661c0603101314d74706a80",
     "registration_schemas": [
       "pysolate.semantic-pass-registration.v2",
       "pysolate.stage-aware-pass-registration.v3"
@@ -49,20 +50,20 @@
     "measurements": {
       "capability_future_projection": {
         "samples": 1,
-        "baseline_median_ns": 2572503292,
-        "treatment_median_ns": 2449303000,
-        "treatment_ratio": 0.9521087913,
-        "change_percent": -4.7891208685,
+        "baseline_median_ns": 2597793083,
+        "treatment_median_ns": 2498108458,
+        "treatment_ratio": 0.9616271882,
+        "change_percent": -3.8372811773,
         "analyzer_invocations": 0
       },
       "prepared_value_binding": {
         "samples": 5,
-        "baseline_ns": [5052820875, 5030993167, 5045085458, 5051680709, 5031170917],
-        "treatment_ns": [2287064417, 2296858584, 2289597125, 2285304292, 2298296041],
-        "baseline_median_ns": 5045085458,
-        "treatment_median_ns": 2289597125,
-        "treatment_ratio": 0.4538272234,
-        "change_percent": -54.6172776644,
+        "baseline_ns": [4876064458, 4865138500, 4902766417, 4877184041, 4875347958],
+        "treatment_ns": [2283576625, 2284929792, 2278449000, 2295645625, 2301360750],
+        "baseline_median_ns": 4876064458,
+        "treatment_median_ns": 2284929792,
+        "treatment_ratio": 0.4686012278,
+        "change_percent": -53.1398772169,
         "analyzer_invocations": 0,
         "host_to_guest_bytes": 12
       },

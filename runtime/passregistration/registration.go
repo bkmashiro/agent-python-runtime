@@ -15,6 +15,9 @@ type Binding string
 type Stage string
 
 const (
+	SourceRegistrationSchemaVersion       = "pysolate.semantic-pass-registration.v2"
+	AnalyzerFreeRegistrationSchemaVersion = "pysolate.stage-aware-pass-registration.v3"
+
 	SemanticPreDispatch        Name = "semantic_pre_dispatch"
 	PreparedPureRegion         Name = "prepared_pure_region"
 	PreparedNumpyLoad          Name = "prepared_numpy_load"
@@ -141,8 +144,12 @@ func (definition Definition) Register(analyzerSHA256, configSHA256 string) (Regi
 		return Registration{}, ErrInvalid
 	}
 	bindings := append([]Binding(nil), definition.requiredBindings...)
+	schemaVersion := SourceRegistrationSchemaVersion
+	if definition.consumer == PlanProjection || definition.consumer == RunBinding {
+		schemaVersion = AnalyzerFreeRegistrationSchemaVersion
+	}
 	value := identity{
-		SchemaVersion: "pysolate.semantic-pass-registration.v2", Name: definition.name, Version: definition.version,
+		SchemaVersion: schemaVersion, Name: definition.name, Version: definition.version,
 		Stage: definition.stage, AnalyzerSHA256: analyzerSHA256, ConfigSHA256: configSHA256,
 		Consumer: definition.consumer, RequiredBindings: bindings,
 	}

@@ -266,7 +266,7 @@ func TestSharedImmutableObjectFeedsFreshIsolatedGuestConsumers(t *testing.T) {
 		}
 		request := runtimeconfig.RunRequest{RunID: fmt.Sprintf("shared-consumer-%d", index), Code: code, Inputs: json.RawMessage(`{}`)}
 		raw, _ := runtimeconfig.EncodeRunRequest(request)
-		prepare, prepareErr := valueslot.PythonPrelude("slot-bytes")
+		prepare, prepareErr := preparedValuePassPrelude(t, "slot-bytes")
 		if prepareErr != nil {
 			t.Fatal(prepareErr)
 		}
@@ -452,7 +452,7 @@ func TestDirectPreparedNumpySumMatchedEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	producerDuration := time.Since(producerStarted)
-	prelude, err := valueslot.PythonPrelude("slot-numpy-sum-v1")
+	prelude, err := preparedValuePassPrelude(t, "slot-numpy-sum-v1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -567,6 +567,23 @@ func dataLocalRunRequest(t *testing.T, runID string) runtimeconfig.RunRequest {
 		RunID: runID, Code: dataLocalSource, Inputs: json.RawMessage(`{}`),
 		Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: "numpy-core", Imports: []string{"io", "numpy"}},
 	}
+}
+
+func preparedValuePassPrelude(t *testing.T, slotID string) (string, error) {
+	t.Helper()
+	pass, err := valueslot.NewPreparedValuePass()
+	if err != nil {
+		return "", err
+	}
+	registry, err := passplugin.New(pass)
+	if err != nil {
+		return "", err
+	}
+	registry, err = registry.Enable(passregistration.PreparedValueBinding)
+	if err != nil {
+		return "", err
+	}
+	return registry.BindRunValue(passregistration.PreparedValueBinding, slotID)
 }
 
 func directPreparedValueRunRequest(runID string) runtimeconfig.RunRequest {

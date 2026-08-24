@@ -2,8 +2,10 @@ package passplugin
 
 import (
 	"context"
+	"strings"
 	"testing"
 
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
 )
@@ -72,4 +74,44 @@ func digestFor(character byte) string {
 		value[index] = character
 	}
 	return "sha256:" + string(value)
+}
+
+func TestUnifiedCatalogRegistersFourStageAwarePassesDefaultOff(t *testing.T) {
+	registry, err := NewUnifiedCatalog(UnifiedCatalogConfig{
+		SemanticPreDispatchConfigSHA256: digestFor('a'),
+		PreparedNumpyLoadConfigSHA256:   digestFor('b'),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := map[passregistration.Name]passregistration.Stage{
+		passregistration.SemanticPreDispatch:        passregistration.StagePrefixOverlay,
+		passregistration.PreparedNumpyLoad:          passregistration.StageHybridPreparePatch,
+		passregistration.CapabilityFutureProjection: passregistration.StagePlanProjection,
+		passregistration.PreparedValueBinding:       passregistration.StageRunBinding,
+	}
+	for name, stage := range expected {
+		plugin, ok := registry.Lookup(name)
+		if !ok || plugin.Registration().Stage() != stage {
+			t.Fatalf("name=%s stage=%s plugin=%v ok=%v", name, stage, plugin, ok)
+		}
+	}
+	if _, err := registry.ProjectPlan(passregistration.CapabilityFutureProjection, nil); err != ErrPluginDisabled {
+		t.Fatalf("default-off Future projection error=%v", err)
+	}
+	if _, err := registry.BindRunValue(passregistration.PreparedValueBinding, "slot-numpy-sum-v1"); err != ErrPluginDisabled {
+		t.Fatalf("default-off prepared value error=%v", err)
+	}
+
+	registry, err = registry.Enable(passregistration.CapabilityFutureProjection, passregistration.PreparedValueBinding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.ProjectPlan(passregistration.CapabilityFutureProjection, (*capability.Plan)(nil)); err == nil {
+		t.Fatal("nil Plan projected")
+	}
+	prelude, err := registry.BindRunValue(passregistration.PreparedValueBinding, "slot-numpy-sum-v1")
+	if err != nil || !strings.Contains(prelude, "prepared_value") || !strings.Contains(prelude, "materialize_slot") {
+		t.Fatalf("prelude=%q err=%v", prelude, err)
+	}
 }

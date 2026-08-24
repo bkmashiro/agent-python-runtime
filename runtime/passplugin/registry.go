@@ -5,8 +5,10 @@ import (
 	"errors"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
+	"github.com/bkmashiro/agent-python-runtime/runtime/valueslot"
 )
 
 var (
@@ -18,6 +20,16 @@ var (
 
 type Plugin interface {
 	Registration() passregistration.Registration
+}
+
+type PlanProjectionPlugin interface {
+	Plugin
+	Project(*capability.Plan) (string, error)
+}
+
+type RunBindingPlugin interface {
+	Plugin
+	Bind(string) (string, error)
 }
 
 type SourcePatchPlugin interface {
@@ -85,6 +97,45 @@ type Registry struct {
 	enabled map[passregistration.Name]bool
 }
 
+type UnifiedCatalogConfig struct {
+	SemanticPreDispatchConfigSHA256 string
+	PreparedNumpyLoadConfigSHA256   string
+}
+
+// NewUnifiedCatalog registers the two streaming-stage adapters and the two
+// analyzer-free direct lowerings in one default-off static pass catalog.
+func NewUnifiedCatalog(config UnifiedCatalogConfig) (*Registry, error) {
+	semantic, err := passregistration.SemanticPreDispatchDefinition().Register(
+		passregistration.SemanticAnalyzerSHA256, config.SemanticPreDispatchConfigSHA256,
+	)
+	if err != nil {
+		return nil, err
+	}
+	preparedNumpy, err := passregistration.PreparedNumpyLoadDefinition().Register(
+		passregistration.SemanticAnalyzerSHA256, config.PreparedNumpyLoadConfigSHA256,
+	)
+	if err != nil {
+		return nil, err
+	}
+	semanticAdapter, err := AdaptExisting(semantic)
+	if err != nil {
+		return nil, err
+	}
+	preparedNumpyAdapter, err := AdaptExisting(preparedNumpy)
+	if err != nil {
+		return nil, err
+	}
+	future, err := capability.NewFutureProjectionPass()
+	if err != nil {
+		return nil, err
+	}
+	preparedValue, err := valueslot.NewPreparedValuePass()
+	if err != nil {
+		return nil, err
+	}
+	return New(semanticAdapter, preparedNumpyAdapter, future, preparedValue)
+}
+
 func New(plugins ...Plugin) (*Registry, error) {
 	registry := &Registry{
 		plugins: make(map[passregistration.Name]Plugin, len(plugins)),
@@ -148,6 +199,36 @@ func (registry *Registry) Transform(ctx context.Context, name passregistration.N
 		return sourcepatch.Patch{}, ErrUnsupportedStage
 	}
 	return patchPlugin.Transform(ctx, transformer, source)
+}
+
+func (registry *Registry) ProjectPlan(name passregistration.Name, plan *capability.Plan) (string, error) {
+	plugin, ok := registry.Lookup(name)
+	if !ok {
+		return "", ErrInvalidPlugin
+	}
+	if !registry.enabled[name] {
+		return "", ErrPluginDisabled
+	}
+	projection, ok := plugin.(PlanProjectionPlugin)
+	if !ok || plugin.Registration().Stage() != passregistration.StagePlanProjection {
+		return "", ErrUnsupportedStage
+	}
+	return projection.Project(plan)
+}
+
+func (registry *Registry) BindRunValue(name passregistration.Name, slotID string) (string, error) {
+	plugin, ok := registry.Lookup(name)
+	if !ok {
+		return "", ErrInvalidPlugin
+	}
+	if !registry.enabled[name] {
+		return "", ErrPluginDisabled
+	}
+	binding, ok := plugin.(RunBindingPlugin)
+	if !ok || plugin.Registration().Stage() != passregistration.StageRunBinding {
+		return "", ErrUnsupportedStage
+	}
+	return binding.Bind(slotID)
 }
 
 // Execute runs one enabled source-patch plugin. Disabled, inapplicable or failed

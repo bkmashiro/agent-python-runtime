@@ -15,20 +15,30 @@ type Binding string
 type Stage string
 
 const (
-	SemanticPreDispatch Name = "semantic_pre_dispatch"
-	PreparedPureRegion  Name = "prepared_pure_region"
+	SemanticPreDispatch        Name = "semantic_pre_dispatch"
+	PreparedPureRegion         Name = "prepared_pure_region"
+	PreparedNumpyLoad          Name = "prepared_numpy_load"
+	CapabilityFutureProjection Name = "capability_future_projection"
+	PreparedValueBinding       Name = "prepared_value_binding"
 
-	SemanticPreDispatchVersion = "pysolate.semantic-pre-dispatch-pass.v0"
-	PreparedPureRegionVersion  = "pysolate.prepared-pure-region-pass.v1"
-	SemanticAnalyzerSHA256     = "sha256:9ed43801b84228c031ba1c3df35dbeab924f1de6d43bb41836b9be894b7be94e"
+	SemanticPreDispatchVersion        = "pysolate.semantic-pre-dispatch-pass.v0"
+	PreparedPureRegionVersion         = "pysolate.prepared-pure-region-pass.v1"
+	PreparedNumpyLoadVersion          = "pysolate.prepared-numpy-load-pass.v1"
+	CapabilityFutureProjectionVersion = "pysolate.capability-future-projection-pass.v1"
+	PreparedValueBindingVersion       = "pysolate.prepared-value-binding-pass.v1"
+	SemanticAnalyzerSHA256            = "sha256:9ed43801b84228c031ba1c3df35dbeab924f1de6d43bb41836b9be894b7be94e"
 
 	OverlayOnly    Consumer = "overlay_only"
 	ExecutionPatch Consumer = "execution_patch"
+	PlanProjection Consumer = "plan_projection"
+	RunBinding     Consumer = "run_binding"
 
+	StagePlanProjection     Stage = "plan_projection"
 	StagePrefixOverlay      Stage = "prefix_overlay"
 	StageHybridPreparePatch Stage = "hybrid_prepare_patch"
 	StageWholeProgramPatch  Stage = "whole_program_patch"
 	StageMultiProgramPatch  Stage = "multi_program_patch"
+	StageRunBinding         Stage = "run_binding"
 
 	SourceSHA256           Binding = "source_sha256"
 	ASTSHA256              Binding = "ast_sha256"
@@ -40,6 +50,7 @@ const (
 	PassConfigSHA256       Binding = "pass_config_sha256"
 	OccurrenceID           Binding = "occurrence_id"
 	RegionID               Binding = "region_id"
+	RunIdentitySHA256      Binding = "run_identity_sha256"
 	FinalSourceSHA256      Binding = "final_source_sha256"
 )
 
@@ -62,8 +73,13 @@ var patchBindings = []Binding{
 	PassConfigSHA256, RegionID, FinalSourceSHA256,
 }
 
-func OverlayBindings() []Binding { return append([]Binding(nil), overlayBindings...) }
-func PatchBindings() []Binding   { return append([]Binding(nil), patchBindings...) }
+var projectionBindings = []Binding{CapabilityPlanSHA256, PassConfigSHA256}
+var runBindings = []Binding{RegionID, RunIdentitySHA256, PassConfigSHA256}
+
+func OverlayBindings() []Binding    { return append([]Binding(nil), overlayBindings...) }
+func PatchBindings() []Binding      { return append([]Binding(nil), patchBindings...) }
+func ProjectionBindings() []Binding { return append([]Binding(nil), projectionBindings...) }
+func RunBindings() []Binding        { return append([]Binding(nil), runBindings...) }
 
 type Definition struct {
 	name             Name
@@ -77,11 +93,7 @@ func Define(name Name, version string, stage Stage, consumer Consumer, bindings 
 	if !namePattern.MatchString(string(name)) || version == "" || len(version) > 128 || !validStageForConsumer(stage, consumer) {
 		return Definition{}, ErrInvalid
 	}
-	expected := patchBindings
-	if consumer == OverlayOnly {
-		expected = overlayBindings
-	}
-	if !reflect.DeepEqual(bindings, expected) {
+	if !reflect.DeepEqual(bindings, bindingsForConsumer(consumer)) {
 		return Definition{}, ErrInvalid
 	}
 	return Definition{
@@ -100,6 +112,21 @@ func PreparedPureRegionDefinition() Definition {
 	return value
 }
 
+func PreparedNumpyLoadDefinition() Definition {
+	value, _ := Define(PreparedNumpyLoad, PreparedNumpyLoadVersion, StageHybridPreparePatch, ExecutionPatch, PatchBindings())
+	return value
+}
+
+func CapabilityFutureProjectionDefinition() Definition {
+	value, _ := Define(CapabilityFutureProjection, CapabilityFutureProjectionVersion, StagePlanProjection, PlanProjection, ProjectionBindings())
+	return value
+}
+
+func PreparedValueBindingDefinition() Definition {
+	value, _ := Define(PreparedValueBinding, PreparedValueBindingVersion, StageRunBinding, RunBinding, RunBindings())
+	return value
+}
+
 func (definition Definition) Name() Name         { return definition.name }
 func (definition Definition) Version() string    { return definition.version }
 func (definition Definition) Stage() Stage       { return definition.stage }
@@ -109,7 +136,7 @@ func (definition Definition) RequiredBindings() []Binding {
 }
 
 func (definition Definition) Register(analyzerSHA256, configSHA256 string) (Registration, error) {
-	if !digestPattern.MatchString(analyzerSHA256) || !digestPattern.MatchString(configSHA256) ||
+	if !validAnalyzerIdentity(definition.consumer, analyzerSHA256) || !digestPattern.MatchString(configSHA256) ||
 		!validStageForConsumer(definition.stage, definition.consumer) || definition.name == "" {
 		return Registration{}, ErrInvalid
 	}
@@ -133,10 +160,40 @@ func (definition Definition) Register(analyzerSHA256, configSHA256 string) (Regi
 }
 
 func validStageForConsumer(stage Stage, consumer Consumer) bool {
-	if stage == StagePrefixOverlay {
-		return consumer == OverlayOnly
+	switch consumer {
+	case OverlayOnly:
+		return stage == StagePrefixOverlay
+	case ExecutionPatch:
+		return stage == StageHybridPreparePatch || stage == StageWholeProgramPatch || stage == StageMultiProgramPatch
+	case PlanProjection:
+		return stage == StagePlanProjection
+	case RunBinding:
+		return stage == StageRunBinding
+	default:
+		return false
 	}
-	return (stage == StageHybridPreparePatch || stage == StageWholeProgramPatch || stage == StageMultiProgramPatch) && consumer == ExecutionPatch
+}
+
+func bindingsForConsumer(consumer Consumer) []Binding {
+	switch consumer {
+	case OverlayOnly:
+		return overlayBindings
+	case ExecutionPatch:
+		return patchBindings
+	case PlanProjection:
+		return projectionBindings
+	case RunBinding:
+		return runBindings
+	default:
+		return nil
+	}
+}
+
+func validAnalyzerIdentity(consumer Consumer, analyzerSHA256 string) bool {
+	if consumer == PlanProjection || consumer == RunBinding {
+		return analyzerSHA256 == ""
+	}
+	return digestPattern.MatchString(analyzerSHA256)
 }
 
 type Registration struct {
@@ -170,6 +227,12 @@ func New(name Name, version, analyzerSHA256, configSHA256 string, consumer Consu
 		definition = SemanticPreDispatchDefinition()
 	case name == PreparedPureRegion && version == PreparedPureRegionVersion:
 		definition = PreparedPureRegionDefinition()
+	case name == PreparedNumpyLoad && version == PreparedNumpyLoadVersion:
+		definition = PreparedNumpyLoadDefinition()
+	case name == CapabilityFutureProjection && version == CapabilityFutureProjectionVersion:
+		definition = CapabilityFutureProjectionDefinition()
+	case name == PreparedValueBinding && version == PreparedValueBindingVersion:
+		definition = PreparedValueBindingDefinition()
 	default:
 		return Registration{}, ErrInvalid
 	}

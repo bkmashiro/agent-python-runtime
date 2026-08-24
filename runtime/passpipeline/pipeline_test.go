@@ -54,10 +54,64 @@ func TestCurrentPassesRouteThroughTypedStagesWithoutChangingRegistrationIdentity
 		t.Fatalf("first=%+v second=%+v", first, second)
 	}
 	raw, err := json.Marshal(pipeline.Records())
-	if err != nil || !bytes.Contains(raw, []byte(`"schema_version":"pysolate.source-bound-pass-outcome.v1"`)) ||
+	if err != nil || !bytes.Contains(raw, []byte(`"schema_version":"pysolate.stage-aware-pass-outcome.v2"`)) ||
 		!bytes.Contains(raw, []byte(`"registration_sha256"`)) || !bytes.Contains(raw, []byte(`"logical_events":1`)) ||
 		!bytes.Contains(raw, []byte(`"workspace_disposition":"not_owned"`)) || bytes.Contains(raw, []byte("source_body")) || bytes.Contains(raw, []byte("workspace_body")) {
 		t.Fatalf("body-safe outcome encoding=%s err=%v", raw, err)
+	}
+}
+
+func TestAnalyzerFreePassStagesRecordWithoutInventingSourceAnalysis(t *testing.T) {
+	future, err := passregistration.CapabilityFutureProjectionDefinition().Register("", digest('b'))
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := passregistration.PreparedValueBindingDefinition().Register("", digest('c'))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pipeline, err := passpipeline.New([]passpipeline.Entry{
+		{Registration: future, Stage: passpipeline.StagePlanProjection, Enabled: true},
+		{Registration: prepared, Stage: passpipeline.StageRunBinding, Enabled: true},
+	}, passpipeline.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	projection, err := pipeline.RecordPlanProjection(passpipeline.RecordInput{
+		PassName: future.Name(), Outcome: passpipeline.OutcomeApplied,
+		Bindings: map[passregistration.Binding]string{
+			passregistration.CapabilityPlanSHA256: digest('d'),
+			passregistration.PassConfigSHA256:     future.ConfigSHA256(),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := pipeline.RecordRunBinding(passpipeline.RecordInput{
+		PassName: prepared.Name(), Outcome: passpipeline.OutcomeApplied,
+		Bindings: map[passregistration.Binding]string{
+			passregistration.RegionID:          digest('e'),
+			passregistration.RunIdentitySHA256: digest('f'),
+			passregistration.PassConfigSHA256:  prepared.ConfigSHA256(),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if projection.Stage != passpipeline.StagePlanProjection || binding.Stage != passpipeline.StageRunBinding ||
+		projection.OriginalSourceSHA256 != "" || binding.OriginalASTSHA256 != "" {
+		t.Fatalf("projection=%+v binding=%+v", projection, binding)
+	}
+	secondRun := passpipeline.RecordInput{
+		PassName: prepared.Name(), Outcome: passpipeline.OutcomeApplied,
+		Bindings: map[passregistration.Binding]string{
+			passregistration.RegionID:          digest('e'),
+			passregistration.RunIdentitySHA256: digest('a'),
+			passregistration.PassConfigSHA256:  prepared.ConfigSHA256(),
+		},
+	}
+	if _, err := pipeline.RecordRunBinding(secondRun); err != nil {
+		t.Fatalf("fresh Run binding collided with prior Run: %v", err)
 	}
 }
 

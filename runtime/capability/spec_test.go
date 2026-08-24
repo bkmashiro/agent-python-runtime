@@ -8,7 +8,31 @@ import (
 	"testing"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 )
+
+func TestFutureProjectionIsAnAnalyzerFreePlanPass(t *testing.T) {
+	registry := capability.NewRegistry()
+	if err := registry.Register(testSpec(), basicGrant(t), noopHandler); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pass, err := capability.NewFutureProjectionPass()
+	if err != nil {
+		t.Fatal(err)
+	}
+	registration := pass.Registration()
+	if registration.Stage() != passregistration.StagePlanProjection || registration.AnalyzerSHA256() != "" {
+		t.Fatalf("registration=%+v", registration)
+	}
+	projected, err := pass.Project(plan)
+	if err != nil || projected != plan.FuturePythonPrelude() {
+		t.Fatalf("projection changed direct prelude: err=%v", err)
+	}
+}
 
 func TestCapabilitySpecCanonicalizationAndPlanIdentity(t *testing.T) {
 	first := capability.NewRegistry()

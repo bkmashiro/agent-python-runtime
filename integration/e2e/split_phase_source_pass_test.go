@@ -80,7 +80,7 @@ func TestRealGuestCapabilityFuturesOverlapWithoutAnalyzer(t *testing.T) {
 
 	maxActive.Store(0)
 	treatmentStarted := time.Now()
-	treatment, err := runner.Run(context.Background(), request, plan.FuturePythonPrelude())
+	treatment, err := runner.Run(context.Background(), request, futurePassPrelude(t, plan))
 	treatmentDuration := time.Since(treatmentStarted)
 	if err != nil {
 		t.Fatal(err)
@@ -139,7 +139,7 @@ func TestRealGuestCapabilityFutureDrainsUnobservedWrite(t *testing.T) {
 	request, _ := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
 		RunID: "future-write-e2e", Code: "fixture.write(\"value\")\nresult = \"done\"\n", Inputs: json.RawMessage(`{}`),
 	})
-	payload, err := runner.Run(context.Background(), request, plan.FuturePythonPrelude())
+	payload, err := runner.Run(context.Background(), request, futurePassPrelude(t, plan))
 	result, decodeErr := decodeSuccessfulGuestResult(payload)
 	if err != nil || decodeErr != nil || string(result) != `"done"` || writes.Load() != 1 {
 		t.Fatalf("result=%s writes=%d decode_err=%v err=%v payload=%s", result, writes.Load(), decodeErr, err, payload)
@@ -199,7 +199,7 @@ func TestRealGuestCapabilityFutureDrainsAfterEarlierError(t *testing.T) {
 		Code:   "fixture.write(\"error\")\nfixture.write(\"ok\")\nresult = \"done\"\n",
 		Inputs: json.RawMessage(`{}`),
 	})
-	payload, runErr := runner.Run(context.Background(), request, plan.FuturePythonPrelude())
+	payload, runErr := runner.Run(context.Background(), request, futurePassPrelude(t, plan))
 	var response struct {
 		Status string `json:"status"`
 		Error  *struct {
@@ -269,7 +269,7 @@ func TestRealGuestCapabilityFutureMaterializesAnyJSONResultShape(t *testing.T) {
 		Code:   "scalar = fixture.value(\"scalar\")\narray = fixture.value(\"array\")\nnone = fixture.value(\"null\")\nresult = [scalar, array, none]\n",
 		Inputs: json.RawMessage(`{}`),
 	})
-	payload, runErr := runner.Run(context.Background(), request, plan.FuturePythonPrelude())
+	payload, runErr := runner.Run(context.Background(), request, futurePassPrelude(t, plan))
 	result, decodeErr := decodeSuccessfulGuestResult(payload)
 	if runErr != nil || decodeErr != nil || string(result) != `[7,[1,2],null]` {
 		t.Fatalf("result=%s decode_err=%v run_err=%v payload=%s", result, decodeErr, runErr, payload)
@@ -318,7 +318,7 @@ func TestRealGuestCapabilityFuturesUseWholePlanCallBudget(t *testing.T) {
 		Code:   "a = fixture.read()\nb = fixture.read()\nc = fixture.read()\nd = fixture.read()\ne = fixture.read()\nresult = [a, b, c, d, e]\n",
 		Inputs: json.RawMessage(`{}`),
 	})
-	payload, runErr := runner.Run(context.Background(), request, plan.FuturePythonPrelude())
+	payload, runErr := runner.Run(context.Background(), request, futurePassPrelude(t, plan))
 	_, decodeErr := decodeSuccessfulGuestResult(payload)
 	if runErr != nil || decodeErr != nil || calls.Load() != 5 {
 		t.Fatalf("calls=%d decode_err=%v run_err=%v payload=%s", calls.Load(), decodeErr, runErr, payload)
@@ -652,6 +652,27 @@ func splitPhaseE2EPlan(t *testing.T, maxCalls uint32, handler capability.Handler
 		t.Fatal(err)
 	}
 	return plan
+}
+
+func futurePassPrelude(t *testing.T, plan *capability.Plan) string {
+	t.Helper()
+	pass, err := capability.NewFutureProjectionPass()
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := passplugin.New(pass)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err = registry.Enable(passregistration.CapabilityFutureProjection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prelude, err := registry.ProjectPlan(passregistration.CapabilityFutureProjection, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return prelude
 }
 
 func splitPhaseCallID(source string, index int) string {

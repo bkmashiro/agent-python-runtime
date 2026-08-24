@@ -10,17 +10,19 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 )
 
-const OutcomeRecordSchemaVersion = "pysolate.source-bound-pass-outcome.v1"
+const OutcomeRecordSchemaVersion = "pysolate.stage-aware-pass-outcome.v2"
 
 type Stage = passregistration.Stage
 type Outcome string
 type RejectionReason string
 
 const (
+	StagePlanProjection     = passregistration.StagePlanProjection
 	StagePrefixOverlay      = passregistration.StagePrefixOverlay
 	StageHybridPreparePatch = passregistration.StageHybridPreparePatch
 	StageWholeProgramPatch  = passregistration.StageWholeProgramPatch
 	StageMultiProgramPatch  = passregistration.StageMultiProgramPatch
+	StageRunBinding         = passregistration.StageRunBinding
 
 	OutcomeApplied               Outcome = "applied"
 	OutcomeDiscarded             Outcome = "discarded"
@@ -171,6 +173,10 @@ func New(entries []Entry, limits Limits) (*Pipeline, error) {
 
 func (pipeline *Pipeline) AllOff() bool { return pipeline == nil || pipeline.allOff }
 
+func (pipeline *Pipeline) RecordPlanProjection(input RecordInput) (OutcomeRecord, error) {
+	return pipeline.record(StagePlanProjection, input)
+}
+
 func (pipeline *Pipeline) RecordPrefixOverlay(input RecordInput) (OutcomeRecord, error) {
 	return pipeline.record(StagePrefixOverlay, input)
 }
@@ -185,6 +191,10 @@ func (pipeline *Pipeline) RecordWholeProgramPatch(input RecordInput) (OutcomeRec
 
 func (pipeline *Pipeline) RecordMultiProgramPatch(input RecordInput) (OutcomeRecord, error) {
 	return pipeline.record(StageMultiProgramPatch, input)
+}
+
+func (pipeline *Pipeline) RecordRunBinding(input RecordInput) (OutcomeRecord, error) {
+	return pipeline.record(StageRunBinding, input)
 }
 
 func (pipeline *Pipeline) Records() []OutcomeRecord {
@@ -250,14 +260,24 @@ func (pipeline *Pipeline) record(stage Stage, input RecordInput) (OutcomeRecord,
 func recordOutcomeKey(entry Entry, input RecordInput) (string, error) {
 	occurrenceID := input.Bindings[passregistration.OccurrenceID]
 	regionID := input.Bindings[passregistration.RegionID]
-	if occurrenceID == "" && regionID == "" {
+	planID := input.Bindings[passregistration.CapabilityPlanSHA256]
+	runID := input.Bindings[passregistration.RunIdentitySHA256]
+	if occurrenceID == "" && regionID == "" && planID == "" {
 		return "", ErrInvalidRecord
 	}
-	return string(entry.Registration.Name()) + "\x00" + string(entry.Stage) + "\x00" + occurrenceID + "\x00" + regionID, nil
+	return string(entry.Registration.Name()) + "\x00" + string(entry.Stage) + "\x00" + occurrenceID + "\x00" + regionID + "\x00" + planID + "\x00" + runID, nil
 }
 
 func validateInput(registration passregistration.Registration, input RecordInput, limits Limits) error {
-	if input.PassName != registration.Name() || !digestPattern.MatchString(input.OriginalSourceSHA256) || !digestPattern.MatchString(input.OriginalASTSHA256) {
+	if input.PassName != registration.Name() {
+		return ErrInvalidRecord
+	}
+	sourceBound := registration.Consumer() == passregistration.OverlayOnly || registration.Consumer() == passregistration.ExecutionPatch
+	if sourceBound {
+		if !digestPattern.MatchString(input.OriginalSourceSHA256) || !digestPattern.MatchString(input.OriginalASTSHA256) {
+			return ErrInvalidRecord
+		}
+	} else if input.OriginalSourceSHA256 != "" || input.OriginalASTSHA256 != "" || input.DerivedSourceSHA256 != "" || input.DerivedASTSHA256 != "" {
 		return ErrInvalidRecord
 	}
 	if input.Outcome == OutcomeApplied || input.Outcome == OutcomePreparedAwaitingFinal {
@@ -296,10 +316,12 @@ func validateInput(registration passregistration.Registration, input RecordInput
 	if err := validateBindings(registration, input.Bindings); err != nil {
 		return err
 	}
-	if input.Bindings[passregistration.SourceSHA256] != input.OriginalSourceSHA256 ||
+	if input.Bindings[passregistration.PassConfigSHA256] != registration.ConfigSHA256() {
+		return ErrBindingMismatch
+	}
+	if sourceBound && (input.Bindings[passregistration.SourceSHA256] != input.OriginalSourceSHA256 ||
 		input.Bindings[passregistration.ASTSHA256] != input.OriginalASTSHA256 ||
-		input.Bindings[passregistration.AnalyzerSHA256] != registration.AnalyzerSHA256() ||
-		input.Bindings[passregistration.PassConfigSHA256] != registration.ConfigSHA256() {
+		input.Bindings[passregistration.AnalyzerSHA256] != registration.AnalyzerSHA256()) {
 		return ErrBindingMismatch
 	}
 	if input.Usage.DerivedSourceBytes > input.Usage.OriginalSourceBytes &&
@@ -338,13 +360,18 @@ func validateBindings(registration passregistration.Registration, values map[pas
 }
 
 func validStageForConsumer(stage Stage, consumer passregistration.Consumer) bool {
-	if consumer == passregistration.OverlayOnly {
+	switch consumer {
+	case passregistration.OverlayOnly:
 		return stage == StagePrefixOverlay
-	}
-	if consumer == passregistration.ExecutionPatch {
+	case passregistration.ExecutionPatch:
 		return stage == StageHybridPreparePatch || stage == StageWholeProgramPatch || stage == StageMultiProgramPatch
+	case passregistration.PlanProjection:
+		return stage == StagePlanProjection
+	case passregistration.RunBinding:
+		return stage == StageRunBinding
+	default:
+		return false
 	}
-	return false
 }
 
 func validOutcome(stage Stage, outcome Outcome) bool {
@@ -353,7 +380,7 @@ func validOutcome(stage Stage, outcome Outcome) bool {
 		return outcome == OutcomeApplied || outcome == OutcomeDiscarded || outcome == OutcomeRejected
 	case StageHybridPreparePatch:
 		return outcome == OutcomeApplied || outcome == OutcomeDiscarded || outcome == OutcomePreparedAwaitingFinal || outcome == OutcomeRejected
-	case StageWholeProgramPatch, StageMultiProgramPatch:
+	case StageWholeProgramPatch, StageMultiProgramPatch, StagePlanProjection, StageRunBinding:
 		return outcome == OutcomeApplied || outcome == OutcomeRejected
 	default:
 		return false

@@ -146,6 +146,9 @@ func NewSemanticPreDispatchTreatment(config SemanticPreDispatchTreatmentConfig) 
 	config.RunConfig.Mechanisms.PreparedRuntime = false
 	config.RunConfig.Mechanisms.MemoryCOW = false
 	config.RunConfig.Mechanisms.SemanticPreDispatch = false
+	if _, _, err := config.Passes.ApplyRunConfig(config.RunConfig); err != nil {
+		return nil, err
+	}
 	return &SemanticPreDispatchTreatment{config: config}, nil
 }
 

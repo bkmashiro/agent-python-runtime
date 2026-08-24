@@ -2,6 +2,7 @@ package semanticspeculation
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -25,6 +26,14 @@ func TestEagerTreatmentRejectsCatalogWithoutStreamingPass(t *testing.T) {
 	}
 }
 
+func TestEagerTreatmentRejectsUnmigratedOptimizationFlagBeforeBegin(t *testing.T) {
+	config := eagerTreatmentPassConfig(t)
+	config.RunConfig.Mechanisms.FunctionCache = true
+	if _, err := NewEagerGuestTreatment(config); !errors.Is(err, passplugin.ErrDirectOptimizationSelection) {
+		t.Fatalf("unmigrated EAGER optimization error=%v", err)
+	}
+}
+
 func TestSemanticTreatmentRejectsCatalogWithoutPreDispatchPass(t *testing.T) {
 	passes, err := passplugin.NewDefaultUnifiedCatalog()
 	if err != nil {
@@ -44,6 +53,25 @@ func TestSemanticTreatmentRejectsAnalyzerPreparationMismatch(t *testing.T) {
 	config.RunConfig.Mechanisms.PreparedRuntime = true
 	if _, err := NewSemanticPreDispatchTreatment(config); err == nil {
 		t.Fatal("semantic treatment silently dropped requested prepared analyzer pass")
+	}
+}
+
+func TestSemanticTreatmentRejectsUnmigratedOptimizationFlagBeforeBegin(t *testing.T) {
+	config := semanticTreatmentPassConfig(t)
+	config.RunConfig.Mechanisms.FunctionCache = true
+	if _, err := NewSemanticPreDispatchTreatment(config); !errors.Is(err, passplugin.ErrDirectOptimizationSelection) {
+		t.Fatalf("unmigrated semantic optimization error=%v", err)
+	}
+}
+
+func eagerTreatmentPassConfig(t *testing.T) EagerGuestTreatmentConfig {
+	t.Helper()
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.Streaming = true
+	return EagerGuestTreatmentConfig{
+		Artifact: []byte{1}, RunConfig: config, Plan: emptyTreatmentPlan(t),
+		BrokerFactory: func(context.Context) (*capability.Broker, error) { return nil, nil },
+		RunID:         "eager-pass-selection", WorkspaceRoot: t.TempDir(), WorkspaceOwner: "owner",
 	}
 }
 

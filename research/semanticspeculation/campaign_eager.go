@@ -80,6 +80,9 @@ func NewEagerGuestTreatment(config EagerGuestTreatmentConfig) (*EagerGuestTreatm
 		return nil, errors.Join(errors.New("EAGER Guest treatment requires source_streaming_execution pass"), err)
 	}
 	config.RunConfig.Mechanisms.Streaming = false
+	if _, _, err := config.Passes.ApplyRunConfig(config.RunConfig); err != nil {
+		return nil, err
+	}
 	return &EagerGuestTreatment{config: config}, nil
 }
 

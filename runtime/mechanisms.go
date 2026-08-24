@@ -101,9 +101,6 @@ func (set MechanismSet) Validate() error {
 	if set.SplitPhaseCalls && set.SemanticPreDispatch {
 		return ErrInvalidMechanismSet
 	}
-	if set.ValueSlots && !set.SemanticAnalysis {
-		return ErrInvalidMechanismSet
-	}
 	if set.ChildFanout && (!set.Streaming || !set.ImmutableBranches) {
 		return ErrInvalidMechanismSet
 	}

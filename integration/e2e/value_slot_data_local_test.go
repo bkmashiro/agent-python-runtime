@@ -26,6 +26,8 @@ import (
 
 const dataLocalSource = "import io\nimport numpy as np\ndataset = np.load(io.BytesIO(open('/workspace/input.npy', 'rb').read()), allow_pickle=False)\nresult = int(dataset.sum())\n"
 
+const directPreparedValueSource = "result = prepared_value\n"
+
 func TestDataLocalNumpySumRejectsUnattestedScalarBeforeGuest(t *testing.T) {
 	artifact, profile := numpyCoreGuest(t)
 	object, err := valueslot.NewPreparedObject(valueslot.KindJSONScalar, []byte("0"), "numpy-int64-sum-v1", valueslot.CanonicalNumpyInt64FileSHA256, "private-cohort")
@@ -253,18 +255,21 @@ func TestSharedImmutableObjectFeedsFreshIsolatedGuestConsumers(t *testing.T) {
 		}
 		identities = append(identities, table.BackingIdentity("slot-bytes"))
 		config := runtimeconfig.DefaultRunConfig()
-		config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, ValueSlots: true}
+		config.Mechanisms = runtimeconfig.MechanismSet{ValueSlots: true}
 		runner, createErr := (wazeroengine.Factory{ValueSlots: table}).New(context.Background(), artifact, config)
 		if createErr != nil {
 			t.Fatal(createErr)
 		}
-		code := "result = prepared_blob.hex()"
+		code := "result = prepared_value.hex()"
 		if index == 0 {
-			code = "prepared_blob[0] = 88\nresult = prepared_blob.hex()"
+			code = "prepared_value[0] = 88\nresult = prepared_value.hex()"
 		}
 		request := runtimeconfig.RunRequest{RunID: fmt.Sprintf("shared-consumer-%d", index), Code: code, Inputs: json.RawMessage(`{}`)}
 		raw, _ := runtimeconfig.EncodeRunRequest(request)
-		prepare := "import _agent_runtime_host\n_raw_slot = _agent_runtime_host.materialize_slot('slot-bytes')\nif _raw_slot[:1] != b'\\x02': raise RuntimeError('wrong value-slot strategy')\nprepared_blob = bytearray(_raw_slot[1:])\n"
+		prepare, prepareErr := valueslot.PythonPrelude("slot-bytes")
+		if prepareErr != nil {
+			t.Fatal(prepareErr)
+		}
 		response, runErr := runner.Run(context.Background(), raw, prepare)
 		closeErr := runner.Close(context.Background())
 		if runErr != nil || closeErr != nil {
@@ -424,6 +429,105 @@ func TestDataLocalNumpySumMatchedEndToEnd(t *testing.T) {
 	t.Logf("data-local matched evidence: baseline_ns=%v treatment_ns=%v baseline_median_ns=%d treatment_median_ns=%d ratio=%.6f disposition=%s fixture_bytes=%d host_to_guest_bytes=%v guest_peak_memory=unavailable", durationsNanos(baselineDurations), durationsNanos(treatmentDurations), baselineMedian.Nanoseconds(), treatmentMedian.Nanoseconds(), float64(treatmentMedian)/float64(baselineMedian), disposition, len(fixture), treatmentCopiedBytes)
 }
 
+func TestDirectPreparedNumpySumMatchedEndToEnd(t *testing.T) {
+	artifact, profile := numpyCoreGuest(t)
+	fixture := preparedfixture.CanonicalFixture()
+	workspaceRoot := t.TempDir()
+	if err := os.Chmod(workspaceRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := workspace.NewManager(workspaceRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	ref, err := manager.Create([]workspace.InitialFile{{Path: "input.npy", Data: fixture}}, workspace.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	producerStarted := time.Now()
+	table, err := valueslot.NewCanonicalNumpyInt64SumTable(fixture, "private-cohort")
+	if err != nil {
+		t.Fatal(err)
+	}
+	producerDuration := time.Since(producerStarted)
+	prelude, err := valueslot.PythonPrelude("slot-numpy-sum-v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	baselineConfig := runtimeconfig.DefaultRunConfig()
+	baselineConfig.Timeout = 90 * time.Second
+	baselineConfig.ExecutionProfile = profile
+	baselineConfig.Mechanisms = runtimeconfig.MechanismSet{PrivateWorkspace: true}
+	baselineRunner, err := (wazeroengine.Factory{
+		WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "direct-value-slot-baseline",
+	}).New(context.Background(), artifact, baselineConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer baselineRunner.Close(context.Background())
+
+	treatmentConfig := runtimeconfig.DefaultRunConfig()
+	treatmentConfig.Timeout = 90 * time.Second
+	treatmentConfig.ExecutionProfile = profile
+	treatmentConfig.Mechanisms = runtimeconfig.MechanismSet{ValueSlots: true}
+	treatmentRunner, err := (wazeroengine.Factory{ValueSlots: table}).New(context.Background(), artifact, treatmentConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer treatmentRunner.Close(context.Background())
+	treatmentEngine := trustedSemanticRunner(t, treatmentRunner)
+
+	var baselineDurations, treatmentDurations []time.Duration
+	for index := 0; index < 5; index++ {
+		baselineRequest := dataLocalRunRequest(t, fmt.Sprintf("direct-value-slot-baseline-%d", index))
+		baselineRaw, encodeErr := runtimeconfig.EncodeRunRequest(baselineRequest)
+		if encodeErr != nil {
+			t.Fatal(encodeErr)
+		}
+		treatmentRequest := directPreparedValueRunRequest(fmt.Sprintf("direct-value-slot-treatment-%d", index))
+		treatmentRaw, encodeErr := runtimeconfig.EncodeRunRequest(treatmentRequest)
+		if encodeErr != nil {
+			t.Fatal(encodeErr)
+		}
+
+		runBaseline := func() {
+			started := time.Now()
+			response, runErr := baselineRunner.Run(context.Background(), baselineRaw, "")
+			baselineDurations = append(baselineDurations, time.Since(started))
+			assertDataLocalResult(t, baselineRequest, response, runErr)
+		}
+		runTreatment := func() {
+			started := time.Now()
+			response, runErr := treatmentRunner.Run(context.Background(), treatmentRaw, prelude)
+			treatmentDurations = append(treatmentDurations, time.Since(started))
+			assertDataLocalResult(t, treatmentRequest, response, runErr)
+			if evidence := treatmentEngine.ValueSlotEvidence(); evidence.Claims != 1 || evidence.CopiedBytes != 12 || evidence.Discarded != 0 || !evidence.Closed {
+				t.Fatalf("value-slot evidence=%+v", evidence)
+			}
+		}
+		if index%2 == 0 {
+			runBaseline()
+			runTreatment()
+		} else {
+			runTreatment()
+			runBaseline()
+		}
+	}
+
+	baselineMedian := medianDuration(baselineDurations)
+	treatmentMedian := medianDuration(treatmentDurations)
+	if lifecycle := treatmentEngine.SemanticAnalysisLifecycleEvidence(); lifecycle.Invocations != 0 || lifecycle.ModuleInstantiations != 0 {
+		t.Fatalf("direct value-slot lane constructed analyzer: %+v", lifecycle)
+	}
+	if treatmentMedian >= baselineMedian {
+		t.Fatalf("direct prepared value did not improve complete Run latency: baseline=%v treatment=%v", baselineDurations, treatmentDurations)
+	}
+	t.Logf("direct prepared value evidence: baseline_ns=%v treatment_ns=%v baseline_median_ns=%d treatment_median_ns=%d ratio=%.6f producer_ns=%d fixture_bytes=%d host_to_guest_bytes=12 analyzer_invocations=0", durationsNanos(baselineDurations), durationsNanos(treatmentDurations), baselineMedian.Nanoseconds(), treatmentMedian.Nanoseconds(), float64(treatmentMedian)/float64(baselineMedian), producerDuration.Nanoseconds(), len(fixture))
+}
+
 func durationsNanos(values []time.Duration) []int64 {
 	result := make([]int64, len(values))
 	for index, value := range values {
@@ -462,6 +566,13 @@ func dataLocalRunRequest(t *testing.T, runID string) runtimeconfig.RunRequest {
 	return runtimeconfig.RunRequest{
 		RunID: runID, Code: dataLocalSource, Inputs: json.RawMessage(`{}`),
 		Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: "numpy-core", Imports: []string{"io", "numpy"}},
+	}
+}
+
+func directPreparedValueRunRequest(runID string) runtimeconfig.RunRequest {
+	return runtimeconfig.RunRequest{
+		RunID: runID, Code: directPreparedValueSource, Inputs: json.RawMessage(`{}`),
+		Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: "numpy-core", Imports: []string{}},
 	}
 }
 

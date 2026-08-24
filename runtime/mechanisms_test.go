@@ -28,6 +28,12 @@ func TestFutureCallsDoNotRequireSemanticAnalyzer(t *testing.T) {
 	}
 }
 
+func TestValueSlotsDoNotRequireSemanticAnalyzer(t *testing.T) {
+	if err := (runtime.MechanismSet{ValueSlots: true}).Validate(); err != nil {
+		t.Fatalf("direct ValueSlots unexpectedly require an analyzer: %v", err)
+	}
+}
+
 func TestMechanismDependenciesFailClosed(t *testing.T) {
 	tests := []struct {
 		name string
@@ -37,7 +43,6 @@ func TestMechanismDependenciesFailClosed(t *testing.T) {
 		{"staged observation without streaming", runtime.MechanismSet{StagedObservation: true}},
 		{"semantic pre-dispatch without analysis", runtime.MechanismSet{SemanticPreDispatch: true, StagedObservation: true}},
 		{"semantic pre-dispatch without staged observation", runtime.MechanismSet{SemanticPreDispatch: true, SemanticAnalysis: true}},
-		{"value slots without semantic analysis", runtime.MechanismSet{ValueSlots: true}},
 		{"fanout without streaming", runtime.MechanismSet{ImmutableBranches: true, ChildFanout: true}},
 		{"fanout without branches", runtime.MechanismSet{Streaming: true, ChildFanout: true}},
 		{"function cache without branches", runtime.MechanismSet{FunctionCache: true}},

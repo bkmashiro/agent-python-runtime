@@ -1,6 +1,6 @@
 # Correctness-Gated Source-Bound Agent Python Optimizer Autonomous Mega-Goal
 
-> **Historical/completed roadmap:** Do not resume this file. Its planned runtime
+> **Historical/completed roadmap:** Do not resume this file. Its completed experimental
 > successor is the
 > [Host-Scheduled Calls and Immutable Value Reuse Mega-Goal](2026-08-24-host-scheduled-python-reuse-autonomous-megagoal.md),
 > which starts from the negative scalar-pass results and targets high-latency calls,

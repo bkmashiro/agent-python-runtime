@@ -321,12 +321,12 @@ claiming concurrency benefit.
   explicit terminal states and deterministic close/discard.
 - [x] Add Guest/Host helpers keyed by a source-bound decision and dynamic occurrence;
   no Agent-visible token or public Python API.
-- [ ] Keep submit and materialize adjacent. Prove value, exception, Broker budget,
+- [x] Keep submit and materialize adjacent. Prove value, exception, Broker budget,
   receipt, Plan/freshness/privacy/workspace and cleanup equivalence against the original
   synchronous call.
 - [x] Reject writes, mutable argument capture, introspection, loops and unsupported control
   in v1 rather than generalizing early.
-- [ ] Prove all-off and pre-effect failure select the unchanged path; no fallback replays a
+- [x] Prove all-off and pre-effect failure select the unchanged path; no fallback replays a
   possibly started external effect.
 
 **Gate P1:** Adjacent lowering is semantically equivalent and independently removable.
@@ -338,22 +338,22 @@ what later overlap requires.
 **Promise:** Overlap physical latency while preserving the original dynamic Python
 occurrences and exception-visible order.
 
-- [ ] Add RED fixtures for two or more independent qualified calls followed by source-order
+- [x] Add RED fixtures for two or more independent qualified calls followed by source-order
   uses, including first-call failure and later prepared success/failure.
-- [ ] Hoist a submit only after its arguments are available. Normally the Python path must
+- [x] Hoist a submit only after its arguments are available. Normally the Python path must
   already be active; a later qualified pure/immutable read may be staged before an earlier
   materialization only under the explicit physical-only contract, then discarded if
   Python never reaches its logical occurrence.
-- [ ] Sink materialization only across a proven local region with no mutation, external
+- [x] Sink materialization only across a proven local region with no mutation, external
   effect, exception-timing change, namespace/frame/source introspection or observable use.
-- [ ] Add a bounded Host ready queue and concurrency/provider budget. Do not add a planner
+- [x] Add a bounded Host ready queue and concurrency/provider budget. Do not add a planner
   or static workflow DAG.
-- [ ] Store early failures and raise them at the allowed materialization point. Cancel or
+- [x] Store early failures and raise them at the allowed materialization point. Cancel or
   discard later physical work when Python would not reach its logical occurrence.
-- [ ] Record one physical timeline and one logical occurrence timeline; prove no invented,
+- [x] Record one physical timeline and one logical occurrence timeline; prove no invented,
   dropped or reordered logical calls.
-- [ ] Benchmark matched one-call, two-call and N-call cases, including scheduler overhead
-  when latency is too small to repay it.
+- [-] Stop at the preregistered matched two-call economic gate: exact treatment was 194.39%
+  slower after complete costs. Do not spend further Guest builds on one/N widening.
 
 **Gate P2:** At least one preregistered latency-dominated case improves end-to-end time and
 all semantic controls pass. If overlap is economically negative, retain the correctness
@@ -363,18 +363,18 @@ result as Experimental/off and do not widen the scheduler.
 
 **Promise:** Let Python remain the controller while the Host handles actual pending events.
 
-- [ ] Extend only the proven forms needed by real fixtures: branch-local calls, bounded
+- [x] Extend only the proven forms needed by real fixtures: branch-local calls, bounded
   loops or direct dependent calls. Reject forms not required by the selected workload.
-- [ ] Allocate dynamic occurrence identities at runtime; a static source occurrence alone
+- [x] Allocate dynamic occurrence identities at runtime; a static source occurrence alone
   must not merge loop iterations.
-- [ ] Preserve zero-iteration behavior, first failing iteration, `try`/`except` timing,
+- [x] Preserve zero-iteration behavior, first failing iteration, `try`/`except` timing,
   cancellation and deadline propagation.
-- [ ] Admit a dependent call only when its arguments exist. Do not represent unresolved
-  Python expressions in a Host dataflow DSL.
-- [ ] Reconcile any overlap with existing `semantic_pre_dispatch`: reuse the two-ledger
+- [x] Leave dependent calls rejected; no unresolved Python expression enters a Host
+  dataflow representation.
+- [x] Reconcile overlap with existing `semantic_pre_dispatch`: reuse the two-ledger
   occurrence/claim model where it fits, but do not force prefix speculation and final
   split-phase calls through one callback.
-- [ ] Add deterministic teardown evidence for ready, failed, cancelled, late and unclaimed
+- [x] Add deterministic teardown evidence for ready, failed, cancelled, late and unclaimed
   entries.
 
 **Gate P3:** The Host event graph contains only actual dynamic call/value events and does
@@ -391,12 +391,12 @@ cross-Run object reuse.
 - [x] Define `ValueSlot`/consumer declarations with only fields needed for correctness:
   source/dynamic occurrence, producer/input identity, value kind/size, immutability,
   privacy, claim policy and bounds.
-- [ ] Prove scalar and bounded immutable bytes/blob materialization through fresh Guests.
+- [x] Prove scalar and bounded immutable bytes/blob materialization through fresh Guests.
 - [x] Put inline/copy/data-local/existing private-COW choice behind a Host materializer;
   passes cannot select OS/Wazero mechanics.
 - [x] Preserve single-use and multi-consumer lifecycle explicitly. A multi-consumer object
   does not merge logical Run/call outcomes.
-- [ ] Measure transfer, allocation and cleanup costs before considering a page-composed
+- [x] Measure transfer, allocation and cleanup costs before considering a page-composed
   arena or producer-page ownership transfer.
 
 **Gate P4:** Two materially different value types use the same small semantic slot
@@ -417,10 +417,10 @@ DataOp optimizer.
   projection/predicate pushdown or one data-local scalar reduction.
 - [x] Keep arbitrary Pandas/Polars operations opaque. No generic operator graph or
   framework appears.
-- [ ] Measure physical bytes read/returned, Host-to-Guest bytes, Guest peak memory and
+- [x] Measure physical bytes read/returned, Host-to-Guest bytes, Guest peak memory and
   end-to-end latency against unchanged source.
-- [ ] Reject or leave default-off if the intended physical cost does not improve after all
-  overhead.
+- [-] Reject the fixed pass after the exact matched treatment was 7.70% slower. Keep it
+  default-off; Guest peak memory was unavailable and is recorded rather than inferred.
 
 **Gate P5:** One fixed high-frequency pattern either has retained end-to-end benefit under
 an exact adapter law or is closed as a truthful no-go. Completion does not require adding
@@ -433,19 +433,19 @@ logical consumer outcomes.
 
 - [x] Define one expensive deterministic producer family with explicit input revision,
   implementation identity, privacy partition, size bound and mutation rejection.
-- [ ] Add RED tests for two fresh Runs/agents requesting the same producer, near misses,
-  changed revision/implementation/privacy, failed producer, cancelled consumer, consumer
-  mutation and independent workspace/result disposition.
-- [ ] Materialize one sealed Host value once and provide fresh consumers through bounded
+- [-] Stop the expensive NPY producer lane before widening its matrix: the existing 240-run,
+  40-cell campaign had zero break-even cells. Small-object tests still cover changed
+  revision/implementation/privacy, mutation isolation and independent disposition.
+- [x] Materialize one sealed Host value once and provide fresh consumers through bounded
   copy, existing private COW or data-local computation selected by the Host.
 - [x] Preserve separate Run identities, Plans, Broker budgets/receipts and terminal facts.
   Sharing physical bytes must not invent one shared logical Python call.
-- [ ] Add a small cost policy based on measured producer cost, value size, consumer count,
-  transfer cost and, for COW, dirty behavior. Do not build a general cache service.
-- [ ] Prove deterministic cleanup when producer or any consumer fails/cancels and when a
+- [-] Do not add a cache cost policy after the preregistered cohort remained negative; the
+  explicit producer/input/privacy/consumer bounds are sufficient for the semantic seam.
+- [x] Prove deterministic cleanup when producer or any consumer fails/cancels and when a
   value is never claimed.
-- [ ] Compare recompute, copy, COW/data-local and shared-value treatments on the same fresh
-  Run cohort.
+- [-] Reuse the existing matched recompute/copy/private-COW campaign; no new treatment was
+  justified after all 40 economic cells were negative.
 
 **Gate P6:** At least one preregistered expensive immutable producer shows positive
 end-to-end cohort value while every consumer remains fresh and isolated. If reuse is
@@ -457,14 +457,14 @@ needs it; otherwise close it as Experimental/no-go.
 **Promise:** Compose only mechanisms that survived independently; do not create a general
 optimizer manager.
 
-- [ ] Test split-phase calls with the retained data pass and/or shared intermediate without
-  changing logical occurrence and exception behavior.
-- [ ] Add static, explicit ordering only if two retained passes actually conflict or depend
+- [-] No performance pass survived independently and no admitted workload uses both fixed
+  patterns; a composed mode is therefore not applicable.
+- [x] Add no ordering layer because no retained passes conflict or depend
   on each other. Otherwise keep independent selection.
-- [ ] Use observable workload/cost facts to reject cheap or low-incidence transformations
+- [x] Use observable workload/cost facts to reject cheap or low-incidence transformations
   before provisioning scratch Guests or large materializers.
-- [ ] Test all-off, each-pass-only and admitted composed modes against the same baseline.
-- [ ] Confirm no default CLI/HTTP behavior changes and each mechanism can be disabled or
+- [-] All-off and each-pass-only modes were matched; no composed mode was admitted.
+- [x] Confirm no default CLI/HTTP behavior changes and each mechanism can be disabled or
   deleted independently.
 
 **Gate P7:** Composition produces additional measured value or simpler execution without
@@ -573,9 +573,10 @@ completion.
 
 ## Current execution pointer
 
-`Phase 1: the bounded Host table, default-off mechanism, exact-Guest source transform and
-Guest/Host helper code pass local unit/package gates. Build a new exact Guest artifact from
-the implementation commit, then run adjacent/overlap/failure E2E before closing P1/P2.`
+`Phase 8: exact-Guest semantic gates pass. Split-phase source lowering is rejected after a
+194.39% slowdown; fixed NumPy data-local reduction is rejected after a 7.70% slowdown;
+cross-Run cache widening and pass composition are closed no-go. Complete independent review,
+global gates, signed push and final clean-state verification.`
 
 ## Completion log
 
@@ -591,6 +592,18 @@ the implementation commit, then run adjacent/overlap/failure E2E before closing 
   `split_phase_sources_read` pass and hidden Guest/Host helper ABI. Capability table,
   runtime/source-pass/engine packages and 178 Guest unit tests pass. Exact rebuilt-Guest
   E2E remains open.
+- 2026-08-24: Phases 1-3 exact semantic checkpoint. Artifact
+  `sha256:09aa6bebea5d1767acd730bb73159ff405c443af47b95d7ba99609defdfe703e`
+  from `1bcec51f1c1770c09680fdcf761270ae8296b9ee` passed dynamic branch/loop
+  activation, source-ordered receipts, first-failure discard and fresh-Run teardown. The
+  five-repetition split-phase treatment was 194.39% slower, so scheduler widening and the
+  source-pass performance claim are rejected.
+- 2026-08-24: Phases 4-7 closed. Exact fresh Guests passed scalar/private-byte slots and
+  isolated consumers of one physical immutable object. The fixed 8,388,736-byte NumPy sum
+  adapter copied 12 bytes per result but was 7.70% slower, so the pass is rejected. Existing
+  240-run/40-cell reuse evidence had zero break-even cells; no cache policy, composed mode,
+  pass manager, DataOp graph or new public API was added. Evidence is frozen in
+  `docs/evidence/host-scheduled-reuse-e2e-v1.json`.
 
 ## Short `/goal`
 

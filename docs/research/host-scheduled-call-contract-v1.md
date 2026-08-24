@@ -1,6 +1,6 @@
 # Host-scheduled synchronous calls contract v1
 
-Status: **Implemented Experimental, default-off; exact-Guest economics pending**
+Status: **Exact-Guest verified, Experimental/default-off; overlap source pass rejected on cost**
 
 Baseline source: `fde07939f3d1865a83bfb59b16a3ac16abf46e8f`
 
@@ -234,6 +234,19 @@ expected speedup. Phase 2 remains Experimental and default-off unless:
 
 A correct slowdown closes the performance claim and stops scheduler expansion; it is not a
 reason to add batching, a planner or a richer IR.
+
+The exact `numpy-core` Guest built from `1bcec51f1c1770c09680fdcf761270ae8296b9ee`
+proved two physical calls overlap with two source-ordered Broker receipts, dynamic branch
+and loop activation, first-failure discard and cancellation/join behavior. Five matched
+two-call repetitions nevertheless measured a `2,567,356,750 ns` baseline median and a
+`7,558,074,834 ns` treatment median. Including source analysis, both fresh Guests,
+scheduling, materialization and cleanup made treatment **194.39% slower**.
+
+Therefore Phase 1 keeps only the independently removable hidden ABI/table correctness seam,
+Experimental and default-off. The `split_phase_sources_read` source pass is rejected for
+promotion, Phase 2 scheduler widening stops, and the synthetic fixture is not presented as
+representative workload evidence. The frozen numbers and exact artifact identity are in
+[`host-scheduled-reuse-e2e-v1.json`](../evidence/host-scheduled-reuse-e2e-v1.json).
 
 The fixed data-local candidate separately reports source bytes read, Host-to-Guest bytes,
 Guest peak memory where available, exact result/error parity and complete Run latency. The

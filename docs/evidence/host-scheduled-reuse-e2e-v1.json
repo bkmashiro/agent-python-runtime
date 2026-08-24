@@ -1,0 +1,118 @@
+{
+  "composition": {
+    "decision": "not_applicable_no_joint_admitted_workload",
+    "generic_pass_manager_added": false
+  },
+  "cross_run_reuse": {
+    "break_even_cells": 0,
+    "decision": "no durable cache, automatic reuse policy, or production promotion",
+    "economic_campaign": "reject",
+    "existing_campaign_records": 240,
+    "matched_cells": 40,
+    "semantic_mechanism": "pass"
+  },
+  "data_local_numpy_int64_sum": {
+    "baseline_median_ns": 4709831166,
+    "baseline_ns": [
+      4709012750,
+      4638671959,
+      4812602542,
+      4709831166,
+      4771433208
+    ],
+    "cost_scope": [
+      "workspace read",
+      "fixture validation",
+      "Host reduction",
+      "slot construction",
+      "fresh execution Guest",
+      "materialization",
+      "response validation",
+      "cleanup"
+    ],
+    "decision": "reject pass promotion; exact fixed adapter is correct but slower at this incidence",
+    "delta_percent": 7.700640515911017,
+    "disposition": "reject",
+    "fixture_bytes": 8388736,
+    "guest_peak_memory": "unavailable",
+    "host_to_guest_bytes": [
+      12,
+      12,
+      12,
+      12,
+      12
+    ],
+    "matched_results": true,
+    "ratio": 1.0770064051591102,
+    "slot_claims_per_run": 1,
+    "treatment_median_ns": 5072518333,
+    "treatment_ns": [
+      4940645833,
+      5151940709,
+      5024192750,
+      5135295167,
+      5072518333
+    ],
+    "workload": "canonical immutable numpy int64 fixture loaded through io.BytesIO and reduced to Python int"
+  },
+  "environment": {
+    "arch": "arm64",
+    "go": "go1.26.0 darwin/arm64",
+    "macos_build": "25E253",
+    "macos_version": "26.4.1",
+    "python": "3.14.3",
+    "recorded_utc": "2026-08-24T03:11:51Z"
+  },
+  "guest": {
+    "artifact_sha256": "sha256:09aa6bebea5d1767acd730bb73159ff405c443af47b95d7ba99609defdfe703e",
+    "build_millis": 433975,
+    "cache_disposition": "hit",
+    "final_cache_disposition": "miss",
+    "profile": "numpy-core",
+    "source_tree": "a6c40cbb28bb794b41f8959d0d8472238a5a73ac"
+  },
+  "implementation_commit": "1bcec51f1c1770c09680fdcf761270ae8296b9ee",
+  "recorded_date": "2026-08-24",
+  "schema_version": "pysolate.host-scheduled-reuse-e2e.v1",
+  "semantic_exact_guest": {
+    "dynamic_branch_and_loop_activation": "pass",
+    "first_failure_discards_later_physical_work_without_receipt": "pass",
+    "private_byte_materialization": "pass",
+    "shared_physical_immutable_object_with_fresh_isolated_consumers": "pass"
+  },
+  "split_phase_sources_read": {
+    "baseline_median_ns": 2567356750,
+    "baseline_ns": [
+      2528983833,
+      2576128375,
+      2567356750,
+      2563135291,
+      2583247209
+    ],
+    "cost_scope": [
+      "source analysis",
+      "fresh analysis Guest",
+      "fresh execution Guest",
+      "physical calls",
+      "materialization",
+      "cleanup"
+    ],
+    "decision": "reject source-pass promotion; keep hidden substrate default-off for semantic research",
+    "delta_percent": 194.39129696330673,
+    "disposition": "reject",
+    "logical_receipts_in_source_order": true,
+    "maximum_concurrent": 2,
+    "physical_overlap_proven": true,
+    "ratio": 2.9439129696330673,
+    "treatment_median_ns": 7558074834,
+    "treatment_ns": [
+      7542077250,
+      7611782000,
+      7529197708,
+      7558074834,
+      7591655041
+    ],
+    "workload": "two independent qualified sources.read calls with 150 ms handlers"
+  },
+  "test_harness_commit": "71491d9ae0ef9ee3fa81a0cab45b421630005468"
+}

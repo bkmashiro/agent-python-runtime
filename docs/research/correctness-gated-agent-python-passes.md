@@ -3,10 +3,12 @@
 Status: **implemented predecessor contract; its candidate ordering is historical**
 
 The completed lane retained the static pass seam and two narrow scalar kernels, with
-negative end-to-end timing evidence. Future execution now follows the
+negative end-to-end timing evidence. Its completed experimental successor is the
 [Host-Scheduled Calls and Immutable Value Reuse Mega-Goal](../plans/2026-08-24-host-scheduled-python-reuse-autonomous-megagoal.md):
 it selects common high-cost Python/capability patterns, does not reproduce Stratum's
-DataOp IR, and does not resume the batching/meta-tool queue below.
+DataOp IR, and does not resume the batching/meta-tool queue below. Exact evidence kept the
+small hidden ABI/ValueSlot seams Experimental and default-off while rejecting the tested
+source passes and cache/composition widening on cost.
 
 The body-free v1 study is frozen by
 [`source-bound-pass-preregistration-v1.json`](../evidence/source-bound-pass-preregistration-v1.json).

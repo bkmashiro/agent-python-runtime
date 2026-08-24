@@ -221,6 +221,9 @@ class SourcePassTests(unittest.TestCase):
             'first = sources.read("alpha")\nresult = locals()\n',
             'first = sources.read(path="alpha")\nresult = first\n',
             'first = other.read("alpha")\nresult = first\n',
+            'try:\n    first = sources.read("alpha")\n    result = first\nexcept Exception:\n    result = None\n',
+            'while inputs["keep"]:\n    first = sources.read("alpha")\n    result = first\n',
+            'with open("/workspace/input.npy", "rb") as handle:\n    first = sources.read("alpha")\n    result = first\n',
         ]
         for source in cases:
             with self.subTest(source=source):

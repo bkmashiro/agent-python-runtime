@@ -1,6 +1,6 @@
 # Value-slot and data-local reduction contract v1
 
-Status: **Implemented locally, exact-Guest and economic gates pending**
+Status: **Exact-Guest verified; semantic slot retained Experimental/off, data pass rejected on cost**
 
 This contract covers the first bounded immutable-value lane. It is intentionally
 not a general object cache, Python IR, NumPy optimizer, or DataOp runtime.
@@ -96,6 +96,18 @@ The baseline performs the same fresh-Guest run with ordinary NumPy import,
 research-only unless the treatment median is faster and all results match. A
 positive result applies only to this exact immutable int64 reduction; it is not
 evidence for arbitrary NumPy, table pushdown, or a generic shared-object cache.
+
+The exact `numpy-core` Guest built from `1bcec51f1c1770c09680fdcf761270ae8296b9ee`
+passed private-byte materialization, fresh-consumer isolation, shared physical backing and
+the fixed NumPy sum equivalence controls. Five matched repetitions read an `8,388,736`-byte
+fixture and copied only `12` result bytes to each Guest, but measured a `4,709,831,166 ns`
+baseline median and `5,072,518,333 ns` treatment median. Complete treatment cost was
+**7.70% slower**; Guest peak memory was unavailable and is not inferred.
+
+The fixed data-local pass is therefore a truthful no-go and stays default-off. The small
+ValueSlot seam remains Experimental because it independently supports bounded scalar/byte
+materialization, not because the NumPy pass won. Exact measurements are frozen in
+[`host-scheduled-reuse-e2e-v1.json`](../evidence/host-scheduled-reuse-e2e-v1.json).
 
 ## Cross-Run reuse disposition
 

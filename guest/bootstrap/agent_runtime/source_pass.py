@@ -287,6 +287,13 @@ def _split_phase_parts(source_identity, static_index, name, path):
     return submit, materialize
 
 
+def _space_indent(line):
+    indent = line[: len(line) - len(line.lstrip())]
+    if any(character != " " for character in indent):
+        return None
+    return indent
+
+
 def _rewrite_split_phase_read_block(statements, lines, source_identity, static_index):
     if len(statements) < 2:
         return None
@@ -311,12 +318,16 @@ def _rewrite_split_phase_read_block(statements, lines, source_identity, static_i
         submits.append(submit)
         materializations.append(materialize)
     first_line = reads[0][0].lineno - 1
-    indent = lines[first_line][: len(lines[first_line]) - len(lines[first_line].lstrip(" "))]
+    indent = _space_indent(lines[first_line])
+    if indent is None:
+        return None
     newline = "\n" if lines[first_line].endswith("\n") else ""
     lines[first_line] = indent + "; ".join(submits + [materializations[0]]) + newline
     for offset, (statement, _, _) in enumerate(reads[1:], start=1):
         line_index = statement.lineno - 1
-        indent = lines[line_index][: len(lines[line_index]) - len(lines[line_index].lstrip(" "))]
+        indent = _space_indent(lines[line_index])
+        if indent is None:
+            return None
         newline = "\n" if lines[line_index].endswith("\n") else ""
         lines[line_index] = indent + materializations[offset] + newline
     return len(reads)
@@ -363,7 +374,9 @@ def _split_phase_structured(tree, lines, source_identity):
             return None
         submit, materialize = _split_phase_parts(source_identity, 1, read[0], read[1])
         line_index = loop.body[0].lineno - 1
-        indent = derived[line_index][: len(derived[line_index]) - len(derived[line_index].lstrip(" "))]
+        indent = _space_indent(derived[line_index])
+        if indent is None:
+            return None
         newline = "\n" if derived[line_index].endswith("\n") else ""
         derived[line_index] = indent + submit + "; " + materialize + newline
         return "".join(derived), 1

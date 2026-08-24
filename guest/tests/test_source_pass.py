@@ -227,6 +227,8 @@ class SourcePassTests(unittest.TestCase):
             'if inputs["take"]: first = sources.read("alpha"); result = first\n',
             'result = []\nfor item in inputs["items"]: first = sources.read("alpha"); result.append(first)\n',
             'result = []\nfor item in inputs["items"]:\n    first = sources.read(\n        "alpha"\n    )\n    result.append(first)\n',
+            'if inputs["take"]:\n\tfirst = sources.read("alpha")\n\tsecond = sources.read("beta")\n\tresult = [first, second]\nelse:\n\tresult = []\n',
+            'result = []\nfor item in inputs["items"]:\n\tfirst = sources.read("alpha")\n\tresult.append(first)\n',
         ]
         for source in cases:
             with self.subTest(source=source):

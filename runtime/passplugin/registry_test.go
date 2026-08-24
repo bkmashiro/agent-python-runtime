@@ -202,6 +202,11 @@ func TestUnifiedCatalogResolvesPassLoweringsAgainstHostAvailability(t *testing.T
 	if evidence.SchemaVersion != RuntimeSelectionEvidenceSchemaVersion || evidence.Mechanisms.Validate() != nil || len(evidence.Passes) != 3 {
 		t.Fatalf("evidence=%+v", evidence)
 	}
+	for _, pass := range evidence.Passes {
+		if pass.Name == "" || pass.Version == "" || pass.Stage != passregistration.StageRuntimeLowering || !strings.HasPrefix(pass.RegistrationSHA256, "sha256:") {
+			t.Fatalf("pass evidence=%+v", pass)
+		}
+	}
 }
 
 func TestUnifiedCatalogRejectsConflictingSchedulingPasses(t *testing.T) {

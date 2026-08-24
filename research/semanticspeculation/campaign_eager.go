@@ -75,6 +75,10 @@ func NewEagerGuestTreatment(config EagerGuestTreatmentConfig) (*EagerGuestTreatm
 		}
 		config.Passes = passes
 	}
+	selection, err := config.Passes.LowerMechanisms(runtimeconfig.MechanismSet{})
+	if err != nil || !selection.Mechanisms.Streaming {
+		return nil, errors.Join(errors.New("EAGER Guest treatment requires source_streaming_execution pass"), err)
+	}
 	config.RunConfig.Mechanisms.Streaming = false
 	return &EagerGuestTreatment{config: config}, nil
 }

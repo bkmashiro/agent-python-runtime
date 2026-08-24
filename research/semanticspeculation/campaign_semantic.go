@@ -120,11 +120,17 @@ func NewSemanticPreDispatchTreatment(config SemanticPreDispatchTreatmentConfig) 
 		}
 		config.Passes = passes
 	}
+	executionSelection, err := config.Passes.LowerMechanisms(runtimeconfig.MechanismSet{})
+	if err != nil || !executionSelection.Mechanisms.SemanticPreDispatch {
+		return nil, errors.Join(errors.New("semantic treatment requires semantic_pre_dispatch pass"), err)
+	}
+	requestedPrepared := config.RunConfig.Mechanisms.PreparedRuntime
+	requestedCOW := config.RunConfig.Mechanisms.MemoryCOW
 	if config.AnalyzerPasses == nil {
 		var names []passregistration.Name
-		if config.RunConfig.Mechanisms.MemoryCOW {
+		if requestedCOW {
 			names = append(names, passregistration.PrivateMemoryCOW)
-		} else if config.RunConfig.Mechanisms.PreparedRuntime {
+		} else if requestedPrepared {
 			names = append(names, passregistration.PreparedRuntimeInstantiation)
 		}
 		passes, err := passplugin.NewDefaultEnabledCatalog(names...)
@@ -132,6 +138,10 @@ func NewSemanticPreDispatchTreatment(config SemanticPreDispatchTreatmentConfig) 
 			return nil, err
 		}
 		config.AnalyzerPasses = passes
+	}
+	analyzerSelection, err := config.AnalyzerPasses.LowerMechanisms(runtimeconfig.MechanismSet{SemanticAnalysis: true})
+	if err != nil || requestedPrepared && !analyzerSelection.Mechanisms.PreparedRuntime || requestedCOW && !analyzerSelection.Mechanisms.MemoryCOW {
+		return nil, errors.Join(errors.New("semantic analyzer optimization pass selection does not match requested preparation"), err)
 	}
 	config.RunConfig.Mechanisms.PreparedRuntime = false
 	config.RunConfig.Mechanisms.MemoryCOW = false

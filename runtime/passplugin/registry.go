@@ -215,8 +215,15 @@ const RuntimeSelectionEvidenceSchemaVersion = "pysolate.optimization-pass-select
 
 type RuntimeSelectionEvidence struct {
 	SchemaVersion string                          `json:"schema_version"`
-	Passes        []passregistration.Name         `json:"passes"`
+	Passes        []RuntimePassEvidence           `json:"passes"`
 	Mechanisms    runtimeconfig.MechanismEvidence `json:"mechanisms"`
+}
+
+type RuntimePassEvidence struct {
+	Name               passregistration.Name  `json:"name"`
+	Version            string                 `json:"version"`
+	Stage              passregistration.Stage `json:"stage"`
+	RegistrationSHA256 string                 `json:"registration_sha256"`
 }
 
 func (registry *Registry) ResolveRuntime(base, available runtimeconfig.MechanismSet) (runtimeconfig.MechanismSet, RuntimeSelectionEvidence, error) {
@@ -228,9 +235,17 @@ func (registry *Registry) ResolveRuntime(base, available runtimeconfig.Mechanism
 	if err != nil {
 		return runtimeconfig.MechanismSet{}, RuntimeSelectionEvidence{}, err
 	}
+	passes := make([]RuntimePassEvidence, 0, len(selection.Passes))
+	for _, name := range selection.Passes {
+		registration := registry.plugins[name].Registration()
+		passes = append(passes, RuntimePassEvidence{
+			Name: name, Version: registration.Version(), Stage: registration.Stage(),
+			RegistrationSHA256: registration.IdentitySHA256(),
+		})
+	}
 	return resolved, RuntimeSelectionEvidence{
 		SchemaVersion: RuntimeSelectionEvidenceSchemaVersion,
-		Passes:        append([]passregistration.Name(nil), selection.Passes...),
+		Passes:        passes,
 		Mechanisms:    mechanisms,
 	}, nil
 }

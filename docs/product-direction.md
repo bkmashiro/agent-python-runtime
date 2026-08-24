@@ -51,13 +51,16 @@ General arbitrary-Python purity, production fan-out scheduling, automatic
 cold/reuse policy, generalized write commit/reconciliation, and broad performance
 claims remain Deferred or Proposed. The completed experimental investigation is bounded by the
 [Host-Scheduled Calls and Immutable Value Reuse Mega-Goal](plans/2026-08-24-host-scheduled-python-reuse-autonomous-megagoal.md).
-Its analyzer-driven split-phase pass, fixed NumPy reduction, cache widening and composition
-remain negative. The follow-up [direct capability Future](research/direct-capability-futures-v1.md)
-intentionally adopts Future semantics instead of transparent ordinary-Python equivalence:
+Its analyzer-driven split-phase pass, fixed NumPy source pass, cache widening and
+composition remain negative. Two explicit successors remove the analyzer dependency. The
+[direct capability Future](research/direct-capability-futures-v1.md) adopts Future semantics:
 non-approval live projected tools submit at the dynamic call point and materialize on
-use/final output. It needs no analyzer Guest and retained a `5.17%` exact-Guest median
-speedup, so this narrow lane remains Experimental/off rather than closed no-go. Broader
-performance claims remain rejected.
+use/final output, retaining a `5.17%` exact-Guest median speedup. The
+[direct prepared-value lane](research/direct-prepared-values-v1.md) reuses one immutable
+ValueSlot template across fresh Guests through an explicit binding, retaining a `53.06%`
+median speedup on the fixed NumPy fixture. Both lanes use zero analyzer Guests and remain
+Experimental/off. Broader automatic scheduling, source rewriting and reuse claims remain
+rejected.
 
 Optional mechanisms must remain orthogonal at their public contract boundaries.
 Result caching, single-flight, workflow re-evaluation, immutable workspace

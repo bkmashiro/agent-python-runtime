@@ -1,6 +1,10 @@
 # Value-slot and data-local reduction contract v1
 
-Status: **Exact-Guest verified; semantic slot retained Experimental/off, data pass rejected on cost**
+Status: **Exact-Guest verified; analyzer-driven data pass rejected, direct prepared-value successor retained Experimental/off**
+
+> **Performance successor:** the explicit analyzer-free lane is specified in
+> [Direct Prepared Values v1](direct-prepared-values-v1.md). This file retains the historical
+> source-pass contract and its negative measurement.
 
 This contract covers the first bounded immutable-value lane. It is intentionally
 not a general object cache, Python IR, NumPy optimizer, or DataOp runtime.
@@ -24,7 +28,9 @@ The first implementation supports only:
 
 Python cannot name the materializer in ordinary source. A static source pass may
 use the hidden helper only when its exact pass name and version are accepted by
-the Guest. The Host validates the pass-specific slot shape before execution.
+the Guest. The direct successor instead gives explicitly authored consumer code a
+trusted `prepared_value` binding before that code runs; it still cannot invoke the
+Host materializer itself. The Host validates the slot shape before execution.
 Unknown slots, duplicate claims, kind/strategy mismatches, over-limit payloads,
 non-canonical scalars, stale input revisions, and privacy-partition mismatches
 fail closed.
@@ -91,34 +97,23 @@ observation represented by `result`; physical readiness never records a
 capability effect. The implementation exposes value-slot evidence separately
 from effect receipts.
 
-## Cost gate
+## Historical source-pass cost gate
 
-The matched campaign includes, per treatment repetition:
+The original campaign intended to include workspace read, fixture validation, slot
+construction, fresh Guest startup, materialization and response validation. It did not produce
+a fair reuse result: the treatment rebuilt its producer for every consumer, kept source
+analysis in the Run path, and timed selected-runner construction and close while the baseline
+timed neither. Five repetitions recorded a `4,695,289,958 ns` baseline median and
+`4,990,682,666 ns` treatment median, or **6.29% slower**. Those measurements remain frozen as
+the cost of the rejected analyzer-driven harness; they are not evidence that prepared values
+are intrinsically slower.
 
-- workspace read;
-- immutable fixture validation and reduction;
-- value-slot construction;
-- fresh Guest startup;
-- hidden materialization;
-- full response validation.
-
-The baseline performs the same fresh-Guest run with ordinary NumPy import,
-`np.load`, and `sum`. Five fresh repetitions are required. The adapter remains
-research-only unless the treatment median is faster and all results match. A
-positive result applies only to this exact immutable int64 reduction; it is not
-evidence for arbitrary NumPy, table pushdown, or a generic shared-object cache.
-
-The exact `numpy-core` Guest built from `84520efa7397a23d03cdbf3cdbc4d60c29543e62`
-passed private-byte materialization across two Runs on one Runner, fresh-consumer isolation,
-shared physical backing, forged-metadata rejection and workspace-drift fallback. Five
-matched repetitions read an `8,388,736`-byte fixture and copied only `12` result bytes to
-each Guest, but measured a `4,695,289,958 ns` baseline median and `4,990,682,666 ns`
-treatment median. Complete treatment cost was **6.29% slower**; Guest peak memory was
-unavailable and is not inferred.
-
-The fixed data-local pass is therefore a truthful no-go and stays default-off. The small
-ValueSlot seam remains Experimental because it independently supports bounded scalar/byte
-materialization, not because the NumPy pass won. Exact measurements are frozen in
+The direct successor uses one immutable template across fresh Runs, zero analyzer invocations
+and matched `Runner.Run` timer boundaries. Across 15 exact-Guest pairs, it measured a
+`5,017,197,083 ns` baseline median and `2,354,885,541 ns` treatment median, or
+**53.06% faster**. The Host delivered `12` bytes per Run. Exact successor measurements are in
+[`direct-prepared-values-e2e-v1.json`](../evidence/direct-prepared-values-e2e-v1.json); the
+historical source-pass measurements remain in
 [`host-scheduled-reuse-e2e-v1.json`](../evidence/host-scheduled-reuse-e2e-v1.json).
 
 ## Cross-Run reuse disposition

@@ -6,10 +6,10 @@
 > slices. A green test, signed commit, or rejected candidate is a checkpoint, not a stop
 > condition. Stop only at the decision/resource/safety gates below or complete closeout.
 
-**Status:** Completed experimental campaign with a post-closeout correction. The original
-analyzer-driven split-phase pass, fixed data-local pass, cache widening and composition remain
-no-go. A simpler direct capability Future successor is retained Experimental/default-off after
-positive exact-Guest evidence.
+**Status:** Completed experimental campaign with two post-closeout corrections. The original
+analyzer-driven split-phase pass, fixed data-local source pass, cache widening and composition
+remain no-go. Simpler direct capability Future and explicit prepared-value successors are
+retained Experimental/default-off after positive exact-Guest evidence.
 
 **Post-closeout correction (2026-08-24):** the original split-phase treatment paid for a
 second cold exact analyzer Guest before formal execution. That was unnecessary for Future
@@ -22,6 +22,18 @@ formal fresh Guest. Five matched exact-Guest trials changed the result from the 
 [machine-readable evidence](../evidence/direct-capability-futures-e2e-v1.json). The historical
 source-rewrite result below remains valid for that rejected route; it is no longer the Future
 story.
+
+**Prepared-value correction (2026-08-24):** the historical fixed NumPy treatment did not
+measure reuse. It rebuilt the producer for each consumer, kept source analysis in the Run path,
+and included selected-runner construction and close inside only the treatment timer. The direct
+prepared-value successor instead prepares one immutable ValueSlot template, gives each fresh
+Guest a private claim table, and injects an explicit `prepared_value` binding with zero analyzer
+Guests. Across 15 matched exact-Guest pairs, median complete-Run latency changed from the
+historical `4.695 s -> 4.991 s` source-pass regression to `5.017 s -> 2.355 s`, a **53.06%**
+speedup. The fixed producer median was `2.821 ms` and Host-to-Guest delivery was `12` bytes.
+See [Direct Prepared Values v1](../research/direct-prepared-values-v1.md) and its
+[machine-readable evidence](../evidence/direct-prepared-values-e2e-v1.json). The historical
+negative measurement below remains attached to the rejected analyzer-driven route.
 
 **Prepared:** 2026-08-24
 

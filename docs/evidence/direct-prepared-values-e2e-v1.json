@@ -1,0 +1,105 @@
+{
+  "schema_version": "pysolate.direct-prepared-values-e2e.v1",
+  "study_id": "direct-prepared-values-v1",
+  "decision": "retain_experimental",
+  "supersedes": {
+    "scope": "paper performance story for the analyzer-driven fixed NumPy ValueSlot pass; historical measurements remain unchanged",
+    "historical_evidence": "host-scheduled-reuse-e2e-v1.json"
+  },
+  "host": {
+    "commit": "d98498c476ba4eac8ea052e7cb75e75dae243067",
+    "tree": "609adee9d1d0b7425f43fe5cb661fae87c52c25b"
+  },
+  "guest": {
+    "profile": "numpy-core",
+    "artifact_bytes": 68215666,
+    "artifact_sha256": "sha256:15f5e415d19acc95eb2f304e881cde22e5fd657a532edad3d67c8e5ac608382c"
+  },
+  "workload": {
+    "fixture": "canonical immutable NumPy int64 array",
+    "fixture_bytes": 8388736,
+    "expected_result": 549755289600,
+    "baseline": "fresh Guest reads the workspace .npy through io.BytesIO, runs np.load and int(dataset.sum())",
+    "treatment": "fresh Guest explicitly consumes Host-prepared equivalent through valueslot.PythonPrelude",
+    "host_to_guest_bytes_per_run": 12,
+    "semantic_scope": "explicit prepared-value API; no transparent same-source claim"
+  },
+  "timer": {
+    "boundary": "immediately before Runner.Run through its return",
+    "runner_factory": "outside both baseline and treatment timers",
+    "runner_close": "outside both baseline and treatment timers",
+    "producer": "outside the prepared Run timer and measured separately",
+    "order": "alternated baseline-first and treatment-first within each five-pair cohort"
+  },
+  "baseline_ns": [
+    5011902208,
+    5012097375,
+    5000912958,
+    5048348416,
+    5064167750,
+    5017197083,
+    5000112916,
+    4972566583,
+    4980903416,
+    4973581917,
+    5303344292,
+    5044919709,
+    5023628458,
+    5038777959,
+    5032398167
+  ],
+  "treatment_ns": [
+    2340793667,
+    2354885541,
+    2326167209,
+    2387659792,
+    2356732041,
+    2342694750,
+    2354406417,
+    2322841292,
+    2335691959,
+    2313091833,
+    2372002583,
+    2373185542,
+    2365448542,
+    2386443292,
+    2459139417
+  ],
+  "producer_ns": [
+    3150541,
+    2820583,
+    2790333
+  ],
+  "aggregate": {
+    "pairs": 15,
+    "baseline_median_ns": 5017197083,
+    "treatment_median_ns": 2354885541,
+    "median_saved_ns": 2662311542,
+    "ratio": 0.4693627740833955,
+    "treatment_faster_percent": 53.063722591660444,
+    "all_treatment_trials_faster": true,
+    "producer_median_ns": 2820583,
+    "treatment_median_plus_one_producer_ns": 2357706124,
+    "treatment_plus_producer_faster_percent": 53.007504289821014
+  },
+  "mechanism": {
+    "semantic_analyzer_invocations": 0,
+    "semantic_analyzer_module_instantiations": 0,
+    "formal_fresh_guests_per_run": 1,
+    "immutable_template_reused": true,
+    "run_private_table_via_fresh": true,
+    "claims_per_run": 1,
+    "discarded_per_run": 0,
+    "copied_bytes_per_run": 12
+  },
+  "validation": {
+    "matched_results": true,
+    "fresh_private_bytes_consumers_repetitions": 3,
+    "go_test_all": "pass",
+    "focused_race": "pass",
+    "go_vet_all": "pass",
+    "guest_unit_tests": 189,
+    "exact_guest_performance_repetitions": 3,
+    "exact_guest_pairs_per_repetition": 5
+  }
+}

@@ -45,13 +45,17 @@ experimental successor is the
 [Host-Scheduled Calls and Immutable Value Reuse Mega-Goal](docs/plans/2026-08-24-host-scheduled-python-reuse-autonomous-megagoal.md),
 which follows the completed
 [correctness-gated source-bound optimizer Mega-Goal](docs/plans/2026-08-23-correctness-gated-agent-python-optimizer-autonomous-megagoal.md).
-It preserved fresh Runs, but its analyzer-driven split-phase source pass, NumPy data-local
-pass and broader shared-value cache lane failed their original end-to-end cost gates. A
-subsequent [direct capability Future](docs/research/direct-capability-futures-v1.md) removed
-the redundant cold analyzer entirely: every non-approval live projected tool submits when
-Python reaches the call and materializes on use or final output. The exact-Guest two-call
-fixture moved from a `196.60%` slowdown to a `5.17%` median speedup. This Future lane is
-retained Experimental/default-off; the analyzer-based rewrite remains rejected.
+It preserved fresh Runs, but its analyzer-driven split-phase source pass, fixed NumPy
+source pass and broader shared-value cache lane failed their original end-to-end cost gates.
+Two direct successors remove the redundant analyzers. The
+[direct capability Future](docs/research/direct-capability-futures-v1.md) submits every
+non-approval live projected tool when Python reaches the call and materializes it on use or
+final output; its exact-Guest two-call fixture moved from a `196.60%` slowdown to a `5.17%`
+median speedup. The [direct prepared-value lane](docs/research/direct-prepared-values-v1.md)
+reuses one immutable ValueSlot template across fresh Guests through an explicit
+`prepared_value` binding; its matched NumPy fixture moved from the historical `6.29%`
+source-pass regression to a **53.06%** median speedup with zero analyzer invocations. Both
+lanes remain Experimental/default-off; the analyzer-based rewrites remain rejected.
 The completed foundation records bounded Experimental target-Guest AST planning,
 exact whole-Run single-flight/retention, continuation-preserving cold-I/O evidence and a
 small static source-pass seam while keeping every mechanism off by default.

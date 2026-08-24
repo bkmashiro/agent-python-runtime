@@ -182,6 +182,28 @@ func TestUnifiedCatalogLowersRuntimeOptimizationsToExistingMechanisms(t *testing
 	}
 }
 
+func TestEnablePreservesPriorExplicitSelections(t *testing.T) {
+	registry, err := NewDefaultUnifiedCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err = registry.Enable(passregistration.CapabilityFutureProjection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err = registry.Enable(passregistration.PreparedValueBinding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var unsealed capability.Plan
+	if _, err := registry.ProjectPlan(passregistration.CapabilityFutureProjection, &unsealed); err != capability.ErrInvalidFutureProjectionPass {
+		t.Fatalf("prior Plan pass selection was lost: %v", err)
+	}
+	if _, err := registry.BindRunValue(passregistration.PreparedValueBinding, "slot"); err != nil {
+		t.Fatalf("new Run pass selection missing: %v", err)
+	}
+}
+
 func TestUnifiedCatalogResolvesPassLoweringsAgainstHostAvailability(t *testing.T) {
 	registry, err := NewDefaultEnabledCatalog(
 		passregistration.PreparedRuntimeInstantiation,

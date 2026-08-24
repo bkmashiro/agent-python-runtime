@@ -276,6 +276,58 @@ func TestRealGuestCapabilityFutureMaterializesAnyJSONResultShape(t *testing.T) {
 	}
 }
 
+func TestRealGuestCapabilityFuturesUseWholePlanCallBudget(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := capability.NewRegistry()
+	grant, err := capability.NewGrant(json.RawMessage(`{"scope":"future-plan-budget-e2e"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Uint32
+	spec := capability.Spec{
+		Name: "fixture.read", Version: "fixture.read.future-budget-e2e.v1", Description: "Read one fixture.",
+		EffectClass: capability.EffectPure, Playback: capability.PlaybackLiveOnly, HandlerIdentity: "fixture-read-future-budget-e2e.v1",
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false}`),
+		OutputSchema: json.RawMessage(`{"type":"integer"}`),
+		Python:       &capability.PythonProjection{Module: "fixture", Method: "read"},
+	}
+	if err := registry.Register(spec, grant, capability.HandlerFunc(func(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		return json.Marshal(calls.Add(1))
+	})); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runtimeconfig.DefaultRunConfig()
+	config.Timeout = 90 * time.Second
+	config.Mechanisms = runtimeconfig.MechanismSet{SplitPhaseCalls: true}
+	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+		return capability.NewBroker(capability.Config{RunIdentity: "future-plan-budget-e2e", Plan: plan})
+	}}).New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	request, _ := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
+		RunID:  "future-plan-budget-e2e",
+		Code:   "a = fixture.read()\nb = fixture.read()\nc = fixture.read()\nd = fixture.read()\ne = fixture.read()\nresult = [a, b, c, d, e]\n",
+		Inputs: json.RawMessage(`{}`),
+	})
+	payload, runErr := runner.Run(context.Background(), request, plan.FuturePythonPrelude())
+	_, decodeErr := decodeSuccessfulGuestResult(payload)
+	if runErr != nil || decodeErr != nil || calls.Load() != 5 {
+		t.Fatalf("calls=%d decode_err=%v run_err=%v payload=%s", calls.Load(), decodeErr, runErr, payload)
+	}
+	if evidence := trustedSemanticRunner(t, runner).SplitPhaseEvidence(); evidence.Submitted != 5 || evidence.Consumed != 5 || evidence.Discarded != 0 {
+		t.Fatalf("plan budget evidence=%+v", evidence)
+	}
+}
+
 func TestRealGuestSplitPhaseSourcesReadOverlapsPhysicalWorkAndKeepsLogicalReceipts(t *testing.T) {
 	artifact, err := os.ReadFile(guestArtifact(t))
 	if err != nil {

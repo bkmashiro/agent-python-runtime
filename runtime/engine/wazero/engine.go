@@ -1347,9 +1347,6 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		}
 		if engine.config.Mechanisms.SplitPhaseCalls {
 			maxCalls := broker.CapabilityPlan().MaxCalls()
-			if maxCalls > 4 {
-				maxCalls = 4
-			}
 			var tableErr error
 			splitPhaseTable, tableErr = capability.NewSplitPhaseTable(broker.CapabilityPlan(), capability.SplitPhaseLimits{
 				MaxCalls: maxCalls, MaxCostUnits: uint64(maxCalls) * 4, MaxResultBytes: uint64(engine.config.MaxResponseBytes) * uint64(maxCalls),

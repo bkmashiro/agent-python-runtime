@@ -1,4 +1,9 @@
 {
+  "direct_future_successor": {
+    "status": "retained_experimental",
+    "evidence": "direct-capability-futures-e2e-v1.json",
+    "scope": "supersedes only the analyzer-driven split-phase performance story; historical measurements below remain unchanged"
+  },
   "composition": {
     "decision": "not_applicable_no_joint_admitted_workload",
     "generic_pass_manager_added": false

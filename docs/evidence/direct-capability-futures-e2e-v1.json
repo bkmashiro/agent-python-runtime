@@ -11,7 +11,7 @@
     "finding": "The negative result measured a second cold CPython/WASI analyzer on the critical path, not intrinsic Future overhead."
   },
   "implementation": {
-    "host_commit": "35cd17b315c45a6002554efd7621011ff691ac61",
+    "host_commit": "24e0394f8f8035b38e58ae12856fef7dbcb836f1",
     "guest_source_commit": "7bb75647ae5bf9249bb97403b56bc178016347ce",
     "artifact_profile": "numpy-core",
     "artifact_sha256": "sha256:15f5e415d19acc95eb2f304e881cde22e5fd657a532edad3d67c8e5ac608382c",
@@ -31,25 +31,26 @@
     "tool_calls": 2,
     "per_call_delay_nanos": 150000000,
     "baseline_nanos": [
-      2436570833,
-      2450213875,
-      2501499833,
-      2473559667,
-      2495181417
+      2659419125,
+      2625038916,
+      2630091208,
+      2643771333,
+      2629988541
     ],
     "treatment_nanos": [
-      2328585459,
-      2340996167,
-      2363813292,
-      2364729208,
-      2376555917
+      2521230209,
+      2502478792,
+      2481091167,
+      2494158750,
+      2487526125
     ],
-    "baseline_median_nanos": 2473559667,
-    "treatment_median_nanos": 2363813292,
-    "median_saved_nanos": 109746375,
-    "treatment_faster_percent": 4.436778965316142,
-    "treatment_to_baseline_ratio": 0.9556322103468385,
-    "captured_theoretical_overlap_percent": 73.16425,
+    "baseline_median_nanos": 2630091208,
+    "treatment_median_nanos": 2494158750,
+    "median_saved_nanos": 135932458,
+    "treatment_faster_percent": 5.16835528693954,
+    "treatment_to_baseline_ratio": 0.9483164471306046,
+    "captured_theoretical_overlap_percent": 90.62163866666667,
+    "unrecovered_theoretical_overlap_nanos": 14067542,
     "all_trials_faster": true,
     "maximum_concurrent_handlers": 2
   },
@@ -62,7 +63,30 @@
       "logical_claims": 1,
       "discarded": 0
     },
+    "drain_after_earlier_error": {
+      "test": "TestRealGuestCapabilityFutureDrainsAfterEarlierError",
+      "repetitions": 3,
+      "passed": true,
+      "physical_calls": 2,
+      "logical_claims": 2,
+      "discarded": 0
+    },
+    "json_result_shapes": {
+      "test": "TestRealGuestCapabilityFutureMaterializesAnyJSONResultShape",
+      "repetitions": 3,
+      "passed": true,
+      "shapes": ["scalar", "array", "null"]
+    },
+    "whole_plan_call_budget": {
+      "test": "TestRealGuestCapabilityFuturesUseWholePlanCallBudget",
+      "repetitions": 3,
+      "passed": true,
+      "plan_max_calls": 5,
+      "submitted": 5,
+      "consumed": 5,
+      "discarded": 0
+    },
     "artifact_verifier": "passed"
   },
-  "claim": "Removing the redundant cold analyzer turns the same two-call 150 ms fixture from a 196.60% slowdown into a 4.44% median speedup. Direct Future bookkeeping is small enough to retain for the paper story; the analyzer-based source-rewrite route remains rejected."
+  "claim": "Removing the redundant cold analyzer turns the same two-call 150 ms fixture from a 196.60% slowdown into a 5.17% median speedup. Direct Future bookkeeping is small enough to retain for the paper story; the analyzer-based source-rewrite route remains rejected."
 }

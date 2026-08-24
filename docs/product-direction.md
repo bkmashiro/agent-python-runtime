@@ -55,8 +55,8 @@ Its analyzer-driven split-phase pass, fixed NumPy reduction, cache widening and 
 remain negative. The follow-up [direct capability Future](research/direct-capability-futures-v1.md)
 intentionally adopts Future semantics instead of transparent ordinary-Python equivalence:
 non-approval live projected tools submit at the dynamic call point and materialize on
-use/final output. It needs no analyzer Guest and retained a `4.44%` exact-Guest median
-speedup, so this narrow lane remains Experimental/off rather than closed no-go. A full
+use/final output. It needs no analyzer Guest and retained a `5.17%` exact-Guest median
+speedup, so this narrow lane remains Experimental/off rather than closed no-go. Broader
 performance claims remain rejected.
 
 Optional mechanisms must remain orthogonal at their public contract boundaries.

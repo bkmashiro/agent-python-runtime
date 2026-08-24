@@ -56,18 +56,23 @@ patch in this lane. Fresh Guest execution is unchanged: one formal Guest per Run
 ## Exact-Guest result
 
 The matched fixture contains two independent `150 ms` calls. Five exact-Guest trials at
-Host commit `35cd17b315c45a6002554efd7621011ff691ac61` produced:
+Host commit `24e0394f8f8035b38e58ae12856fef7dbcb836f1` produced:
 
 | Treatment | Median complete-Run time |
 |---|---:|
-| synchronous baseline | `2.473559667 s` |
-| direct capability Futures | `2.363813292 s` |
-| saved | `109.746 ms` |
+| synchronous baseline | `2.630091208 s` |
+| direct capability Futures | `2.494158750 s` |
+| saved | `135.932 ms` |
 
-The Future lane was faster in all five trials. Median speedup was `4.44%`, and it captured
-`73.16%` of the theoretical `150 ms` overlap window after complete Guest and Host overhead.
+The Future lane was faster in all five trials. Median speedup was `5.17%`, and it captured
+`90.62%` of the theoretical `150 ms` overlap window after complete Guest and Host overhead.
+The unrecovered `14.068 ms` includes Future projection/bridge work and run-to-run variance;
+there is no second interpreter in that amount.
 An exact-Guest ignored-write fixture also passed three repetitions: one physical execution,
-one final logical claim and no discarded write.
+one final logical claim and no discarded write. Three remediation gates also passed three
+repetitions each: a failed first Future no longer prevents later Futures from being claimed;
+scalar, array and `null` tool results materialize through the direct Future path; and a
+five-call plan submits and consumes all five Futures rather than truncating at four.
 
 Machine-readable evidence:
 [`direct-capability-futures-e2e-v1.json`](../evidence/direct-capability-futures-e2e-v1.json).

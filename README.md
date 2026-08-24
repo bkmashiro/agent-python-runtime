@@ -50,7 +50,7 @@ pass and broader shared-value cache lane failed their original end-to-end cost g
 subsequent [direct capability Future](docs/research/direct-capability-futures-v1.md) removed
 the redundant cold analyzer entirely: every non-approval live projected tool submits when
 Python reaches the call and materializes on use or final output. The exact-Guest two-call
-fixture moved from a `196.60%` slowdown to a `4.44%` median speedup. This Future lane is
+fixture moved from a `196.60%` slowdown to a `5.17%` median speedup. This Future lane is
 retained Experimental/default-off; the analyzer-based rewrite remains rejected.
 The completed foundation records bounded Experimental target-Guest AST planning,
 exact whole-Run single-flight/retention, continuation-preserving cold-I/O evidence and a

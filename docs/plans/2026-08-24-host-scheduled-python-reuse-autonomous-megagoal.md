@@ -17,7 +17,7 @@ semantics and dominated the two-call fixture. `Plan.FuturePythonPrelude()` now p
 live, non-approval capability directly as a Future: submit occurs when Python reaches the call,
 and proxy use or final output materializes/drains it. This path uses zero analyzers and one
 formal fresh Guest. Five matched exact-Guest trials changed the result from the historical
-`2.508 s → 7.439 s` slowdown to `2.474 s → 2.364 s`, a `4.44%` median speedup. See
+`2.508 s → 7.439 s` slowdown to `2.630 s → 2.494 s`, a `5.17%` median speedup. See
 [Direct Capability Futures v1](../research/direct-capability-futures-v1.md) and its
 [machine-readable evidence](../evidence/direct-capability-futures-e2e-v1.json). The historical
 source-rewrite result below remains valid for that rejected route; it is no longer the Future

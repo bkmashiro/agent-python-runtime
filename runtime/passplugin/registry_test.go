@@ -114,4 +114,10 @@ func TestUnifiedCatalogRegistersFourStageAwarePassesDefaultOff(t *testing.T) {
 	if err != nil || !strings.Contains(prelude, "prepared_value") || !strings.Contains(prelude, "materialize_slot") {
 		t.Fatalf("prelude=%q err=%v", prelude, err)
 	}
+	if _, err := registry.ProjectPlan(passregistration.PreparedValueBinding, nil); err != ErrUnsupportedStage {
+		t.Fatalf("run binding crossed into Plan stage: %v", err)
+	}
+	if _, err := registry.BindRunValue(passregistration.CapabilityFutureProjection, "slot-numpy-sum-v1"); err != ErrUnsupportedStage {
+		t.Fatalf("Plan projection crossed into Run stage: %v", err)
+	}
 }

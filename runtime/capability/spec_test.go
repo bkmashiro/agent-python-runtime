@@ -338,6 +338,38 @@ func TestFuturePythonPreludeSubmitsEveryProjectedCapability(t *testing.T) {
 	}
 }
 
+func TestFuturePythonPreludeKeepsApprovalSynchronousWithDistinctCallIDs(t *testing.T) {
+	registry := capability.NewRegistry()
+	future := testSpec()
+	future.Name = "fixture.read"
+	future.Version = "fixture.read.v1"
+	future.Description = "read"
+	future.EffectClass = capability.EffectExternalRead
+	future.Python = &capability.PythonProjection{Module: "fixture", Method: "read", Arguments: []string{"path"}}
+	approval := testSpec()
+	approval.Name = "fixture.delete"
+	approval.Version = "fixture.delete.v1"
+	approval.Description = "delete"
+	approval.EffectClass = capability.EffectWorkspaceWrite
+	approval.Python = &capability.PythonProjection{Module: "fixture", Method: "delete", Arguments: []string{"path"}}
+	approval.Approval = &capability.ApprovalRequirement{Mode: capability.ApprovalLease, LeaseMilliseconds: 15}
+	for _, spec := range []capability.Spec{future, approval} {
+		if err := registry.Register(spec, basicGrant(t), noopHandler); err != nil {
+			t.Fatal(err)
+		}
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prelude := plan.FuturePythonPrelude()
+	for _, required := range []string{"future-capability-", `"call_id": "capability-"`, "_host_bridge.submit_call", "_host_bridge.call", "fixture.read", "fixture.delete"} {
+		if !strings.Contains(prelude, required) {
+			t.Fatalf("hybrid Future prelude is missing %q: %s", required, prelude)
+		}
+	}
+}
+
 func TestCapabilitySpecRejectsInvalidSchemaAndProjection(t *testing.T) {
 	for name, mutate := range map[string]func(*capability.Spec){
 		"invalid input schema": func(spec *capability.Spec) { spec.InputSchema = json.RawMessage(`{"type":`) },

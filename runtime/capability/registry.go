@@ -694,16 +694,22 @@ func generatePythonPrelude(specs []Spec) string {
 }
 
 func generateFuturePythonPrelude(specs []Spec) string {
-	projected := make([]Spec, 0, len(specs))
+	futureSpecs := make([]Spec, 0, len(specs))
+	synchronousSpecs := make([]Spec, 0, len(specs))
 	modules := make(map[string]struct{})
 	for _, spec := range specs {
-		if spec.Python != nil {
-			projected = append(projected, spec)
-			modules[spec.Python.Module] = struct{}{}
+		if spec.Python == nil {
+			continue
+		}
+		modules[spec.Python.Module] = struct{}{}
+		if spec.Playback == PlaybackLiveOnly && spec.Approval == nil {
+			futureSpecs = append(futureSpecs, spec)
+		} else {
+			synchronousSpecs = append(synchronousSpecs, spec)
 		}
 	}
-	if len(projected) == 0 {
-		return ""
+	if len(futureSpecs) == 0 {
+		return generatePythonPrelude(synchronousSpecs)
 	}
 	moduleNames := make([]string, 0, len(modules))
 	for module := range modules {
@@ -769,7 +775,7 @@ def _capability_future(capability, arguments, field):
     suffix = str(_capability_future_sequence)
     slot = "future-" + suffix
     request = {
-        "call_id": "capability-" + suffix,
+        "call_id": "future-capability-" + suffix,
         "capability": capability,
         "arguments": arguments,
     }
@@ -795,10 +801,48 @@ def _resolve_capability_futures(value):
         future.result()
     return resolved
 `)
+	if len(synchronousSpecs) != 0 {
+		builder.WriteString(`
+_capability_call_sequence = 0
+
+def _capability_call(capability, arguments):
+    global _capability_call_sequence
+    _capability_call_sequence += 1
+    request = {
+        "call_id": "capability-" + str(_capability_call_sequence),
+        "capability": capability,
+        "arguments": arguments,
+    }
+    response = _host_json.loads(_host_bridge.call(_host_json.dumps(request, separators=(",", ":"))))
+    if response["status"] != "ok":
+        raise RuntimeError(response["error"]["message"])
+    return response["result"]
+`)
+	}
 	for _, module := range moduleNames {
 		fmt.Fprintf(&builder, "\n%s = _CapabilityModule()\n", module)
 	}
-	for index, spec := range projected {
+	for index, spec := range synchronousSpecs {
+		projection := spec.Python
+		proxy := fmt.Sprintf("_capability_sync_proxy_%d", index)
+		fmt.Fprintf(&builder, "\ndef %s(%s):\n    return _capability_call(%s, {", proxy, strings.Join(projection.Arguments, ", "), pythonString(spec.Name))
+		for argumentIndex, argument := range projection.Arguments {
+			if argumentIndex != 0 {
+				builder.WriteString(", ")
+			}
+			fmt.Fprintf(&builder, "%s: %s", pythonString(argument), argument)
+		}
+		builder.WriteString("})")
+		if projection.ResultField != "" {
+			fmt.Fprintf(&builder, "[%s]", pythonString(projection.ResultField))
+		}
+		builder.WriteByte('\n')
+		fmt.Fprintf(&builder, "%s.%s = %s\n", projection.Module, projection.Method, proxy)
+		if projection.GlobalAlias != "" {
+			fmt.Fprintf(&builder, "%s = %s.%s\n", projection.GlobalAlias, projection.Module, projection.Method)
+		}
+	}
+	for index, spec := range futureSpecs {
 		projection := spec.Python
 		proxy := fmt.Sprintf("_capability_future_proxy_%d", index)
 		fmt.Fprintf(&builder, "\ndef %s(%s):\n    return _capability_future(%s, {", proxy, strings.Join(projection.Arguments, ", "), pythonString(spec.Name))

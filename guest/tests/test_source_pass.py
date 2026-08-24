@@ -84,7 +84,7 @@ class SourcePassTests(unittest.TestCase):
         raw = emit_source_pass_patch_request_json(request(
             source,
             "split_phase_sources_read",
-            "pysolate.split-phase-sources-read-pass.v2",
+            "pysolate.split-phase-sources-read-pass.v3",
         ))
         patch = json.loads(raw)
         self.assertEqual("applied", patch["status"])
@@ -104,7 +104,7 @@ class SourcePassTests(unittest.TestCase):
         raw = emit_source_pass_patch_request_json(request(
             source,
             "split_phase_sources_read",
-            "pysolate.split-phase-sources-read-pass.v2",
+            "pysolate.split-phase-sources-read-pass.v3",
         ))
         patch = json.loads(raw)
         self.assertEqual("applied", patch["status"])
@@ -136,7 +136,7 @@ class SourcePassTests(unittest.TestCase):
                 patch = json.loads(emit_source_pass_patch_request_json(request(
                     source,
                     "split_phase_sources_read",
-                    "pysolate.split-phase-sources-read-pass.v2",
+                    "pysolate.split-phase-sources-read-pass.v3",
                 )))
                 self.assertEqual("applied", patch["status"])
                 self.assertEqual(count, patch["replacement_count"])
@@ -161,7 +161,7 @@ class SourcePassTests(unittest.TestCase):
         )
         def execute(source, inputs):
             patch = json.loads(emit_source_pass_patch_request_json(request(
-                source, "split_phase_sources_read", "pysolate.split-phase-sources-read-pass.v2",
+                source, "split_phase_sources_read", "pysolate.split-phase-sources-read-pass.v3",
             )))
             submitted = []
             materialized = []
@@ -186,7 +186,7 @@ class SourcePassTests(unittest.TestCase):
         self.assertEqual(submitted, materialized)
 
         patch = json.loads(emit_source_pass_patch_request_json(request(
-            loop, "split_phase_sources_read", "pysolate.split-phase-sources-read-pass.v2",
+            loop, "split_phase_sources_read", "pysolate.split-phase-sources-read-pass.v3",
         )))
         submitted = []
         namespace = {
@@ -209,7 +209,7 @@ class SourcePassTests(unittest.TestCase):
         patch = json.loads(emit_source_pass_patch_request_json(request(
             source,
             "split_phase_sources_read",
-            "pysolate.split-phase-sources-read-pass.v2",
+            "pysolate.split-phase-sources-read-pass.v3",
         )))
         self.assertEqual("not_applicable", patch["status"])
 
@@ -235,7 +235,7 @@ class SourcePassTests(unittest.TestCase):
                 patch = json.loads(emit_source_pass_patch_request_json(request(
                     source,
                     "split_phase_sources_read",
-                    "pysolate.split-phase-sources-read-pass.v2",
+                    "pysolate.split-phase-sources-read-pass.v3",
                 )))
                 self.assertEqual("not_applicable", patch["status"])
 

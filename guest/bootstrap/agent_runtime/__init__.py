@@ -961,7 +961,7 @@ def _prepare_source_pass_execution(patch_json: str) -> None:
     allowed_runtime_names = frozenset()
     if (
         patch.get("pass_name") == "split_phase_sources_read"
-        and patch.get("pass_version") == "pysolate.split-phase-sources-read-pass.v2"
+        and patch.get("pass_version") == "pysolate.split-phase-sources-read-pass.v3"
     ):
         allowed_runtime_names = frozenset({_SPLIT_PHASE_SUBMIT_HELPER, _SPLIT_PHASE_MATERIALIZE_HELPER})
     elif (

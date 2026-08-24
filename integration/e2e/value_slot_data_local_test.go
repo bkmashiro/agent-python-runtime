@@ -177,6 +177,7 @@ func TestDataLocalNumpySumMatchedEndToEnd(t *testing.T) {
 	}
 
 	var baselineDurations, treatmentDurations []time.Duration
+	var treatmentCopiedBytes []uint64
 	for index := 0; index < 5; index++ {
 		baselineOwner := fmt.Sprintf("data-local-baseline-%d", index)
 		request := dataLocalRunRequest(t, fmt.Sprintf("data-local-baseline-%d", index))
@@ -236,6 +237,7 @@ func TestDataLocalNumpySumMatchedEndToEnd(t *testing.T) {
 		if evidence.Claims != 1 || evidence.Discarded != 0 || !evidence.Closed {
 			t.Fatalf("evidence=%+v", evidence)
 		}
+		treatmentCopiedBytes = append(treatmentCopiedBytes, evidence.CopiedBytes)
 	}
 	baselineMedian := medianDuration(baselineDurations)
 	treatmentMedian := medianDuration(treatmentDurations)
@@ -243,7 +245,7 @@ func TestDataLocalNumpySumMatchedEndToEnd(t *testing.T) {
 	if treatmentMedian >= baselineMedian {
 		disposition = "reject"
 	}
-	t.Logf("data-local matched evidence: baseline_ns=%v treatment_ns=%v baseline_median_ns=%d treatment_median_ns=%d ratio=%.6f disposition=%s", durationsNanos(baselineDurations), durationsNanos(treatmentDurations), baselineMedian.Nanoseconds(), treatmentMedian.Nanoseconds(), float64(treatmentMedian)/float64(baselineMedian), disposition)
+	t.Logf("data-local matched evidence: baseline_ns=%v treatment_ns=%v baseline_median_ns=%d treatment_median_ns=%d ratio=%.6f disposition=%s fixture_bytes=%d host_to_guest_bytes=%v guest_peak_memory=unavailable", durationsNanos(baselineDurations), durationsNanos(treatmentDurations), baselineMedian.Nanoseconds(), treatmentMedian.Nanoseconds(), float64(treatmentMedian)/float64(baselineMedian), disposition, len(fixture), treatmentCopiedBytes)
 }
 
 func durationsNanos(values []time.Duration) []int64 {

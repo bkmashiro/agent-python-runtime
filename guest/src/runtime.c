@@ -18,6 +18,8 @@
 #define AGENT_RUNTIME_TOOL_RESPONSE_MAX (1024 * 1024)
 #define AGENT_RUNTIME_MATERIALIZED_RESPONSE_MAX 256
 #define AGENT_RUNTIME_SPLIT_PHASE_SLOT_MAX 96
+#define AGENT_RUNTIME_VALUE_SLOT_MAX 128
+#define AGENT_RUNTIME_VALUE_SLOT_RESPONSE_MAX (AGENT_RUNTIME_TOOL_RESPONSE_MAX + 1)
 #define AGENT_RUNTIME_PREPARED_DESCRIPTOR_MAX 4096
 #define AGENT_RUNTIME_PREPARED_BODY_MAX (8 * 1024 * 1024)
 
@@ -211,6 +213,33 @@ static PyObject *python_materialize_call(PyObject *self, PyObject *args) {
     return result;
 }
 
+static PyObject *python_materialize_slot(PyObject *self, PyObject *args) {
+    (void)self;
+    const char *slot = NULL;
+    Py_ssize_t slot_len = 0;
+    if (!PyArg_ParseTuple(args, "s#:materialize_slot", &slot, &slot_len)) {
+        return NULL;
+    }
+    if (slot_len <= 0 || slot_len > AGENT_RUNTIME_VALUE_SLOT_MAX) {
+        PyErr_SetString(PyExc_RuntimeError, "Host value-slot identity is invalid");
+        return NULL;
+    }
+    char *response = malloc(AGENT_RUNTIME_VALUE_SLOT_RESPONSE_MAX);
+    if (response == NULL) {
+        return PyErr_NoMemory();
+    }
+    int32_t response_len = agent_runtime_materialize_slot(
+        slot, (int32_t)slot_len, response, AGENT_RUNTIME_VALUE_SLOT_RESPONSE_MAX);
+    if (response_len <= 1 || response_len > AGENT_RUNTIME_VALUE_SLOT_RESPONSE_MAX) {
+        free(response);
+        PyErr_SetString(PyExc_RuntimeError, "Host value-slot materialization failed");
+        return NULL;
+    }
+    PyObject *result = PyBytes_FromStringAndSize(response, response_len);
+    free(response);
+    return result;
+}
+
 static PyObject *python_seal_imports(PyObject *self, PyObject *names) {
     (void)self;
     if (import_policy_sealed) {
@@ -268,6 +297,7 @@ static PyMethodDef agent_runtime_host_methods[] = {
     {"materialize_value", python_materialize_value, METH_VARARGS, "Claim one exact prepared scalar value."},
     {"submit_call", python_submit_call, METH_VARARGS, "Submit one hidden Host-owned read."},
     {"materialize_call", python_materialize_call, METH_VARARGS, "Materialize one hidden Host-owned read."},
+    {"materialize_slot", python_materialize_slot, METH_VARARGS, "Materialize one hidden Host-owned immutable value."},
     {"seal_imports", python_seal_imports, METH_O, "Seal the exact per-Run import set."},
     {"import_receipts", python_import_receipts, METH_NOARGS, "Read bounded native import receipts."},
     {NULL, NULL, 0, NULL},
@@ -378,12 +408,11 @@ int32_t runtime_init(const char *config, int32_t config_len) {
     return 0;
 }
 
-int32_t runtime_validate_source(const char *request, int32_t request_len) {
+static int32_t validate_source_with(const char *function, const char *request, int32_t request_len) {
     if (!Py_IsInitialized() || runtime_module == NULL) {
         return -1;
     }
-    PyObject *result = call_with_utf8("_validate_request_source", request,
-                                     request_len);
+    PyObject *result = call_with_utf8(function, request, request_len);
     if (result == NULL) {
         PyErr_Print();
         return -1;
@@ -395,6 +424,14 @@ int32_t runtime_validate_source(const char *request, int32_t request_len) {
         return -1;
     }
     return (int32_t)status;
+}
+
+int32_t runtime_validate_source(const char *request, int32_t request_len) {
+    return validate_source_with("_validate_request_source", request, request_len);
+}
+
+int32_t runtime_validate_source_for_patch(const char *request, int32_t request_len) {
+    return validate_source_with("_validate_request_source_for_patch", request, request_len);
 }
 
 

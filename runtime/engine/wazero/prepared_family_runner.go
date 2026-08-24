@@ -223,7 +223,7 @@ func (family *PreparedFamily) newCOWChildEngine(ctx context.Context, config runt
 	if shared == nil || shared.imageState().PreparedInputSHA256 != family.input.identity {
 		return nil, ErrPreparedFamilyDrift
 	}
-	child, err := newEngine(ctx, family.wasm, config, brokerFactory, binding, nil)
+	child, err := newEngine(ctx, family.wasm, config, brokerFactory, binding, nil, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -73,3 +73,15 @@ func TestSplitPhaseSourcesReadIsAStaticHostScheduledPlugin(t *testing.T) {
 		t.Fatalf("registration=%+v", registration)
 	}
 }
+
+func TestDataLocalNumpySumIsAStaticValueSlotPlugin(t *testing.T) {
+	pass, err := NewDataLocalNumpySum(passregistration.SemanticAnalyzerSHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registration := pass.Registration()
+	if registration.Name() != DataLocalNumpySumName || registration.Stage() != passregistration.StageWholeProgramPatch ||
+		registration.Consumer() != passregistration.ExecutionPatch || !pass.ValueSlotBound() {
+		t.Fatalf("registration=%+v", registration)
+	}
+}

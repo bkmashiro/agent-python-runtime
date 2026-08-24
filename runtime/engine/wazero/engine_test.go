@@ -13,6 +13,7 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/valueslot"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
@@ -48,6 +49,22 @@ func TestFactoryRequiresBrokerForSplitPhaseCalls(t *testing.T) {
 	_, err := (wazeroengine.Factory{}).New(context.Background(), []byte("not wasm"), config)
 	if err == nil || !strings.Contains(err.Error(), "requires a capability Broker factory") {
 		t.Fatalf("factory error = %v", err)
+	}
+}
+
+func TestFactoryRequiresValueSlotTableExactlyWhenSelected(t *testing.T) {
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, ValueSlots: true}
+	if _, err := (wazeroengine.Factory{}).New(context.Background(), []byte("not wasm"), config); err == nil || !strings.Contains(err.Error(), "value slots require") {
+		t.Fatalf("missing table error=%v", err)
+	}
+	object, _ := valueslot.NewPreparedObject(valueslot.KindJSONScalar, []byte("1"), "producer-v1", "input-v1", "run-one")
+	table, _ := valueslot.NewTable([]valueslot.Entry{{
+		Spec:   valueslot.SlotSpec{ID: "slot-one", SourceOccurrence: "line-1", ProducerIdentity: "producer-v1", InputIdentity: "input-v1", Kind: valueslot.KindJSONScalar, MaxBytes: 16, PrivacyPartition: "run-one", ClaimPolicy: valueslot.ClaimSingleUse, MaxClaims: 1},
+		Object: object, Strategy: valueslot.StrategyInlineJSON,
+	}})
+	if _, err := (wazeroengine.Factory{ValueSlots: table}).New(context.Background(), []byte("not wasm"), runtimeconfig.DefaultRunConfig()); err == nil || !strings.Contains(err.Error(), "require the value-slot mechanism") {
+		t.Fatalf("disabled mechanism error=%v", err)
 	}
 }
 

@@ -14,6 +14,8 @@ PURE_SCALAR_FOLD = "pure_scalar_fold"
 PURE_SCALAR_FOLD_VERSION = "pysolate.pure-scalar-fold-pass.v1"
 SPLIT_PHASE_SOURCES_READ = "split_phase_sources_read"
 SPLIT_PHASE_SOURCES_READ_VERSION = "pysolate.split-phase-sources-read-pass.v1"
+DATA_LOCAL_NUMPY_SUM = "data_local_numpy_sum"
+DATA_LOCAL_NUMPY_SUM_VERSION = "pysolate.data-local-numpy-sum-pass.v1"
 _REQUEST_KEYS = {"pass_name", "pass_version", "registration_sha256", "source"}
 _PATCH_KEYS = {
     "schema_version", "status", "pass_name", "pass_version", "registration_sha256",
@@ -305,10 +307,81 @@ def _split_phase_sources_read(source):
     return tree, derived_source, len(reads)
 
 
+def _data_local_numpy_sum(source):
+    if (
+        not isinstance(source, str)
+        or not source
+        or "\r" in source
+        or len(source.encode("utf-8")) > MAX_SOURCE_BYTES
+    ):
+        raise ValueError("invalid source pass input")
+    tree = ast.parse(source, filename="<agent-run>", mode="exec")
+    lines = source.splitlines(keepends=True)
+    if len(tree.body) != 3 or len(lines) != 3:
+        return tree, "", 0
+    import_statement, load_statement, result_statement = tree.body
+    if (
+        not isinstance(import_statement, ast.Import)
+        or len(import_statement.names) != 1
+        or import_statement.names[0].name != "numpy"
+        or import_statement.names[0].asname != "np"
+        or import_statement.lineno != 1
+        or import_statement.end_lineno != 1
+    ):
+        return tree, "", 0
+    load_assignment = _simple_assignment(load_statement)
+    if load_assignment is None or load_assignment[0] != "dataset" or load_statement.lineno != 2 or load_statement.end_lineno != 2:
+        return tree, "", 0
+    load_call = load_assignment[1]
+    if (
+        not isinstance(load_call, ast.Call)
+        or not isinstance(load_call.func, ast.Attribute)
+        or load_call.func.attr != "load"
+        or not isinstance(load_call.func.value, ast.Name)
+        or load_call.func.value.id != "np"
+        or len(load_call.args) != 1
+        or not isinstance(load_call.args[0], ast.Constant)
+        or load_call.args[0].value != "/workspace/input.npy"
+        or len(load_call.keywords) != 1
+        or load_call.keywords[0].arg != "allow_pickle"
+        or not isinstance(load_call.keywords[0].value, ast.Constant)
+        or load_call.keywords[0].value.value is not False
+    ):
+        return tree, "", 0
+    result_assignment = _simple_assignment(result_statement)
+    if result_assignment is None or result_assignment[0] != "result" or result_statement.lineno != 3 or result_statement.end_lineno != 3:
+        return tree, "", 0
+    outer_call = result_assignment[1]
+    if (
+        not isinstance(outer_call, ast.Call)
+        or not isinstance(outer_call.func, ast.Name)
+        or outer_call.func.id != "int"
+        or len(outer_call.args) != 1
+        or outer_call.keywords
+    ):
+        return tree, "", 0
+    sum_call = outer_call.args[0]
+    if (
+        not isinstance(sum_call, ast.Call)
+        or not isinstance(sum_call.func, ast.Attribute)
+        or sum_call.func.attr != "sum"
+        or not isinstance(sum_call.func.value, ast.Name)
+        or sum_call.func.value.id != "dataset"
+        or sum_call.args
+        or sum_call.keywords
+    ):
+        return tree, "", 0
+    trailing_newline = "\n" if source.endswith("\n") else ""
+    derived_source = "pass\npass\nresult = _pysolate_materialize_slot('slot-numpy-sum-v1')" + trailing_newline
+    ast.parse(derived_source, filename="<agent-run>", mode="exec")
+    return tree, derived_source, 1
+
+
 _TRANSFORMS = {
     (PURE_SCALAR_CSE, PURE_SCALAR_CSE_VERSION): _pure_scalar_cse,
     (PURE_SCALAR_FOLD, PURE_SCALAR_FOLD_VERSION): _pure_scalar_fold,
     (SPLIT_PHASE_SOURCES_READ, SPLIT_PHASE_SOURCES_READ_VERSION): _split_phase_sources_read,
+    (DATA_LOCAL_NUMPY_SUM, DATA_LOCAL_NUMPY_SUM_VERSION): _data_local_numpy_sum,
 }
 
 

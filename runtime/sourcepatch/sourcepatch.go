@@ -23,6 +23,9 @@ const (
 	SplitPhaseSourcesReadName         passregistration.Name = "split_phase_sources_read"
 	SplitPhaseSourcesReadVersion                            = "pysolate.split-phase-sources-read-pass.v1"
 	SplitPhaseSourcesReadConfigSHA256                       = "sha256:2a402e54fb4a0dc196737b03d8f2e03c9b1a8509bd729563b1f24f95a0ae1d7f"
+	DataLocalNumpySumName             passregistration.Name = "data_local_numpy_sum"
+	DataLocalNumpySumVersion                                = "pysolate.data-local-numpy-sum-pass.v1"
+	DataLocalNumpySumConfigSHA256                           = "sha256:2de3ebe7ec484955cec783ca0fbbf091598d8217bff9f7cc95d9a241fbbeac64"
 )
 
 var (
@@ -64,6 +67,10 @@ type PureScalarFold struct {
 }
 
 type SplitPhaseSourcesRead struct {
+	registration passregistration.Registration
+}
+
+type DataLocalNumpySum struct {
 	registration passregistration.Registration
 }
 
@@ -126,6 +133,24 @@ func (pass SplitPhaseSourcesRead) Registration() passregistration.Registration {
 
 func (pass SplitPhaseSourcesRead) HostScheduled() bool { return true }
 
+func NewDataLocalNumpySum(analyzerSHA256 string) (DataLocalNumpySum, error) {
+	definition, err := passregistration.Define(
+		DataLocalNumpySumName, DataLocalNumpySumVersion, passregistration.StageWholeProgramPatch,
+		passregistration.ExecutionPatch, passregistration.PatchBindings(),
+	)
+	if err != nil {
+		return DataLocalNumpySum{}, err
+	}
+	registration, err := definition.Register(analyzerSHA256, DataLocalNumpySumConfigSHA256)
+	if err != nil {
+		return DataLocalNumpySum{}, err
+	}
+	return DataLocalNumpySum{registration: registration}, nil
+}
+
+func (pass DataLocalNumpySum) Registration() passregistration.Registration { return pass.registration }
+func (pass DataLocalNumpySum) ValueSlotBound() bool                        { return true }
+
 func (pass PureScalarFold) Transform(ctx context.Context, transformer Transformer, source string) (Patch, error) {
 	return transform(ctx, transformer, source, pass.registration, PureScalarFoldName)
 }
@@ -136,6 +161,10 @@ func (pass PureScalarCSE) Transform(ctx context.Context, transformer Transformer
 
 func (pass SplitPhaseSourcesRead) Transform(ctx context.Context, transformer Transformer, source string) (Patch, error) {
 	return transform(ctx, transformer, source, pass.registration, SplitPhaseSourcesReadName)
+}
+
+func (pass DataLocalNumpySum) Transform(ctx context.Context, transformer Transformer, source string) (Patch, error) {
+	return transform(ctx, transformer, source, pass.registration, DataLocalNumpySumName)
 }
 
 func transform(ctx context.Context, transformer Transformer, source string, registration passregistration.Registration, expectedName passregistration.Name) (Patch, error) {

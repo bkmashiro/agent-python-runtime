@@ -15,6 +15,7 @@ REQUIRED_EXPORTS = {
     "memory",
     "runtime_init",
     "runtime_validate_source",
+    "runtime_validate_source_for_patch",
     "runtime_analyze_source",
     "runtime_transform_source_pass",
     "runtime_select_source_pass_execution",
@@ -37,6 +38,9 @@ ALLOWED_IMPORT_MODULES = {"wasi_snapshot_preview1", "agent_runtime_v1"}
 REQUIRED_CUSTOM_IMPORTS = {
     ("agent_runtime_v1", "host_call"),
     ("agent_runtime_v1", "materialize_value"),
+    ("agent_runtime_v1", "submit_call"),
+    ("agent_runtime_v1", "materialize_call"),
+    ("agent_runtime_v1", "materialize_slot"),
 }
 MAX_JSON_BYTES = 1 << 20
 MANIFEST_FIELDS = {

@@ -16,7 +16,7 @@ class GuestSourceContractTests(unittest.TestCase):
         text = HEADER.read_text()
         exports = set(re.findall(r"AGENT_RUNTIME_EXPORT\(\"([^\"]+)\"\)", text))
         self.assertEqual(
-            {"runtime_init", "runtime_validate_source", "runtime_analyze_source", "runtime_transform_source_pass", "runtime_select_source_pass_execution", "runtime_emit_prepared_region_patch", "runtime_execute_prepared_region_scratch", "runtime_select_prepared_region_execution", "runtime_prepare", "runtime_prepare_numpy_ndarray", "alloc", "dealloc", "execute"},
+            {"runtime_init", "runtime_validate_source", "runtime_validate_source_for_patch", "runtime_analyze_source", "runtime_transform_source_pass", "runtime_select_source_pass_execution", "runtime_emit_prepared_region_patch", "runtime_execute_prepared_region_scratch", "runtime_select_prepared_region_execution", "runtime_prepare", "runtime_prepare_numpy_ndarray", "alloc", "dealloc", "execute"},
             exports,
         )
 

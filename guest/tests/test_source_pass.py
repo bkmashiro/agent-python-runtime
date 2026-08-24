@@ -26,6 +26,53 @@ def request(source, pass_name="pure_scalar_cse", pass_version="pysolate.pure-sca
 
 
 class SourcePassTests(unittest.TestCase):
+    def test_data_local_numpy_sum_emits_one_value_slot_materialization(self):
+        source = (
+            "import numpy as np\n"
+            "dataset = np.load('/workspace/input.npy', allow_pickle=False)\n"
+            "result = int(dataset.sum())\n"
+        )
+        raw_request = request(
+            source,
+            "data_local_numpy_sum",
+            "pysolate.data-local-numpy-sum-pass.v1",
+        )
+        patch = json.loads(emit_source_pass_patch_request_json(raw_request))
+        self.assertEqual("applied", patch["status"])
+        self.assertEqual(1, patch["replacement_count"])
+        self.assertEqual(
+            "pass\npass\nresult = _pysolate_materialize_slot('slot-numpy-sum-v1')\n",
+            patch["derived_source"],
+        )
+        tree = validate_source_pass_execution_request(source, json.dumps(patch, separators=(",", ":")))
+        self.assertIsNotNone(tree)
+
+    def test_data_local_numpy_sum_rejects_variants_without_rewrite(self):
+        variants = (
+            "import numpy as np\ndataset = np.load(path, allow_pickle=False)\nresult = int(dataset.sum())\n",
+            "import numpy as np\ndataset = np.load('/workspace/input.npy')\nresult = int(dataset.sum())\n",
+            "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=True)\nresult = int(dataset.sum())\n",
+            "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\nresult = dataset.sum()\n",
+            "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\nresult = int(dataset.mean())\n",
+            "import numpy as numpy\ndataset = numpy.load('/workspace/input.npy', allow_pickle=False)\nresult = int(dataset.sum())\n",
+            "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\ndataset[0] = 0\nresult = int(dataset.sum())\n",
+            "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\nresult = int(dataset[dataset > 0].sum())\n",
+            "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\nresult = int(sum(map(lambda item: item, dataset)))\n",
+            "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\nresult = locals()\n",
+            "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\nraise RuntimeError('visible')\n",
+            "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\nprint(dataset.shape)\nresult = int(dataset.sum())\n",
+        )
+        for source in variants:
+            with self.subTest(source=source):
+                raw_request = request(
+                    source,
+                    "data_local_numpy_sum",
+                    "pysolate.data-local-numpy-sum-pass.v1",
+                )
+                patch = json.loads(emit_source_pass_patch_request_json(raw_request))
+                self.assertEqual("not_applicable", patch["status"])
+                self.assertEqual("", patch["derived_source"])
+
     def test_split_phase_sources_read_keeps_submit_and_materialize_adjacent_for_one_call(self):
         source = 'first = sources.read("alpha")\nresult = first\n'
         raw = emit_source_pass_patch_request_json(request(

@@ -25,6 +25,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/preparedregion"
 	"github.com/bkmashiro/agent-python-runtime/runtime/receipt"
 	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
+	"github.com/bkmashiro/agent-python-runtime/runtime/valueslot"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 	wazerort "github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -42,6 +43,7 @@ type Factory struct {
 	WorkspaceRef     workspace.Ref
 	WorkspaceOwner   string
 	PreparedRegions  *preparedregion.PreparedRegionTable
+	ValueSlots       *valueslot.Table
 }
 
 func (Factory) Name() string { return "wazero" }
@@ -51,7 +53,7 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 	if err != nil {
 		return nil, err
 	}
-	return newEngine(ctx, wasm, config, factory.BrokerFactory, binding, factory.PreparedRegions)
+	return newEngine(ctx, wasm, config, factory.BrokerFactory, binding, factory.PreparedRegions, factory.ValueSlots)
 }
 
 func (factory Factory) validatedBinding(config runtimeconfig.RunConfig) (*workspaceBinding, error) {
@@ -86,6 +88,12 @@ func (factory Factory) validatedBinding(config runtimeconfig.RunConfig) (*worksp
 	}
 	if factory.PreparedRegions != nil && (!config.Mechanisms.SemanticAnalysis || config.Mechanisms.Streaming) {
 		return nil, errors.New("prepared region table requires non-streaming semantic analysis")
+	}
+	if config.Mechanisms.ValueSlots && factory.ValueSlots == nil {
+		return nil, errors.New("value slots require a Host value-slot table")
+	}
+	if factory.ValueSlots != nil && !config.Mechanisms.ValueSlots {
+		return nil, errors.New("Host value-slot tables require the value-slot mechanism")
 	}
 	return binding, nil
 }
@@ -224,17 +232,18 @@ type Engine struct {
 	coldEvidence        coldEvidenceStore
 	semanticLifecycle   semanticAnalysisLifecycleStore
 	preparedRegions     *preparedregion.PreparedRegionTable
+	valueSlots          *valueslot.Table
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
-	return newEngine(ctx, wasm, config, nil, nil, nil)
+	return newEngine(ctx, wasm, config, nil, nil, nil, nil)
 }
 
 func NewWithBrokerFactory(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, factory BrokerFactory) (*Engine, error) {
-	return newEngine(ctx, wasm, config, factory, nil, nil)
+	return newEngine(ctx, wasm, config, factory, nil, nil, nil)
 }
 
-func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, brokerFactory BrokerFactory, binding *workspaceBinding, preparedRegions *preparedregion.PreparedRegionTable) (*Engine, error) {
+func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, brokerFactory BrokerFactory, binding *workspaceBinding, preparedRegions *preparedregion.PreparedRegionTable, valueSlots *valueslot.Table) (*Engine, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid run config: %w", err)
 	}
@@ -272,7 +281,7 @@ func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig,
 		return nil, fmt.Errorf("compile guest: %w", err)
 	}
 	engine := &Engine{
-		runtime: wasmRuntime, compiled: compiled, config: config, brokerFactory: brokerFactory, workspaceBinding: binding, preparedRegions: preparedRegions,
+		runtime: wasmRuntime, compiled: compiled, config: config, brokerFactory: brokerFactory, workspaceBinding: binding, preparedRegions: preparedRegions, valueSlots: valueSlots,
 		artifactSHA256: artifactSHA256,
 	}
 	if binding != nil {
@@ -286,7 +295,7 @@ func newPreparedNumpyCopyEngine(ctx context.Context, wasm []byte, config runtime
 	if input.validateForConfig(config) != nil || len(input.body) == 0 || len(input.descriptorJSON) == 0 {
 		return nil, ErrPreparedNumpyInput
 	}
-	engine, err := newEngine(ctx, wasm, config, brokerFactory, binding, nil)
+	engine, err := newEngine(ctx, wasm, config, brokerFactory, binding, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -989,6 +998,39 @@ func (engine *Engine) RunHostScheduledSourcePatchDerived(ctx context.Context, re
 	return engine.runWithPrepares(ctx, request, prepares, false, &derivedSelection{export: "runtime_select_source_pass_execution", payload: append(patchRaw, '\n')})
 }
 
+// RunValueSlotSourcePatchDerived executes the single v1 data-local reduction adapter.
+// The pass describes one semantic scalar slot; the Host-selected table owns materialization.
+func (engine *Engine) RunValueSlotSourcePatchDerived(ctx context.Context, request []byte, patch sourcepatch.Patch, registration passregistration.Registration) ([]byte, error) {
+	if !engine.config.Mechanisms.ValueSlots || engine.valueSlots == nil || engine.config.ProgramSurface != runtimeconfig.ProgramSurfaceDirect {
+		return nil, runtimeconfig.ErrMechanismDisabled
+	}
+	spec, strategy, backingIdentity, err := engine.valueSlots.Describe("slot-numpy-sum-v1")
+	if err != nil || spec.ID != "slot-numpy-sum-v1" || spec.SourceOccurrence != "line-3:result" ||
+		spec.ProducerIdentity != "numpy-int64-sum-v1" || spec.InputIdentity == "" || spec.PrivacyPartition == "" ||
+		spec.Kind != valueslot.KindJSONScalar || spec.MaxBytes > 32 || spec.ClaimPolicy != valueslot.ClaimSingleUse ||
+		spec.MaxClaims != 1 || strategy != valueslot.StrategyInlineJSON || backingIdentity == "" {
+		return nil, valueslot.ErrInvalidEntry
+	}
+	runRequest, err := runtimeconfig.DecodeRunRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	if registration.Name() != sourcepatch.DataLocalNumpySumName || registration.Stage() != passregistration.StageWholeProgramPatch ||
+		!patch.Applied() || patch.Validate(runRequest.Code, registration) != nil {
+		return nil, sourcepatch.ErrInvalidPatch
+	}
+	patchRaw, err := json.Marshal(patch)
+	if err != nil {
+		return nil, err
+	}
+	prepares := make(chan string)
+	close(prepares)
+	return engine.runWithPrepares(ctx, request, prepares, false, &derivedSelection{
+		export: "runtime_select_source_pass_execution", payload: append(patchRaw, '\n'),
+		sourceValidationExport: "runtime_validate_source_for_patch",
+	})
+}
+
 // RunStream keeps one fresh Guest alive while Host-trusted preparation chunks
 // arrive. It is an internal streaming seam; Agent source still enters only
 // through the final validated request.
@@ -1000,8 +1042,9 @@ func (engine *Engine) RunStream(ctx context.Context, request []byte, prepares <-
 }
 
 type derivedSelection struct {
-	export  string
-	payload []byte
+	export                 string
+	payload                []byte
+	sourceValidationExport string
 }
 
 func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepares <-chan string, streaming bool, selection *derivedSelection) (payload []byte, runErr error) {
@@ -1042,6 +1085,10 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		runContext = context.WithValue(runContext, preparedRegionContextKey{}, engine.preparedRegions)
 		defer func() { runErr = errors.Join(runErr, engine.preparedRegions.Close()) }()
 	}
+	if engine.valueSlots != nil {
+		runContext = context.WithValue(runContext, valueSlotContextKey{}, engine.valueSlots)
+		defer func() { runErr = errors.Join(runErr, engine.valueSlots.Close()) }()
+	}
 	if engine.workspaceRun != nil {
 		select {
 		case engine.workspaceRun <- struct{}{}:
@@ -1051,6 +1098,9 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		defer func() { <-engine.workspaceRun }()
 	}
 	if err := engine.ensureWorkspace(); err != nil {
+		return nil, err
+	}
+	if err := engine.verifyDataLocalValueInput(); err != nil {
 		return nil, err
 	}
 	if err := engine.ensurePrepared(runContext); err != nil {
@@ -1165,7 +1215,11 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 			return nil, withGuestDiagnostic(err, stderr.String())
 		}
 	}
-	if err := callSourceValidation(runContext, module, request); err != nil {
+	validationExport := "runtime_validate_source"
+	if selection != nil && selection.sourceValidationExport != "" {
+		validationExport = selection.sourceValidationExport
+	}
+	if err := callSourceValidation(runContext, module, validationExport, request); err != nil {
 		return nil, withGuestDiagnostic(err, stderr.String())
 	}
 	if selection != nil {
@@ -1318,10 +1372,34 @@ prepareComplete:
 	return payload, nil
 }
 
+func (engine *Engine) verifyDataLocalValueInput() error {
+	if engine.valueSlots == nil {
+		return nil
+	}
+	spec, _, _, err := engine.valueSlots.Describe("slot-numpy-sum-v1")
+	if errors.Is(err, valueslot.ErrMissingSlot) {
+		return nil
+	}
+	if err != nil || engine.workspaceLease == nil {
+		return valueslot.ErrInvalidEntry
+	}
+	snapshot, err := engine.workspaceLease.Snapshot()
+	if err != nil {
+		return err
+	}
+	for _, entry := range snapshot.Entries {
+		if entry.Path == "input.npy" && entry.Kind == "file" && entry.SHA256 == spec.InputIdentity {
+			return nil
+		}
+	}
+	return valueslot.ErrInvalidEntry
+}
+
 type brokerContextKey struct{}
 type streamingContextKey struct{}
 type preparedRegionContextKey struct{}
 type splitPhaseContextKey struct{}
+type valueSlotContextKey struct{}
 
 const hostCallPayloadMax = 1024 * 1024
 
@@ -1339,6 +1417,9 @@ func instantiateCapabilityHost(ctx context.Context, runtime wazerort.Runtime) er
 		NewFunctionBuilder().
 		WithFunc(hostMaterializeCall).
 		Export("materialize_call").
+		NewFunctionBuilder().
+		WithFunc(hostMaterializeSlot).
+		Export("materialize_slot").
 		Instantiate(ctx)
 	return err
 }
@@ -1405,6 +1486,38 @@ func hostMaterializeCall(ctx context.Context, module api.Module, slotPointer, sl
 	if err != nil || len(response) == 0 || len(response) > int(responseCapacity) {
 		return -1
 	}
+	if !module.Memory().Write(responsePointer, response) {
+		return -1
+	}
+	return int32(len(response))
+}
+
+func hostMaterializeSlot(ctx context.Context, module api.Module, slotPointer, slotLength, responsePointer, responseCapacity uint32) int32 {
+	if slotLength == 0 || slotLength > 128 || responseCapacity < 2 || responseCapacity > hostCallPayloadMax+1 {
+		return -1
+	}
+	table, ok := ctx.Value(valueSlotContextKey{}).(*valueslot.Table)
+	if !ok || table == nil {
+		return -1
+	}
+	slotView, ok := module.Memory().Read(slotPointer, slotLength)
+	if !ok {
+		return -1
+	}
+	payload, strategy, err := table.Claim(string(append([]byte(nil), slotView...)))
+	if err != nil || len(payload) == 0 || len(payload)+1 > int(responseCapacity) {
+		return -1
+	}
+	response := make([]byte, len(payload)+1)
+	switch strategy {
+	case valueslot.StrategyInlineJSON:
+		response[0] = 1
+	case valueslot.StrategyPrivateCopy:
+		response[0] = 2
+	default:
+		return -1
+	}
+	copy(response[1:], payload)
 	if !module.Memory().Write(responsePointer, response) {
 		return -1
 	}
@@ -1568,8 +1681,8 @@ func callNoArgs(ctx context.Context, module api.Module, name string) error {
 	return nil
 }
 
-func callSourceValidation(ctx context.Context, module api.Module, request []byte) error {
-	results, release, err := callWithBytes(ctx, module, "runtime_validate_source", request)
+func callSourceValidation(ctx context.Context, module api.Module, export string, request []byte) error {
+	results, release, err := callWithBytes(ctx, module, export, request)
 	if release != nil {
 		defer release()
 	}
@@ -1577,7 +1690,7 @@ func callSourceValidation(ctx context.Context, module api.Module, request []byte
 		return err
 	}
 	if len(results) != 1 {
-		return errors.New("runtime_validate_source returned an unexpected result count")
+		return fmt.Errorf("%s returned an unexpected result count", export)
 	}
 	switch uint32(results[0]) {
 	case 0:

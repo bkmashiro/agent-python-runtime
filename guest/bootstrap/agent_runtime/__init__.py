@@ -48,6 +48,7 @@ _PREPARED_REGION_HELPER = "__pysolate_materialize_value__"
 _PREPARED_REGION_PAYLOAD_MAX = 256
 _SPLIT_PHASE_SUBMIT_HELPER = "_pysolate_call_submit"
 _SPLIT_PHASE_MATERIALIZE_HELPER = "_pysolate_call_materialize"
+_VALUE_SLOT_HELPER = "_pysolate_materialize_slot"
 _FUTURE_FLAGS = sum(getattr(__future__, name).compiler_flag for name in __future__.all_feature_names)
 
 
@@ -876,13 +877,34 @@ def _validate_request_source(request_json: str) -> int:
     return _SOURCE_CONTRACT_OK
 
 
+def _validate_request_source_for_patch(request_json: str) -> int:
+    """Validate original source without importing modules erased by a derived patch."""
+    global _validated_request_json, _validated_code, _validated_import_globals
+    if not isinstance(request_json, str):
+        return _SOURCE_CONTRACT_INVALID
+    request, error = _decode_request(request_json)
+    if error is not None or request is None:
+        return _SOURCE_CONTRACT_INVALID
+    if request.get("compatibility") is None:
+        return _validate_request_source(request_json)
+    status, code, _ = _validate_agent_source(request["code"], request.get("compatibility"))
+    if status != _SOURCE_CONTRACT_OK or code is None:
+        return status
+    _validated_request_json = request_json
+    _validated_code = code
+    _validated_import_globals = {}
+    return _SOURCE_CONTRACT_OK
+
+
 def _install_derived_tree(
     tree: ast.Module,
     request: dict[str, Any],
     allowed_runtime_names: frozenset[str] = frozenset(),
+    preload_derived_imports: bool = False,
 ) -> None:
-    global _validated_code, _validated_effective_ast_sha256
+    global _validated_code, _validated_effective_ast_sha256, _validated_import_globals
     compatibility = request.get("compatibility")
+    import_nodes: list[ast.stmt] = []
     if compatibility is None:
         preamble: list[ast.stmt] = []
         body: list[ast.stmt] = []
@@ -902,6 +924,11 @@ def _install_derived_tree(
         body = [node for node in tree.body if id(node) not in import_ids]
         preamble = [node for node in import_nodes if isinstance(node, ast.ImportFrom) and node.module == "__future__"]
     code, digest = _compile_agent_wrapper(body, preamble, allowed_runtime_names)
+    if preload_derived_imports:
+        preload = _preload_and_seal_imports(import_nodes)
+        if preload is None:
+            raise RuntimeError("derived source imports are unavailable")
+        _validated_import_globals = preload
     _validated_code = code
     _validated_effective_ast_sha256 = digest
 
@@ -935,7 +962,12 @@ def _prepare_source_pass_execution(patch_json: str) -> None:
         and patch.get("pass_version") == "pysolate.split-phase-sources-read-pass.v1"
     ):
         allowed_runtime_names = frozenset({_SPLIT_PHASE_SUBMIT_HELPER, _SPLIT_PHASE_MATERIALIZE_HELPER})
-    _install_derived_tree(tree, request, allowed_runtime_names)
+    elif (
+        patch.get("pass_name") == "data_local_numpy_sum"
+        and patch.get("pass_version") == "pysolate.data-local-numpy-sum-pass.v1"
+    ):
+        allowed_runtime_names = frozenset({_VALUE_SLOT_HELPER})
+    _install_derived_tree(tree, request, allowed_runtime_names, preload_derived_imports=True)
 
 
 def _encode(response: dict[str, Any]) -> str:
@@ -1010,6 +1042,34 @@ def _materialize_split_phase_call(slot_id: str) -> dict[str, Any]:
         raise RuntimeError("split-phase Host response is invalid") from exc
 
 
+def _materialize_value_slot(slot_id: str) -> Any:
+    if not isinstance(slot_id, str) or not slot_id.startswith("slot-") or len(slot_id) > 128:
+        raise RuntimeError("value-slot materialization is invalid")
+    import _agent_runtime_host  # type: ignore[import-not-found]
+    response = _agent_runtime_host.materialize_slot(slot_id)
+    if not isinstance(response, bytes) or len(response) < 2:
+        raise RuntimeError("value-slot response is invalid")
+    tag, payload = response[0], response[1:]
+    if tag == 2:
+        return bytes(payload)
+    if tag != 1:
+        raise RuntimeError("value-slot strategy is invalid")
+    try:
+        raw = payload.decode("utf-8", "strict")
+        value = json.loads(raw)
+    except (UnicodeDecodeError, TypeError, ValueError) as exc:
+        raise RuntimeError("value-slot scalar payload is invalid") from exc
+    if isinstance(value, bool):
+        canonical = "true" if value else "false"
+    elif isinstance(value, int) and -(1 << 63) <= value <= (1 << 63) - 1:
+        canonical = str(value)
+    else:
+        raise RuntimeError("value-slot scalar payload is invalid")
+    if raw != canonical:
+        raise RuntimeError("value-slot scalar payload is not canonical")
+    return value
+
+
 def _execute(request_json: str) -> str:
     if not isinstance(request_json, str):
         return _encode(_error("invalid_request", "request_json must be a string"))
@@ -1058,6 +1118,7 @@ def _execute(request_json: str) -> str:
         namespace[_PREPARED_REGION_HELPER] = _materialize_prepared_region
         namespace[_SPLIT_PHASE_SUBMIT_HELPER] = _submit_split_phase_call
         namespace[_SPLIT_PHASE_MATERIALIZE_HELPER] = _materialize_split_phase_call
+        namespace[_VALUE_SLOT_HELPER] = _materialize_value_slot
         main = namespace.get(_WRAPPER_MAIN)
         if not isinstance(main, types.FunctionType):
             raise RuntimeError("agent output wrapper is unavailable")

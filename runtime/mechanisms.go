@@ -29,6 +29,7 @@ const (
 	MechanismSemanticPreDispatch MechanismName = "semantic_pre_dispatch"
 	MechanismSemanticReuse       MechanismName = "semantic_reuse"
 	MechanismSplitPhaseCalls     MechanismName = "split_phase_calls"
+	MechanismValueSlots          MechanismName = "value_slots"
 
 	MechanismOff      MechanismDisposition = "off"
 	MechanismSelected MechanismDisposition = "selected"
@@ -61,6 +62,7 @@ var mechanismNames = []MechanismName{
 	MechanismSplitPhaseCalls,
 	MechanismStagedObservation,
 	MechanismStreaming,
+	MechanismValueSlots,
 }
 
 // MechanismSet is an internal Host-owned feature set. Zero value means ordinary
@@ -83,6 +85,7 @@ type MechanismSet struct {
 	SemanticPreDispatch     bool
 	SemanticReuse           bool
 	SplitPhaseCalls         bool `json:"SplitPhaseCalls,omitempty"`
+	ValueSlots              bool `json:"ValueSlots,omitempty"`
 }
 
 func (set MechanismSet) Validate() error {
@@ -99,6 +102,9 @@ func (set MechanismSet) Validate() error {
 		return ErrInvalidMechanismSet
 	}
 	if set.SplitPhaseCalls && set.SemanticPreDispatch {
+		return ErrInvalidMechanismSet
+	}
+	if set.ValueSlots && !set.SemanticAnalysis {
 		return ErrInvalidMechanismSet
 	}
 	if set.ChildFanout && (!set.Streaming || !set.ImmutableBranches) {
@@ -168,6 +174,8 @@ func (set MechanismSet) enabled(name MechanismName) bool {
 		return set.SemanticReuse
 	case MechanismSplitPhaseCalls:
 		return set.SplitPhaseCalls
+	case MechanismValueSlots:
+		return set.ValueSlots
 	default:
 		return false
 	}
@@ -209,6 +217,8 @@ func (set *MechanismSet) set(name MechanismName, enabled bool) {
 		set.SemanticReuse = enabled
 	case MechanismSplitPhaseCalls:
 		set.SplitPhaseCalls = enabled
+	case MechanismValueSlots:
+		set.ValueSlots = enabled
 	}
 }
 

@@ -386,15 +386,15 @@ proxy values, leave them rejected and continue with independent admitted work.
 **Promise:** Decouple pass semantics from value-transfer mechanics before attempting
 cross-Run object reuse.
 
-- [ ] Re-audit whether `PreparedRegionTable` can be minimally generalized or should remain
+- [x] Re-audit whether `PreparedRegionTable` can be minimally generalized or should remain
   behind a small adapter; do not refactor for naming alone.
-- [ ] Define `ValueSlot`/consumer declarations with only fields needed for correctness:
+- [x] Define `ValueSlot`/consumer declarations with only fields needed for correctness:
   source/dynamic occurrence, producer/input identity, value kind/size, immutability,
   privacy, claim policy and bounds.
 - [ ] Prove scalar and bounded immutable bytes/blob materialization through fresh Guests.
-- [ ] Put inline/copy/data-local/existing private-COW choice behind a Host materializer;
+- [x] Put inline/copy/data-local/existing private-COW choice behind a Host materializer;
   passes cannot select OS/Wazero mechanics.
-- [ ] Preserve single-use and multi-consumer lifecycle explicitly. A multi-consumer object
+- [x] Preserve single-use and multi-consumer lifecycle explicitly. A multi-consumer object
   does not merge logical Run/call outcomes.
 - [ ] Measure transfer, allocation and cleanup costs before considering a page-composed
   arena or producer-page ownership transfer.
@@ -408,14 +408,14 @@ materialization strategies without exposing backend details to the pass.
 **Promise:** Inherit a useful Stratum pattern as a narrow ordinary-Python pass, not a
 DataOp optimizer.
 
-- [ ] Select exactly one named/versioned immutable data capability from P0 evidence.
-- [ ] Have the adapter owner declare and test one equivalence law, including result schema,
+- [x] Select exactly one named/versioned immutable data capability from P0 evidence.
+- [x] Have the adapter owner declare and test one equivalence law, including result schema,
   ordering, encoding/dtype/null behavior, exceptions, revision/freshness and bounds.
-- [ ] Add RED pass-off/pass-on fixtures plus alias, extra-use, mutation, UDF, dynamic
+- [x] Add RED pass-off/pass-on fixtures plus alias, extra-use, mutation, UDF, dynamic
   predicate/column, exception and introspection controls.
-- [ ] Implement the smallest target-Guest/source patch for either static
+- [x] Implement the smallest target-Guest/source patch for either static
   projection/predicate pushdown or one data-local scalar reduction.
-- [ ] Keep arbitrary Pandas/Polars operations opaque. No generic operator graph or
+- [x] Keep arbitrary Pandas/Polars operations opaque. No generic operator graph or
   framework appears.
 - [ ] Measure physical bytes read/returned, Host-to-Guest bytes, Guest peak memory and
   end-to-end latency against unchanged source.
@@ -431,14 +431,14 @@ a second pattern.
 **Promise:** Reuse physical immutable values without reusing Python state or merging
 logical consumer outcomes.
 
-- [ ] Define one expensive deterministic producer family with explicit input revision,
+- [x] Define one expensive deterministic producer family with explicit input revision,
   implementation identity, privacy partition, size bound and mutation rejection.
 - [ ] Add RED tests for two fresh Runs/agents requesting the same producer, near misses,
   changed revision/implementation/privacy, failed producer, cancelled consumer, consumer
   mutation and independent workspace/result disposition.
 - [ ] Materialize one sealed Host value once and provide fresh consumers through bounded
   copy, existing private COW or data-local computation selected by the Host.
-- [ ] Preserve separate Run identities, Plans, Broker budgets/receipts and terminal facts.
+- [x] Preserve separate Run identities, Plans, Broker budgets/receipts and terminal facts.
   Sharing physical bytes must not invent one shared logical Python call.
 - [ ] Add a small cost policy based on measured producer cost, value size, consumer count,
   transfer cost and, for COW, dirty behavior. Do not build a general cache service.

@@ -89,8 +89,8 @@ func (config RunConfig) Validate() error {
 		if !config.Mechanisms.ProgrammaticToolCalling {
 			return errors.New("programmatic surface requires programmatic tool calling")
 		}
-		if config.Mechanisms.SplitPhaseCalls {
-			return errors.New("split-phase calls require the direct program surface")
+		if config.Mechanisms.SplitPhaseCalls || config.Mechanisms.ValueSlots {
+			return errors.New("Host source passes require the direct program surface")
 		}
 	default:
 		return errors.New("invalid program surface")

@@ -24,6 +24,19 @@ def load_bootstrap():
 
 
 class BootstrapTests(unittest.TestCase):
+    def test_value_slot_helper_reconstructs_scalar_or_private_bytes(self):
+        values = iter((b"\x017", b"\x02abc"))
+        self.native_stub.materialize_slot = lambda slot: next(values)  # type: ignore[attr-defined]
+        self.assertEqual(7, self.runtime._materialize_value_slot("slot-seven"))
+        self.assertEqual(b"abc", self.runtime._materialize_value_slot("slot-bytes"))
+
+    def test_value_slot_helper_rejects_noncanonical_or_unknown_payload(self):
+        for payload in (b"\x0107", b"\x011.0", b"\x01\"text\"", b"\x03abc"):
+            with self.subTest(payload=payload):
+                self.native_stub.materialize_slot = lambda slot, value=payload: value  # type: ignore[attr-defined]
+                with self.assertRaises(RuntimeError):
+                    self.runtime._materialize_value_slot("slot-invalid")
+
     def setUp(self):
         self._native_module = sys.modules.get("_agent_runtime_host")
         native_stub = types.ModuleType("_agent_runtime_host")
@@ -322,7 +335,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(1, response["result"])
 
     def test_agent_source_cannot_name_split_phase_runtime_helpers(self):
-        for helper in ("_pysolate_call_submit", "_pysolate_call_materialize"):
+        for helper in ("_pysolate_call_submit", "_pysolate_call_materialize", "_pysolate_materialize_slot"):
             with self.subTest(helper=helper):
                 runtime = load_bootstrap()
                 runtime._initialize("{}")
@@ -331,6 +344,17 @@ class BootstrapTests(unittest.TestCase):
                 self.assertEqual(2, runtime._validate_request_source(raw))
                 response = json.loads(runtime._execute(raw))
                 self.assertEqual("source_invalid", response["error"]["code"])
+
+    def test_patch_source_validation_does_not_import_erased_original_modules(self):
+        request = {
+            "run_id": "patch-no-import",
+            "code": "import definitely_missing_pysolate_module\nresult = 1",
+            "inputs": {},
+            "compatibility": {"profile": "fixture", "imports": ["definitely_missing_pysolate_module"]},
+        }
+        raw = json.dumps(request)
+        self.assertEqual(0, self.runtime._validate_request_source_for_patch(raw))
+        self.assertNotIn("definitely_missing_pysolate_module", sys.modules)
 
     def test_rejects_non_static_agent_import_forms_before_execution(self):
         cases = {

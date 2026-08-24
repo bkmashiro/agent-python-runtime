@@ -180,7 +180,7 @@ func (capacity *PreparedRegionFinalCapacity) Compile(ctx context.Context, reques
 	if capacity.engine.preparedRegions != nil {
 		runContext = context.WithValue(runContext, preparedRegionContextKey{}, capacity.engine.preparedRegions)
 	}
-	if err := callSourceValidation(runContext, capacity.module, request); err != nil {
+	if err := callSourceValidation(runContext, capacity.module, "runtime_validate_source", request); err != nil {
 		cancel()
 		return evidence, withGuestDiagnostic(err, capacity.stderr.String())
 	}
@@ -272,7 +272,7 @@ func (capacity *PreparedRegionFinalCapacity) ExecuteOriginal(ctx context.Context
 	}
 	runContext, cancel := context.WithTimeout(ctx, capacity.engine.config.Timeout)
 	capacity.cancel = cancel
-	if err := callSourceValidation(runContext, capacity.module, request); err != nil {
+	if err := callSourceValidation(runContext, capacity.module, "runtime_validate_source", request); err != nil {
 		return nil, evidence, withGuestDiagnostic(err, capacity.stderr.String())
 	}
 	evidence.SourceValidations = 1

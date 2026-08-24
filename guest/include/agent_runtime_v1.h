@@ -36,11 +36,20 @@ int32_t agent_runtime_materialize_call(const char *slot,
                                        char *response,
                                        int32_t response_cap);
 
+AGENT_RUNTIME_IMPORT("agent_runtime_v1", "materialize_slot")
+int32_t agent_runtime_materialize_slot(const char *slot,
+                                       int32_t slot_len,
+                                       char *response,
+                                       int32_t response_cap);
+
 AGENT_RUNTIME_EXPORT("runtime_init")
 int32_t runtime_init(const char *config, int32_t config_len);
 
 AGENT_RUNTIME_EXPORT("runtime_validate_source")
 int32_t runtime_validate_source(const char *request, int32_t request_len);
+
+AGENT_RUNTIME_EXPORT("runtime_validate_source_for_patch")
+int32_t runtime_validate_source_for_patch(const char *request, int32_t request_len);
 
 AGENT_RUNTIME_EXPORT("runtime_analyze_source")
 uint32_t runtime_analyze_source(const char *request, int32_t request_len);

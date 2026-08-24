@@ -30,6 +30,11 @@ type HostScheduledSourcePatchPlugin interface {
 	HostScheduled() bool
 }
 
+type ValueSlotSourcePatchPlugin interface {
+	SourcePatchPlugin
+	ValueSlotBound() bool
+}
+
 type SourcePatchRunner interface {
 	Run(context.Context, []byte, string) ([]byte, error)
 	RunSourcePatchDerived(context.Context, []byte, sourcepatch.Patch, passregistration.Registration) ([]byte, error)
@@ -38,6 +43,11 @@ type SourcePatchRunner interface {
 type HostScheduledSourcePatchRunner interface {
 	Run(context.Context, []byte, string) ([]byte, error)
 	RunHostScheduledSourcePatchDerived(context.Context, []byte, sourcepatch.Patch, passregistration.Registration) ([]byte, error)
+}
+
+type ValueSlotSourcePatchRunner interface {
+	Run(context.Context, []byte, string) ([]byte, error)
+	RunValueSlotSourcePatchDerived(context.Context, []byte, sourcepatch.Patch, passregistration.Registration) ([]byte, error)
 }
 
 type Execution struct {
@@ -154,6 +164,9 @@ func (registry *Registry) Execute(ctx context.Context, name passregistration.Nam
 	if scheduled, ok := plugin.(HostScheduledSourcePatchPlugin); ok && scheduled.HostScheduled() {
 		return Execution{}, ErrUnsupportedStage
 	}
+	if slotBound, ok := plugin.(ValueSlotSourcePatchPlugin); ok && slotBound.ValueSlotBound() {
+		return Execution{}, ErrUnsupportedStage
+	}
 	if !registry.enabled[name] {
 		payload, runErr := runner.Run(ctx, request, "")
 		return Execution{Payload: payload}, runErr
@@ -197,5 +210,30 @@ func (registry *Registry) ExecuteHostScheduled(ctx context.Context, name passreg
 		return Execution{Payload: payload, Patch: patch, PassError: passErr}, runErr
 	}
 	payload, runErr := runner.RunHostScheduledSourcePatchDerived(ctx, request, patch, plugin.Registration())
+	return Execution{Payload: payload, Patch: patch, Applied: runErr == nil}, runErr
+}
+
+// ExecuteSelectedValueSlot runs a previously selected value-slot patch. Callers
+// must select the patch first, then prepare the immutable Host value, and only
+// then construct the runner. This ordering keeps both pass rejection and producer
+// failure on the unchanged pre-effect fallback path.
+func (registry *Registry) ExecuteSelectedValueSlot(ctx context.Context, name passregistration.Name, runner ValueSlotSourcePatchRunner, request []byte, patch sourcepatch.Patch) (Execution, error) {
+	if runner == nil || !patch.Applied() {
+		return Execution{}, ErrInvalidPlugin
+	}
+	runRequest, err := runtimeconfig.DecodeRunRequest(request)
+	if err != nil {
+		return Execution{}, err
+	}
+	plugin, exists := registry.Lookup(name)
+	if !exists || !registry.enabled[name] {
+		return Execution{}, ErrInvalidPlugin
+	}
+	slotPlugin, valueSlotBound := plugin.(ValueSlotSourcePatchPlugin)
+	if !valueSlotBound || !slotPlugin.ValueSlotBound() || plugin.Registration().Stage() != passregistration.StageWholeProgramPatch ||
+		patch.Validate(runRequest.Code, plugin.Registration()) != nil {
+		return Execution{}, ErrUnsupportedStage
+	}
+	payload, runErr := runner.RunValueSlotSourcePatchDerived(ctx, request, patch, plugin.Registration())
 	return Execution{Payload: payload, Patch: patch, Applied: runErr == nil}, runErr
 }

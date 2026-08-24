@@ -13,6 +13,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 	"github.com/bkmashiro/agent-python-runtime/runtime/streaming"
 )
@@ -129,12 +130,14 @@ func TestRealGuestSemanticPreDispatchClaimsAtUnchangedPythonCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	passes := unifiedPassCatalog(t)
+	passes, err = passes.Enable(passregistration.SemanticPreDispatch)
+	if err != nil {
+		t.Fatal(err)
+	}
 	executionConfig := runtimeconfig.DefaultRunConfig()
 	executionConfig.ExecutionProfile = &profile
-	executionConfig.Mechanisms = runtimeconfig.MechanismSet{
-		SemanticAnalysis: true, SemanticPreDispatch: true, StagedObservation: true,
-	}
-	factory := wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	factory := wazeroengine.Factory{Passes: passes, BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		return capability.NewBroker(capability.Config{RunIdentity: "semantic-pre-dispatch-e2e", Plan: plan, StagedClaimer: controller, SemanticPreDispatch: true})
 	}}
 	executionRunner, err := factory.New(context.Background(), artifact, executionConfig)

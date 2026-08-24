@@ -46,10 +46,15 @@ func TestDataLocalNumpySumRejectsUnattestedScalarBeforeGuest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registry := unifiedPassCatalog(t)
+	registry, err = registry.Enable(sourcepatch.DataLocalNumpySumName)
+	if err != nil {
+		t.Fatal(err)
+	}
 	config := runtimeconfig.DefaultRunConfig()
 	config.ExecutionProfile = profile
-	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, ValueSlots: true}
-	runner, err := (wazeroengine.Factory{ValueSlots: table}).New(context.Background(), artifact, config)
+	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
+	runner, err := (wazeroengine.Factory{Passes: registry, ValueSlots: table}).New(context.Background(), artifact, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,14 +90,7 @@ func TestDataLocalNumpySumDigestDriftFallsBackWithoutSlotClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pass, err := sourcepatch.NewDataLocalNumpySum(passregistration.SemanticAnalyzerSHA256)
-	if err != nil {
-		t.Fatal(err)
-	}
-	registry, err := passplugin.New(pass)
-	if err != nil {
-		t.Fatal(err)
-	}
+	registry := unifiedPassCatalog(t)
 	registry, err = registry.Enable(sourcepatch.DataLocalNumpySumName)
 	if err != nil {
 		t.Fatal(err)
@@ -155,9 +153,9 @@ func TestDataLocalNumpySumDigestDriftFallsBackWithoutSlotClaim(t *testing.T) {
 			}
 			config := runtimeconfig.DefaultRunConfig()
 			config.ExecutionProfile = profile
-			config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, ValueSlots: true}
+			config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
 			runner, factoryErr := (wazeroengine.Factory{
-				WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "digest-drift-treatment", ValueSlots: table,
+				Passes: registry, WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "digest-drift-treatment", ValueSlots: table,
 			}).New(context.Background(), artifact, config)
 			if factoryErr != nil {
 				_ = table.Close()
@@ -199,9 +197,10 @@ func TestValueSlotExactGuestMaterializesPrivateBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	preparedValue := preparedValuePassSelection(t, "slot-bytes")
 	config := runtimeconfig.DefaultRunConfig()
-	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, ValueSlots: true}
-	runner, err := (wazeroengine.Factory{ValueSlots: table}).New(context.Background(), artifact, config)
+	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
+	runner, err := (wazeroengine.Factory{Passes: preparedValue.registry, ValueSlots: table}).New(context.Background(), artifact, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,9 +253,9 @@ func TestSharedImmutableObjectFeedsFreshIsolatedGuestConsumers(t *testing.T) {
 			t.Fatal(createErr)
 		}
 		identities = append(identities, table.BackingIdentity("slot-bytes"))
+		preparedValue := preparedValuePassSelection(t, "slot-bytes")
 		config := runtimeconfig.DefaultRunConfig()
-		config.Mechanisms = runtimeconfig.MechanismSet{ValueSlots: true}
-		runner, createErr := (wazeroengine.Factory{ValueSlots: table}).New(context.Background(), artifact, config)
+		runner, createErr := (wazeroengine.Factory{Passes: preparedValue.registry, ValueSlots: table}).New(context.Background(), artifact, config)
 		if createErr != nil {
 			t.Fatal(createErr)
 		}
@@ -266,11 +265,7 @@ func TestSharedImmutableObjectFeedsFreshIsolatedGuestConsumers(t *testing.T) {
 		}
 		request := runtimeconfig.RunRequest{RunID: fmt.Sprintf("shared-consumer-%d", index), Code: code, Inputs: json.RawMessage(`{}`)}
 		raw, _ := runtimeconfig.EncodeRunRequest(request)
-		prepare, prepareErr := preparedValuePassPrelude(t, "slot-bytes")
-		if prepareErr != nil {
-			t.Fatal(prepareErr)
-		}
-		response, runErr := runner.Run(context.Background(), raw, prepare)
+		response, runErr := runner.Run(context.Background(), raw, preparedValue.prelude)
 		closeErr := runner.Close(context.Background())
 		if runErr != nil || closeErr != nil {
 			t.Fatalf("run=%v close=%v", runErr, closeErr)
@@ -307,14 +302,7 @@ func TestDataLocalNumpySumMatchedEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pass, err := sourcepatch.NewDataLocalNumpySum(passregistration.SemanticAnalyzerSHA256)
-	if err != nil {
-		t.Fatal(err)
-	}
-	registry, err := passplugin.New(pass)
-	if err != nil {
-		t.Fatal(err)
-	}
+	registry := unifiedPassCatalog(t)
 	registry, err = registry.Enable(sourcepatch.DataLocalNumpySumName)
 	if err != nil {
 		t.Fatal(err)
@@ -387,9 +375,9 @@ func TestDataLocalNumpySumMatchedEndToEnd(t *testing.T) {
 				}
 				treatmentConfig := runtimeconfig.DefaultRunConfig()
 				treatmentConfig.ExecutionProfile = profile
-				treatmentConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, ValueSlots: true}
+				treatmentConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
 				runner, factoryErr := (wazeroengine.Factory{
-					WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: treatmentOwner, ValueSlots: table,
+					Passes: registry, WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: treatmentOwner, ValueSlots: table,
 				}).New(context.Background(), artifact, treatmentConfig)
 				if factoryErr != nil {
 					_ = table.Close()
@@ -452,10 +440,7 @@ func TestDirectPreparedNumpySumMatchedEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	producerDuration := time.Since(producerStarted)
-	prelude, err := preparedValuePassPrelude(t, "slot-numpy-sum-v1")
-	if err != nil {
-		t.Fatal(err)
-	}
+	preparedValue := preparedValuePassSelection(t, "slot-numpy-sum-v1")
 
 	baselineConfig := runtimeconfig.DefaultRunConfig()
 	baselineConfig.Timeout = 90 * time.Second
@@ -472,8 +457,7 @@ func TestDirectPreparedNumpySumMatchedEndToEnd(t *testing.T) {
 	treatmentConfig := runtimeconfig.DefaultRunConfig()
 	treatmentConfig.Timeout = 90 * time.Second
 	treatmentConfig.ExecutionProfile = profile
-	treatmentConfig.Mechanisms = runtimeconfig.MechanismSet{ValueSlots: true}
-	treatmentRunner, err := (wazeroengine.Factory{ValueSlots: table}).New(context.Background(), artifact, treatmentConfig)
+	treatmentRunner, err := (wazeroengine.Factory{Passes: preparedValue.registry, ValueSlots: table}).New(context.Background(), artifact, treatmentConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -501,7 +485,7 @@ func TestDirectPreparedNumpySumMatchedEndToEnd(t *testing.T) {
 		}
 		runTreatment := func() {
 			started := time.Now()
-			response, runErr := treatmentRunner.Run(context.Background(), treatmentRaw, prelude)
+			response, runErr := treatmentRunner.Run(context.Background(), treatmentRaw, preparedValue.prelude)
 			treatmentDurations = append(treatmentDurations, time.Since(started))
 			assertDataLocalResult(t, treatmentRequest, response, runErr)
 			if evidence := treatmentEngine.ValueSlotEvidence(); evidence.Claims != 1 || evidence.CopiedBytes != 12 || evidence.Discarded != 0 || !evidence.Closed {
@@ -569,21 +553,24 @@ func dataLocalRunRequest(t *testing.T, runID string) runtimeconfig.RunRequest {
 	}
 }
 
-func preparedValuePassPrelude(t *testing.T, slotID string) (string, error) {
+type preparedValuePassExecution struct {
+	registry *passplugin.Registry
+	prelude  string
+}
+
+func preparedValuePassSelection(t *testing.T, slotID string) preparedValuePassExecution {
 	t.Helper()
-	pass, err := valueslot.NewPreparedValuePass()
-	if err != nil {
-		return "", err
-	}
-	registry, err := passplugin.New(pass)
-	if err != nil {
-		return "", err
-	}
+	registry := unifiedPassCatalog(t)
+	var err error
 	registry, err = registry.Enable(passregistration.PreparedValueBinding)
 	if err != nil {
-		return "", err
+		t.Fatal(err)
 	}
-	return registry.BindRunValue(passregistration.PreparedValueBinding, slotID)
+	prelude, err := registry.BindRunValue(passregistration.PreparedValueBinding, slotID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return preparedValuePassExecution{registry: registry, prelude: prelude}
 }
 
 func directPreparedValueRunRequest(runID string) runtimeconfig.RunRequest {

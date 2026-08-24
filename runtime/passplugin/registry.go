@@ -2,7 +2,10 @@ package passplugin
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"sort"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
@@ -12,10 +15,12 @@ import (
 )
 
 var (
-	ErrInvalidPlugin    = errors.New("invalid source pass plugin")
-	ErrDuplicatePlugin  = errors.New("duplicate source pass plugin")
-	ErrPluginDisabled   = errors.New("source pass plugin is disabled")
-	ErrUnsupportedStage = errors.New("source pass plugin does not implement its registered stage")
+	ErrInvalidPlugin               = errors.New("invalid source pass plugin")
+	ErrDuplicatePlugin             = errors.New("duplicate source pass plugin")
+	ErrPluginDisabled              = errors.New("source pass plugin is disabled")
+	ErrUnsupportedStage            = errors.New("source pass plugin does not implement its registered stage")
+	ErrDirectOptimizationSelection = errors.New("optimization mechanisms must be selected through the bound pass catalog")
+	ErrPassConflict                = errors.New("enabled optimization passes conflict")
 )
 
 type Plugin interface {
@@ -93,20 +98,45 @@ func (adapter ExistingAdapter) Registration() passregistration.Registration {
 }
 
 type Registry struct {
-	plugins map[passregistration.Name]Plugin
-	enabled map[passregistration.Name]bool
+	plugins      map[passregistration.Name]Plugin
+	enabled      map[passregistration.Name]bool
+	requirements map[passregistration.Name]runtimeconfig.MechanismSet
 }
 
 type UnifiedCatalogConfig struct {
 	SemanticPreDispatchConfigSHA256 string
 	PreparedNumpyLoadConfigSHA256   string
+	PreparedPureRegionConfigSHA256  string
 }
 
-// NewUnifiedCatalog registers the two streaming-stage adapters and the two
-// analyzer-free direct lowerings in one default-off static pass catalog.
+func NewDefaultUnifiedCatalog() (*Registry, error) {
+	return NewUnifiedCatalog(UnifiedCatalogConfig{
+		SemanticPreDispatchConfigSHA256: catalogConfigSHA256(passregistration.SemanticPreDispatch, passregistration.SemanticPreDispatchVersion),
+		PreparedNumpyLoadConfigSHA256:   catalogConfigSHA256(passregistration.PreparedNumpyLoad, passregistration.PreparedNumpyLoadVersion),
+		PreparedPureRegionConfigSHA256:  catalogConfigSHA256(passregistration.PreparedPureRegion, passregistration.PreparedPureRegionVersion),
+	})
+}
+
+func NewDefaultEnabledCatalog(names ...passregistration.Name) (*Registry, error) {
+	registry, err := NewDefaultUnifiedCatalog()
+	if err != nil {
+		return nil, err
+	}
+	return registry.Enable(names...)
+}
+
+// NewUnifiedCatalog registers every retained optimization and historical source
+// optimizer in one default-off static pass catalog. Runtime owners remain the
+// lowering targets and keep all lifecycle state.
 func NewUnifiedCatalog(config UnifiedCatalogConfig) (*Registry, error) {
 	semantic, err := passregistration.SemanticPreDispatchDefinition().Register(
 		passregistration.SemanticAnalyzerSHA256, config.SemanticPreDispatchConfigSHA256,
+	)
+	if err != nil {
+		return nil, err
+	}
+	preparedPure, err := passregistration.PreparedPureRegionDefinition().Register(
+		passregistration.SemanticAnalyzerSHA256, config.PreparedPureRegionConfigSHA256,
 	)
 	if err != nil {
 		return nil, err
@@ -118,6 +148,10 @@ func NewUnifiedCatalog(config UnifiedCatalogConfig) (*Registry, error) {
 		return nil, err
 	}
 	semanticAdapter, err := AdaptExisting(semantic)
+	if err != nil {
+		return nil, err
+	}
+	preparedPureAdapter, err := AdaptExisting(preparedPure)
 	if err != nil {
 		return nil, err
 	}
@@ -133,13 +167,173 @@ func NewUnifiedCatalog(config UnifiedCatalogConfig) (*Registry, error) {
 	if err != nil {
 		return nil, err
 	}
-	return New(semanticAdapter, preparedNumpyAdapter, future, preparedValue)
+	cse, err := sourcepatch.NewPureScalarCSE(passregistration.SemanticAnalyzerSHA256)
+	if err != nil {
+		return nil, err
+	}
+	fold, err := sourcepatch.NewPureScalarFold(passregistration.SemanticAnalyzerSHA256)
+	if err != nil {
+		return nil, err
+	}
+	splitRead, err := sourcepatch.NewSplitPhaseSourcesRead(passregistration.SemanticAnalyzerSHA256)
+	if err != nil {
+		return nil, err
+	}
+	dataLocal, err := sourcepatch.NewDataLocalNumpySum(passregistration.SemanticAnalyzerSHA256)
+	if err != nil {
+		return nil, err
+	}
+	plugins := []Plugin{
+		semanticAdapter, preparedPureAdapter, preparedNumpyAdapter, future, preparedValue,
+		cse, fold, splitRead, dataLocal,
+	}
+	for _, definition := range passregistration.RuntimeOptimizationDefinitions() {
+		registration, registerErr := definition.Register("", runtimeOptimizationConfigSHA256(definition))
+		if registerErr != nil {
+			return nil, registerErr
+		}
+		adapter, adaptErr := AdaptExisting(registration)
+		if adaptErr != nil {
+			return nil, adaptErr
+		}
+		plugins = append(plugins, adapter)
+	}
+	registry, err := New(plugins...)
+	if err != nil {
+		return nil, err
+	}
+	registry.requirements = unifiedRequirements()
+	return registry, nil
+}
+
+type RuntimeSelection struct {
+	Mechanisms runtimeconfig.MechanismSet
+	Passes     []passregistration.Name
+}
+
+const RuntimeSelectionEvidenceSchemaVersion = "pysolate.optimization-pass-selection.v1"
+
+type RuntimeSelectionEvidence struct {
+	SchemaVersion string                          `json:"schema_version"`
+	Passes        []passregistration.Name         `json:"passes"`
+	Mechanisms    runtimeconfig.MechanismEvidence `json:"mechanisms"`
+}
+
+func (registry *Registry) ResolveRuntime(base, available runtimeconfig.MechanismSet) (runtimeconfig.MechanismSet, RuntimeSelectionEvidence, error) {
+	selection, err := registry.LowerMechanisms(base)
+	if err != nil {
+		return runtimeconfig.MechanismSet{}, RuntimeSelectionEvidence{}, err
+	}
+	resolved, mechanisms, err := runtimeconfig.ResolveMechanisms(selection.Mechanisms, available)
+	if err != nil {
+		return runtimeconfig.MechanismSet{}, RuntimeSelectionEvidence{}, err
+	}
+	return resolved, RuntimeSelectionEvidence{
+		SchemaVersion: RuntimeSelectionEvidenceSchemaVersion,
+		Passes:        append([]passregistration.Name(nil), selection.Passes...),
+		Mechanisms:    mechanisms,
+	}, nil
+}
+
+func (registry *Registry) LowerMechanisms(base runtimeconfig.MechanismSet) (RuntimeSelection, error) {
+	if registry == nil {
+		return RuntimeSelection{}, ErrInvalidPlugin
+	}
+	mechanisms := base
+	passes := make([]passregistration.Name, 0, len(registry.enabled))
+	for name, enabled := range registry.enabled {
+		if !enabled {
+			continue
+		}
+		passes = append(passes, name)
+		mechanisms = mergeMechanisms(mechanisms, registry.requirements[name])
+	}
+	sort.Slice(passes, func(left, right int) bool { return passes[left] < passes[right] })
+	if err := mechanisms.Validate(); err != nil {
+		return RuntimeSelection{}, err
+	}
+	return RuntimeSelection{Mechanisms: mechanisms, Passes: passes}, nil
+}
+
+func (registry *Registry) ApplyRunConfig(config runtimeconfig.RunConfig) (runtimeconfig.RunConfig, RuntimeSelection, error) {
+	if directOptimizationSelected(config.Mechanisms) {
+		return runtimeconfig.RunConfig{}, RuntimeSelection{}, ErrDirectOptimizationSelection
+	}
+	selection, err := registry.LowerMechanisms(config.Mechanisms)
+	if err != nil {
+		return runtimeconfig.RunConfig{}, RuntimeSelection{}, err
+	}
+	config.Mechanisms = selection.Mechanisms
+	return config, selection, nil
+}
+
+func directOptimizationSelected(mechanisms runtimeconfig.MechanismSet) bool {
+	return mechanisms.Streaming || mechanisms.ChildFanout || mechanisms.FunctionCache || mechanisms.SingleFlight ||
+		mechanisms.FreshReevaluation || mechanisms.PreparedRuntime || mechanisms.MemoryCOW || mechanisms.ColdIOContinuation ||
+		mechanisms.SemanticPreDispatch || mechanisms.SemanticReuse || mechanisms.SplitPhaseCalls || mechanisms.ValueSlots
+}
+
+func runtimeOptimizationConfigSHA256(definition passregistration.Definition) string {
+	digest := sha256.Sum256([]byte(definition.Version() + "\x00" + string(definition.Name()) + "\x00runtime-lowering"))
+	return "sha256:" + hex.EncodeToString(digest[:])
+}
+
+func catalogConfigSHA256(name passregistration.Name, version string) string {
+	digest := sha256.Sum256([]byte(string(name) + "\x00" + version))
+	return "sha256:" + hex.EncodeToString(digest[:])
+}
+
+func unifiedRequirements() map[passregistration.Name]runtimeconfig.MechanismSet {
+	return map[passregistration.Name]runtimeconfig.MechanismSet{
+		passregistration.SemanticPreDispatch:          {SemanticAnalysis: true, StagedObservation: true, SemanticPreDispatch: true},
+		passregistration.PreparedPureRegion:           {SemanticAnalysis: true},
+		passregistration.PreparedNumpyLoad:            {SemanticAnalysis: true, PreparedRuntime: true},
+		passregistration.CapabilityFutureProjection:   {SplitPhaseCalls: true},
+		passregistration.PreparedValueBinding:         {ValueSlots: true},
+		sourcepatch.PureScalarCSEName:                 {SemanticAnalysis: true},
+		sourcepatch.PureScalarFoldName:                {SemanticAnalysis: true},
+		sourcepatch.SplitPhaseSourcesReadName:         {SplitPhaseCalls: true},
+		sourcepatch.DataLocalNumpySumName:             {ValueSlots: true},
+		passregistration.SourceStreamingExecution:     {Streaming: true, PrivateWorkspace: true},
+		passregistration.StreamedChildFanout:          {Streaming: true, PrivateWorkspace: true, ImmutableBranches: true, ChildFanout: true},
+		passregistration.AgentFunctionRetention:       {ImmutableBranches: true, FunctionCache: true},
+		passregistration.AgentFunctionSingleFlight:    {SingleFlight: true},
+		passregistration.FreshWorkflowReevaluation:    {ImmutableBranches: true, FunctionCache: true, FreshReevaluation: true},
+		passregistration.PreparedRuntimeInstantiation: {PreparedRuntime: true},
+		passregistration.PrivateMemoryCOW:             {PreparedRuntime: true, MemoryCOW: true},
+		passregistration.ColdIOResidency:              {PreparedRuntime: true, MemoryCOW: true, ColdIOContinuation: true},
+		passregistration.SemanticWholeRunReuse:        {SemanticAnalysis: true, SingleFlight: true, SemanticReuse: true},
+	}
+}
+
+func mergeMechanisms(left, right runtimeconfig.MechanismSet) runtimeconfig.MechanismSet {
+	return runtimeconfig.MechanismSet{
+		ApprovalSuspension:      left.ApprovalSuspension || right.ApprovalSuspension,
+		Streaming:               left.Streaming || right.Streaming,
+		StagedObservation:       left.StagedObservation || right.StagedObservation,
+		PrivateWorkspace:        left.PrivateWorkspace || right.PrivateWorkspace,
+		ProgrammaticToolCalling: left.ProgrammaticToolCalling || right.ProgrammaticToolCalling,
+		ImmutableBranches:       left.ImmutableBranches || right.ImmutableBranches,
+		ChildFanout:             left.ChildFanout || right.ChildFanout,
+		FunctionCache:           left.FunctionCache || right.FunctionCache,
+		SingleFlight:            left.SingleFlight || right.SingleFlight,
+		FreshReevaluation:       left.FreshReevaluation || right.FreshReevaluation,
+		PreparedRuntime:         left.PreparedRuntime || right.PreparedRuntime,
+		MemoryCOW:               left.MemoryCOW || right.MemoryCOW,
+		ColdIOContinuation:      left.ColdIOContinuation || right.ColdIOContinuation,
+		SemanticAnalysis:        left.SemanticAnalysis || right.SemanticAnalysis,
+		SemanticPreDispatch:     left.SemanticPreDispatch || right.SemanticPreDispatch,
+		SemanticReuse:           left.SemanticReuse || right.SemanticReuse,
+		SplitPhaseCalls:         left.SplitPhaseCalls || right.SplitPhaseCalls,
+		ValueSlots:              left.ValueSlots || right.ValueSlots,
+	}
 }
 
 func New(plugins ...Plugin) (*Registry, error) {
 	registry := &Registry{
-		plugins: make(map[passregistration.Name]Plugin, len(plugins)),
-		enabled: make(map[passregistration.Name]bool, len(plugins)),
+		plugins:      make(map[passregistration.Name]Plugin, len(plugins)),
+		enabled:      make(map[passregistration.Name]bool, len(plugins)),
+		requirements: make(map[passregistration.Name]runtimeconfig.MechanismSet),
 	}
 	for _, plugin := range plugins {
 		if plugin == nil {
@@ -163,11 +357,16 @@ func (registry *Registry) Enable(names ...passregistration.Name) (*Registry, err
 		return nil, ErrInvalidPlugin
 	}
 	configured := &Registry{
-		plugins: make(map[passregistration.Name]Plugin, len(registry.plugins)),
-		enabled: make(map[passregistration.Name]bool, len(registry.plugins)),
+		plugins:      make(map[passregistration.Name]Plugin, len(registry.plugins)),
+		enabled:      make(map[passregistration.Name]bool, len(registry.plugins)),
+		requirements: make(map[passregistration.Name]runtimeconfig.MechanismSet, len(registry.requirements)),
 	}
 	for name, plugin := range registry.plugins {
 		configured.plugins[name] = plugin
+		configured.enabled[name] = registry.enabled[name]
+	}
+	for name, requirements := range registry.requirements {
+		configured.requirements[name] = requirements
 	}
 	for _, name := range names {
 		if _, exists := configured.plugins[name]; !exists {
@@ -175,7 +374,32 @@ func (registry *Registry) Enable(names ...passregistration.Name) (*Registry, err
 		}
 		configured.enabled[name] = true
 	}
+	if err := configured.validateEnabledSelection(); err != nil {
+		return nil, err
+	}
 	return configured, nil
+}
+
+func (registry *Registry) validateEnabledSelection() error {
+	var sourceMutation passregistration.Name
+	mechanisms := runtimeconfig.MechanismSet{}
+	for name, enabled := range registry.enabled {
+		if !enabled {
+			continue
+		}
+		plugin := registry.plugins[name]
+		if plugin.Registration().Consumer() == passregistration.ExecutionPatch {
+			if sourceMutation != "" {
+				return ErrPassConflict
+			}
+			sourceMutation = name
+		}
+		mechanisms = mergeMechanisms(mechanisms, registry.requirements[name])
+	}
+	if err := mechanisms.Validate(); err != nil {
+		return errors.Join(ErrPassConflict, err)
+	}
+	return nil
 }
 
 func (registry *Registry) Lookup(name passregistration.Name) (Plugin, bool) {

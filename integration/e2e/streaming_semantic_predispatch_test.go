@@ -15,6 +15,7 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
@@ -155,13 +156,16 @@ func TestRealGuestStreamingPrefixesPreDispatchThreeReadsBeforeSourceFeedComplete
 	if err != nil {
 		t.Fatal(err)
 	}
+	passes := unifiedPassCatalog(t)
+	passes, err = passes.Enable(passregistration.SemanticPreDispatch)
+	if err != nil {
+		t.Fatal(err)
+	}
 	executionConfig := runtimeconfig.DefaultRunConfig()
 	executionConfig.ExecutionProfile = &profile
-	executionConfig.Mechanisms = runtimeconfig.MechanismSet{
-		StagedObservation: true, PrivateWorkspace: true, SemanticAnalysis: true, SemanticPreDispatch: true,
-	}
+	executionConfig.Mechanisms = runtimeconfig.MechanismSet{PrivateWorkspace: true}
 	runner, err := (wazeroengine.Factory{
-		WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: "streaming-day-trip",
+		Passes: passes, WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: "streaming-day-trip",
 		BrokerFactory: func(context.Context) (*capability.Broker, error) {
 			return capability.NewBroker(capability.Config{
 				RunIdentity: "streaming-day-trip", Plan: plan, StagedClaimer: controller, SemanticPreDispatch: true,

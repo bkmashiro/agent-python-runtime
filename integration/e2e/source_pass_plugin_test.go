@@ -14,8 +14,6 @@ import (
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
 )
 
@@ -38,28 +36,23 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
+	registry := unifiedPassCatalog(t)
+	registry, err = registry.Enable(sourcepatch.PureScalarCSEName)
+	if err != nil {
+		t.Fatal(err)
+	}
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 90 * time.Second
 	config.ExecutionProfile = &profile
-	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
-	runner, err := (wazeroengine.Factory{}).New(context.Background(), artifact, config)
+	runner, err := (wazeroengine.Factory{Passes: registry}).New(context.Background(), artifact, config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer runner.Close(context.Background())
 	engine := trustedSemanticRunner(t, runner)
-
-	pass, err := sourcepatch.NewPureScalarCSE(passregistration.SemanticAnalyzerSHA256)
-	if err != nil {
-		t.Fatal(err)
-	}
-	registry, err := passplugin.New(pass)
-	if err != nil {
-		t.Fatal(err)
-	}
-	registry, err = registry.Enable(sourcepatch.PureScalarCSEName)
-	if err != nil {
-		t.Fatal(err)
+	selectedPass, ok := registry.Lookup(sourcepatch.PureScalarCSEName)
+	if !ok {
+		t.Fatal("catalog lost CSE pass")
 	}
 	session, err := engine.NewSemanticAnalysisSession(context.Background(), wazeroengine.SemanticAnalysisSessionLimits{
 		MaxRequests: 6, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
@@ -193,7 +186,7 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 			t.Fatal(err)
 		}
 		started = time.Now()
-		derived, err = engine.RunSourcePatchDerived(context.Background(), benchmarkRequest, benchmarkPatch, pass.Registration())
+		derived, err = engine.RunSourcePatchDerived(context.Background(), benchmarkRequest, benchmarkPatch, selectedPass.Registration())
 		treatmentNanos[index] = time.Since(started).Nanoseconds()
 		if err != nil {
 			t.Fatal(err)
@@ -231,28 +224,23 @@ func TestRealGuestPureScalarFoldPaperPass(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registry := unifiedPassCatalog(t)
+	registry, err = registry.Enable(sourcepatch.PureScalarFoldName)
+	if err != nil {
+		t.Fatal(err)
+	}
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 90 * time.Second
 	config.ExecutionProfile = &profile
-	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
-	runner, err := (wazeroengine.Factory{}).New(context.Background(), artifact, config)
+	runner, err := (wazeroengine.Factory{Passes: registry}).New(context.Background(), artifact, config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer runner.Close(context.Background())
 	engine := trustedSemanticRunner(t, runner)
-
-	pass, err := sourcepatch.NewPureScalarFold(passregistration.SemanticAnalyzerSHA256)
-	if err != nil {
-		t.Fatal(err)
-	}
-	registry, err := passplugin.New(pass)
-	if err != nil {
-		t.Fatal(err)
-	}
-	registry, err = registry.Enable(sourcepatch.PureScalarFoldName)
-	if err != nil {
-		t.Fatal(err)
+	selectedPass, ok := registry.Lookup(sourcepatch.PureScalarFoldName)
+	if !ok {
+		t.Fatal("catalog lost scalar-fold pass")
 	}
 	session, err := engine.NewSemanticAnalysisSession(context.Background(), wazeroengine.SemanticAnalysisSessionLimits{
 		MaxRequests: 4, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
@@ -331,7 +319,7 @@ func TestRealGuestPureScalarFoldPaperPass(t *testing.T) {
 			t.Fatal(err)
 		}
 		started = time.Now()
-		derived, runErr := engine.RunSourcePatchDerived(context.Background(), benchmarkRequest, benchmarkPatch, pass.Registration())
+		derived, runErr := engine.RunSourcePatchDerived(context.Background(), benchmarkRequest, benchmarkPatch, selectedPass.Registration())
 		treatmentNanos[index] = time.Since(started).Nanoseconds()
 		if runErr != nil {
 			t.Fatal(runErr)

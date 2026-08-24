@@ -2,9 +2,11 @@ package passplugin
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
+	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
@@ -76,19 +78,34 @@ func digestFor(character byte) string {
 	return "sha256:" + string(value)
 }
 
-func TestUnifiedCatalogRegistersFourStageAwarePassesDefaultOff(t *testing.T) {
+func TestUnifiedCatalogRegistersEveryOptimizationDefaultOff(t *testing.T) {
 	registry, err := NewUnifiedCatalog(UnifiedCatalogConfig{
 		SemanticPreDispatchConfigSHA256: digestFor('a'),
 		PreparedNumpyLoadConfigSHA256:   digestFor('b'),
+		PreparedPureRegionConfigSHA256:  digestFor('c'),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	expected := map[passregistration.Name]passregistration.Stage{
-		passregistration.SemanticPreDispatch:        passregistration.StagePrefixOverlay,
-		passregistration.PreparedNumpyLoad:          passregistration.StageHybridPreparePatch,
-		passregistration.CapabilityFutureProjection: passregistration.StagePlanProjection,
-		passregistration.PreparedValueBinding:       passregistration.StageRunBinding,
+		passregistration.SemanticPreDispatch:          passregistration.StagePrefixOverlay,
+		passregistration.PreparedPureRegion:           passregistration.StageWholeProgramPatch,
+		passregistration.PreparedNumpyLoad:            passregistration.StageHybridPreparePatch,
+		passregistration.CapabilityFutureProjection:   passregistration.StagePlanProjection,
+		passregistration.PreparedValueBinding:         passregistration.StageRunBinding,
+		sourcepatch.PureScalarCSEName:                 passregistration.StageWholeProgramPatch,
+		sourcepatch.PureScalarFoldName:                passregistration.StageWholeProgramPatch,
+		sourcepatch.SplitPhaseSourcesReadName:         passregistration.StageWholeProgramPatch,
+		sourcepatch.DataLocalNumpySumName:             passregistration.StageWholeProgramPatch,
+		passregistration.SourceStreamingExecution:     passregistration.StageRuntimeLowering,
+		passregistration.StreamedChildFanout:          passregistration.StageRuntimeLowering,
+		passregistration.AgentFunctionRetention:       passregistration.StageRuntimeLowering,
+		passregistration.AgentFunctionSingleFlight:    passregistration.StageRuntimeLowering,
+		passregistration.FreshWorkflowReevaluation:    passregistration.StageRuntimeLowering,
+		passregistration.PreparedRuntimeInstantiation: passregistration.StageRuntimeLowering,
+		passregistration.PrivateMemoryCOW:             passregistration.StageRuntimeLowering,
+		passregistration.ColdIOResidency:              passregistration.StageRuntimeLowering,
+		passregistration.SemanticWholeRunReuse:        passregistration.StageRuntimeLowering,
 	}
 	for name, stage := range expected {
 		plugin, ok := registry.Lookup(name)
@@ -123,5 +140,109 @@ func TestUnifiedCatalogRegistersFourStageAwarePassesDefaultOff(t *testing.T) {
 	}
 	if _, err := registry.BindRunValue(passregistration.CapabilityFutureProjection, "slot-numpy-sum-v1"); err != ErrUnsupportedStage {
 		t.Fatalf("Plan projection crossed into Run stage: %v", err)
+	}
+}
+
+func TestUnifiedCatalogLowersRuntimeOptimizationsToExistingMechanisms(t *testing.T) {
+	registry, err := NewUnifiedCatalog(UnifiedCatalogConfig{
+		SemanticPreDispatchConfigSHA256: digestFor('a'),
+		PreparedNumpyLoadConfigSHA256:   digestFor('b'),
+		PreparedPureRegionConfigSHA256:  digestFor('c'),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err = registry.Enable(
+		passregistration.SourceStreamingExecution,
+		passregistration.StreamedChildFanout,
+		passregistration.AgentFunctionRetention,
+		passregistration.AgentFunctionSingleFlight,
+		passregistration.FreshWorkflowReevaluation,
+		passregistration.PreparedRuntimeInstantiation,
+		passregistration.PrivateMemoryCOW,
+		passregistration.ColdIOResidency,
+		passregistration.SemanticWholeRunReuse,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection, err := registry.LowerMechanisms(runtimeconfig.MechanismSet{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mechanisms := selection.Mechanisms
+	if !mechanisms.Streaming || !mechanisms.PrivateWorkspace || !mechanisms.ImmutableBranches || !mechanisms.ChildFanout ||
+		!mechanisms.FunctionCache || !mechanisms.SingleFlight || !mechanisms.FreshReevaluation ||
+		!mechanisms.PreparedRuntime || !mechanisms.MemoryCOW || !mechanisms.ColdIOContinuation ||
+		!mechanisms.SemanticAnalysis || !mechanisms.SemanticReuse {
+		t.Fatalf("lowered mechanisms=%+v", mechanisms)
+	}
+	if len(selection.Passes) != 9 {
+		t.Fatalf("lowered passes=%v", selection.Passes)
+	}
+}
+
+func TestUnifiedCatalogResolvesPassLoweringsAgainstHostAvailability(t *testing.T) {
+	registry, err := NewDefaultEnabledCatalog(
+		passregistration.PreparedRuntimeInstantiation,
+		passregistration.PrivateMemoryCOW,
+		passregistration.ColdIOResidency,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	available := runtimeconfig.MechanismSet{PreparedRuntime: true}
+	resolved, evidence, err := registry.ResolveRuntime(runtimeconfig.MechanismSet{}, available)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resolved.PreparedRuntime || resolved.MemoryCOW || resolved.ColdIOContinuation {
+		t.Fatalf("resolved=%+v", resolved)
+	}
+	if evidence.SchemaVersion != RuntimeSelectionEvidenceSchemaVersion || evidence.Mechanisms.Validate() != nil || len(evidence.Passes) != 3 {
+		t.Fatalf("evidence=%+v", evidence)
+	}
+}
+
+func TestUnifiedCatalogRejectsConflictingSchedulingPasses(t *testing.T) {
+	registry, err := NewUnifiedCatalog(UnifiedCatalogConfig{
+		SemanticPreDispatchConfigSHA256: digestFor('a'),
+		PreparedNumpyLoadConfigSHA256:   digestFor('b'),
+		PreparedPureRegionConfigSHA256:  digestFor('c'),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = registry.Enable(passregistration.SemanticPreDispatch, passregistration.CapabilityFutureProjection); !errors.Is(err, ErrPassConflict) {
+		t.Fatalf("duplicate scheduling owners error=%v", err)
+	}
+}
+
+func TestUnifiedCatalogRejectsUnorderedSourceMutationPasses(t *testing.T) {
+	registry, err := NewDefaultUnifiedCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = registry.Enable(sourcepatch.PureScalarCSEName, sourcepatch.PureScalarFoldName); !errors.Is(err, ErrPassConflict) {
+		t.Fatalf("unordered source mutations error=%v", err)
+	}
+}
+
+func TestEnablePreservesPriorPassSelection(t *testing.T) {
+	registry, err := NewDefaultUnifiedCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err = registry.Enable(passregistration.AgentFunctionRetention)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err = registry.Enable(passregistration.AgentFunctionSingleFlight)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection, err := registry.LowerMechanisms(runtimeconfig.MechanismSet{})
+	if err != nil || !selection.Mechanisms.FunctionCache || !selection.Mechanisms.SingleFlight || len(selection.Passes) != 2 {
+		t.Fatalf("selection=%+v err=%v", selection, err)
 	}
 }

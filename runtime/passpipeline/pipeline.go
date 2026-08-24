@@ -23,6 +23,7 @@ const (
 	StageWholeProgramPatch  = passregistration.StageWholeProgramPatch
 	StageMultiProgramPatch  = passregistration.StageMultiProgramPatch
 	StageRunBinding         = passregistration.StageRunBinding
+	StageRuntimeLowering    = passregistration.StageRuntimeLowering
 
 	OutcomeApplied               Outcome = "applied"
 	OutcomeDiscarded             Outcome = "discarded"
@@ -197,6 +198,10 @@ func (pipeline *Pipeline) RecordRunBinding(input RecordInput) (OutcomeRecord, er
 	return pipeline.record(StageRunBinding, input)
 }
 
+func (pipeline *Pipeline) RecordRuntimeLowering(input RecordInput) (OutcomeRecord, error) {
+	return pipeline.record(StageRuntimeLowering, input)
+}
+
 func (pipeline *Pipeline) Records() []OutcomeRecord {
 	if pipeline == nil {
 		return []OutcomeRecord{}
@@ -262,10 +267,11 @@ func recordOutcomeKey(entry Entry, input RecordInput) (string, error) {
 	regionID := input.Bindings[passregistration.RegionID]
 	planID := input.Bindings[passregistration.CapabilityPlanSHA256]
 	runID := input.Bindings[passregistration.RunIdentitySHA256]
-	if occurrenceID == "" && regionID == "" && planID == "" {
+	runtimeConfigID := input.Bindings[passregistration.RuntimeConfigSHA256]
+	if occurrenceID == "" && regionID == "" && planID == "" && runID == "" && runtimeConfigID == "" {
 		return "", ErrInvalidRecord
 	}
-	return string(entry.Registration.Name()) + "\x00" + string(entry.Stage) + "\x00" + occurrenceID + "\x00" + regionID + "\x00" + planID + "\x00" + runID, nil
+	return string(entry.Registration.Name()) + "\x00" + string(entry.Stage) + "\x00" + occurrenceID + "\x00" + regionID + "\x00" + planID + "\x00" + runID + "\x00" + runtimeConfigID, nil
 }
 
 func validateInput(registration passregistration.Registration, input RecordInput, limits Limits) error {
@@ -369,6 +375,8 @@ func validStageForConsumer(stage Stage, consumer passregistration.Consumer) bool
 		return stage == StagePlanProjection
 	case passregistration.RunBinding:
 		return stage == StageRunBinding
+	case passregistration.MechanismLowering:
+		return stage == StageRuntimeLowering
 	default:
 		return false
 	}
@@ -380,7 +388,7 @@ func validOutcome(stage Stage, outcome Outcome) bool {
 		return outcome == OutcomeApplied || outcome == OutcomeDiscarded || outcome == OutcomeRejected
 	case StageHybridPreparePatch:
 		return outcome == OutcomeApplied || outcome == OutcomeDiscarded || outcome == OutcomePreparedAwaitingFinal || outcome == OutcomeRejected
-	case StageWholeProgramPatch, StageMultiProgramPatch, StagePlanProjection, StageRunBinding:
+	case StageWholeProgramPatch, StageMultiProgramPatch, StagePlanProjection, StageRunBinding, StageRuntimeLowering:
 		return outcome == OutcomeApplied || outcome == OutcomeRejected
 	default:
 		return false

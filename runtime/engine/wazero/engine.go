@@ -45,11 +45,22 @@ type Factory struct {
 	WorkspaceOwner   string
 	PreparedRegions  *preparedregion.PreparedRegionTable
 	ValueSlots       *valueslot.Table
+	Passes           *passplugin.Registry
 }
 
 func (Factory) Name() string { return "wazero" }
 
 func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (enginecontract.Runner, error) {
+	if factory.Passes != nil {
+		lowered, _, err := factory.Passes.ApplyRunConfig(config)
+		if err != nil {
+			if factory.ValueSlots != nil {
+				err = errors.Join(err, factory.ValueSlots.Close())
+			}
+			return nil, err
+		}
+		config = lowered
+	}
 	binding, err := factory.validatedBinding(config)
 	if err != nil {
 		if factory.ValueSlots != nil {

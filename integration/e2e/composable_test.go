@@ -20,6 +20,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/composable"
 	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/streaming"
 	"github.com/bkmashiro/agent-python-runtime/runtime/subagent"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workflow"
@@ -28,6 +29,21 @@ import (
 
 func TestRealGuestFullComposableRuntimeNorthStar(t *testing.T) {
 	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtimePasses := unifiedPassCatalog(t)
+	runtimePasses, err = runtimePasses.Enable(
+		passregistration.SourceStreamingExecution,
+		passregistration.StreamedChildFanout,
+		passregistration.AgentFunctionRetention,
+		passregistration.AgentFunctionSingleFlight,
+		passregistration.FreshWorkflowReevaluation,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection, err := runtimePasses.LowerMechanisms(runtimeconfig.MechanismSet{StagedObservation: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,9 +98,8 @@ func TestRealGuestFullComposableRuntimeNorthStar(t *testing.T) {
 		t.Fatal(err)
 	}
 	parentConfig := runtimeconfig.DefaultRunConfig()
-	parentConfig.Mechanisms = runtimeconfig.MechanismSet{Streaming: true, PrivateWorkspace: true}
 	parentRunner, err := (wazeroengine.Factory{
-		WorkspaceManager: manager, WorkspaceRef: parentAttempt.Ref(), WorkspaceOwner: "composable-parent",
+		Passes: runtimePasses, WorkspaceManager: manager, WorkspaceRef: parentAttempt.Ref(), WorkspaceOwner: "composable-parent",
 	}).New(context.Background(), artifact, parentConfig)
 	if err != nil {
 		t.Fatal(err)
@@ -155,7 +170,7 @@ func TestRealGuestFullComposableRuntimeNorthStar(t *testing.T) {
 		t.Fatal(err)
 	}
 	flights := agentfunction.NewFlightGroup()
-	functionEngine := agentfunction.Engine{Store: functionStore, CacheEnabled: true, Flights: flights}
+	functionEngine := agentfunction.Engine{Store: functionStore, CacheEnabled: selection.Mechanisms.FunctionCache, Flights: flights}
 	functionInvocation := composableFunctionInvocation(joined.SelectedRoot.IdentitySHA256)
 	var physicalComputes int
 	var computeMu sync.Mutex
@@ -198,7 +213,7 @@ func TestRealGuestFullComposableRuntimeNorthStar(t *testing.T) {
 		{ID: "terminal", Kind: workflow.Terminal, VersionSHA256: hashCharacter('6'), Dependencies: []string{"after"}},
 	}}
 	evaluator, err := workflow.New(workflow.Config{
-		Graph: graph, Guests: guestFactory, ResumeEnabled: true, Authority: workflowAuthority(),
+		Graph: graph, Guests: guestFactory, ResumeEnabled: selection.Mechanisms.FreshReevaluation, Authority: workflowAuthority(),
 		ImmutableRootSHA256: []string{joined.SelectedRoot.IdentitySHA256},
 	})
 	if err != nil {
@@ -211,7 +226,7 @@ func TestRealGuestFullComposableRuntimeNorthStar(t *testing.T) {
 	revokedAuthority := workflowAuthority()
 	revokedAuthority.Revoked = true
 	revokedEvaluator, err := workflow.New(workflow.Config{
-		Graph: graph, Guests: guestFactory, ResumeEnabled: true, Authority: revokedAuthority,
+		Graph: graph, Guests: guestFactory, ResumeEnabled: selection.Mechanisms.FreshReevaluation, Authority: revokedAuthority,
 		ImmutableRootSHA256: []string{joined.SelectedRoot.IdentitySHA256},
 	})
 	if err != nil {
@@ -225,10 +240,7 @@ func TestRealGuestFullComposableRuntimeNorthStar(t *testing.T) {
 		t.Fatalf("resumed=%+v guest=%+v err=%v", resumed, guestFactory, err)
 	}
 
-	selected := runtimeconfig.MechanismSet{
-		Streaming: true, StagedObservation: true, PrivateWorkspace: true, ImmutableBranches: true,
-		ChildFanout: true, FunctionCache: true, SingleFlight: true, FreshReevaluation: true,
-	}
+	selected := selection.Mechanisms
 	_, mechanismEvidence, err := runtimeconfig.ResolveMechanisms(selected, selected)
 	if err != nil {
 		t.Fatal(err)
@@ -282,9 +294,15 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	passes := unifiedPassCatalog(t)
+	passes, err = passes.Enable(passregistration.PreparedRuntimeInstantiation)
+	if err != nil {
+		t.Fatal(err)
+	}
 	config := runtimeconfig.DefaultRunConfig()
-	config.Mechanisms = runtimeconfig.MechanismSet{PreparedRuntime: true}
-	preparedRunner, err := baselineFactory.New(context.Background(), artifact, config)
+	preparedFactory := baselineFactory
+	preparedFactory.Passes = passes
+	preparedRunner, err := preparedFactory.New(context.Background(), artifact, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -313,7 +331,7 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	unusedRunner, err := baselineFactory.New(context.Background(), artifact, config)
+	unusedRunner, err := preparedFactory.New(context.Background(), artifact, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -325,7 +343,7 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 		t.Fatalf("unused close err=%v state=%+v", err, unused.PreparedState())
 	}
 
-	cancelRunner, err := baselineFactory.New(context.Background(), artifact, config)
+	cancelRunner, err := preparedFactory.New(context.Background(), artifact, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,7 +362,7 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 		if err := cancelEngine.Close(context.Background()); err != nil {
 			t.Fatal(err)
 		}
-		replacementRunner, err := baselineFactory.New(context.Background(), artifact, config)
+		replacementRunner, err := preparedFactory.New(context.Background(), artifact, config)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -362,9 +380,14 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 	if err := nextEngine.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	cowConfig := config
-	cowConfig.Mechanisms.MemoryCOW = true
-	cowRunner, cowErr := baselineFactory.New(context.Background(), artifact, cowConfig)
+	cowPasses := unifiedPassCatalog(t)
+	cowPasses, err = cowPasses.Enable(passregistration.PrivateMemoryCOW)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cowFactory := baselineFactory
+	cowFactory.Passes = cowPasses
+	cowRunner, cowErr := cowFactory.New(context.Background(), artifact, config)
 	if cowErr != nil {
 		if !errors.Is(cowErr, runtimeconfig.ErrMechanismDisabled) {
 			t.Fatalf("memory COW error=%v", cowErr)
@@ -390,12 +413,20 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 }
 
 func TestComposableFeatureMatrixAndOffStateFallback(t *testing.T) {
-	requested := runtimeconfig.MechanismSet{
-		Streaming: true, StagedObservation: true, PrivateWorkspace: true,
-		ImmutableBranches: true, ChildFanout: true, FunctionCache: true,
-		SingleFlight: true, FreshReevaluation: true, PreparedRuntime: true, MemoryCOW: true,
+	passes := unifiedPassCatalog(t)
+	passes, err := passes.Enable(
+		passregistration.SourceStreamingExecution,
+		passregistration.StreamedChildFanout,
+		passregistration.AgentFunctionRetention,
+		passregistration.AgentFunctionSingleFlight,
+		passregistration.FreshWorkflowReevaluation,
+		passregistration.PrivateMemoryCOW,
+	)
+	if err != nil {
+		t.Fatal(err)
 	}
-	resolved, evidence, err := runtimeconfig.ResolveMechanisms(requested, runtimeconfig.MechanismSet{})
+	resolved, passEvidence, err := passes.ResolveRuntime(runtimeconfig.MechanismSet{StagedObservation: true}, runtimeconfig.MechanismSet{})
+	evidence := passEvidence.Mechanisms
 	if err != nil || resolved != (runtimeconfig.MechanismSet{}) || evidence.Validate() != nil {
 		t.Fatalf("resolved=%+v evidence=%+v err=%v", resolved, evidence, err)
 	}
@@ -577,10 +608,14 @@ func TestRealGuestCOWSingleUseOutcomeIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	manager, base := newComposableWorkspace(t)
+	passes := unifiedPassCatalog(t)
+	passes, err = passes.Enable(passregistration.PrivateMemoryCOW)
+	if err != nil {
+		t.Fatal(err)
+	}
 	config := runtimeconfig.DefaultRunConfig()
-	config.Mechanisms = runtimeconfig.MechanismSet{PreparedRuntime: true, MemoryCOW: true}
 
-	factory := wazeroengine.Factory{WorkspaceManager: manager, WorkspaceRef: base, WorkspaceOwner: "cow-outcome"}
+	factory := wazeroengine.Factory{Passes: passes, WorkspaceManager: manager, WorkspaceRef: base, WorkspaceOwner: "cow-outcome"}
 	runner, err := factory.New(context.Background(), artifact, config)
 	if err != nil {
 		if goruntime.GOOS != "linux" || errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
@@ -670,14 +705,16 @@ func TestRealGuestColdIOContinuationPreservesPythonState(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan := coldIOCapabilityPlan(t)
-	config := runtimeconfig.DefaultRunConfig()
-	config.Mechanisms = runtimeconfig.MechanismSet{
-		PreparedRuntime: true, MemoryCOW: true, ColdIOContinuation: true,
+	passes := unifiedPassCatalog(t)
+	passes, err = passes.Enable(passregistration.ColdIOResidency)
+	if err != nil {
+		t.Fatal(err)
 	}
+	config := runtimeconfig.DefaultRunConfig()
 	config.ColdIO = &runtimeconfig.ColdIOPolicy{
 		ColdAfter: 10 * time.Millisecond, PageOutAfter: 20 * time.Millisecond,
 	}
-	factory := wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	factory := wazeroengine.Factory{Passes: passes, BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		return capability.NewBroker(capability.Config{RunIdentity: "cold-python", Plan: plan})
 	}}
 	runner, err := factory.New(context.Background(), artifact, config)

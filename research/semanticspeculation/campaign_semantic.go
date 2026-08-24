@@ -15,6 +15,8 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/playback"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
@@ -31,6 +33,8 @@ type SemanticPreDispatchTreatmentConfig struct {
 	RunID               string
 	WorkspaceRoot       string
 	WorkspaceOwner      string
+	Passes              *passplugin.Registry
+	AnalyzerPasses      *passplugin.Registry
 }
 
 type semanticGenerationResult struct {
@@ -109,6 +113,29 @@ func NewSemanticPreDispatchTreatment(config SemanticPreDispatchTreatmentConfig) 
 		config.WorkspaceRoot == "" || config.WorkspaceOwner == "" {
 		return nil, errors.New("invalid semantic pre-dispatch treatment")
 	}
+	if config.Passes == nil {
+		passes, err := passplugin.NewDefaultEnabledCatalog(passregistration.SemanticPreDispatch)
+		if err != nil {
+			return nil, err
+		}
+		config.Passes = passes
+	}
+	if config.AnalyzerPasses == nil {
+		var names []passregistration.Name
+		if config.RunConfig.Mechanisms.MemoryCOW {
+			names = append(names, passregistration.PrivateMemoryCOW)
+		} else if config.RunConfig.Mechanisms.PreparedRuntime {
+			names = append(names, passregistration.PreparedRuntimeInstantiation)
+		}
+		passes, err := passplugin.NewDefaultEnabledCatalog(names...)
+		if err != nil {
+			return nil, err
+		}
+		config.AnalyzerPasses = passes
+	}
+	config.RunConfig.Mechanisms.PreparedRuntime = false
+	config.RunConfig.Mechanisms.MemoryCOW = false
+	config.RunConfig.Mechanisms.SemanticPreDispatch = false
 	return &SemanticPreDispatchTreatment{config: config}, nil
 }
 
@@ -136,8 +163,10 @@ func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.Ra
 	analyzerConfig := t.config.RunConfig
 	analyzerConfig.Mechanisms = runtimeconfig.MechanismSet{
 		SemanticAnalysis: true,
-		PreparedRuntime:  t.config.RunConfig.Mechanisms.PreparedRuntime,
-		MemoryCOW:        t.config.RunConfig.Mechanisms.MemoryCOW,
+	}
+	analyzerConfig, _, err := t.config.AnalyzerPasses.ApplyRunConfig(analyzerConfig)
+	if err != nil {
+		return err
 	}
 	newAnalyzer := t.config.NewAnalyzer
 	if newAnalyzer == nil {
@@ -194,11 +223,10 @@ func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.Ra
 	t.workspaceSetupNanos = uint64(time.Since(workspaceStarted))
 	t.lifecycleMu.Unlock()
 	executionConfig := t.config.RunConfig
-	executionConfig.Mechanisms = runtimeconfig.MechanismSet{
-		StagedObservation: true, PrivateWorkspace: true, SemanticAnalysis: true, SemanticPreDispatch: true,
-	}
+	executionConfig.Mechanisms = runtimeconfig.MechanismSet{PrivateWorkspace: true}
 	formalEngineStarted := time.Now()
 	runner, err := (wazeroengine.Factory{
+		Passes:           t.config.Passes,
 		WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: t.config.WorkspaceOwner,
 		BrokerFactory: func(context.Context) (*capability.Broker, error) {
 			broker, brokerErr := capability.NewBroker(capability.Config{

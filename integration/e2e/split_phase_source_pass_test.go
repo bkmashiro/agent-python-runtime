@@ -57,11 +57,10 @@ func TestRealGuestCapabilityFuturesOverlapWithoutAnalyzer(t *testing.T) {
 	})
 	plan := splitPhaseE2EPlan(t, 2, handler)
 	baselinePrelude := plan.PythonPrelude()
-	futurePrelude := futurePassPrelude(t, plan)
+	futurePass := futurePassSelection(t, plan)
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 90 * time.Second
-	config.Mechanisms = runtimeconfig.MechanismSet{SplitPhaseCalls: true}
-	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	runner, err := (wazeroengine.Factory{Passes: futurePass.registry, BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		return capability.NewBroker(capability.Config{RunIdentity: "future-overlap-e2e", Plan: plan})
 	}}).New(context.Background(), artifact, config)
 	if err != nil {
@@ -82,7 +81,7 @@ func TestRealGuestCapabilityFuturesOverlapWithoutAnalyzer(t *testing.T) {
 
 	maxActive.Store(0)
 	treatmentStarted := time.Now()
-	treatment, err := runner.Run(context.Background(), request, futurePrelude)
+	treatment, err := runner.Run(context.Background(), request, futurePass.prelude)
 	treatmentDuration := time.Since(treatmentStarted)
 	if err != nil {
 		t.Fatal(err)
@@ -128,10 +127,10 @@ func TestRealGuestCapabilityFutureDrainsUnobservedWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	futurePass := futurePassSelection(t, plan)
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 90 * time.Second
-	config.Mechanisms = runtimeconfig.MechanismSet{SplitPhaseCalls: true}
-	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	runner, err := (wazeroengine.Factory{Passes: futurePass.registry, BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		return capability.NewBroker(capability.Config{RunIdentity: "future-write-e2e", Plan: plan})
 	}}).New(context.Background(), artifact, config)
 	if err != nil {
@@ -141,7 +140,7 @@ func TestRealGuestCapabilityFutureDrainsUnobservedWrite(t *testing.T) {
 	request, _ := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
 		RunID: "future-write-e2e", Code: "fixture.write(\"value\")\nresult = \"done\"\n", Inputs: json.RawMessage(`{}`),
 	})
-	payload, err := runner.Run(context.Background(), request, futurePassPrelude(t, plan))
+	payload, err := runner.Run(context.Background(), request, futurePass.prelude)
 	result, decodeErr := decodeSuccessfulGuestResult(payload)
 	if err != nil || decodeErr != nil || string(result) != `"done"` || writes.Load() != 1 {
 		t.Fatalf("result=%s writes=%d decode_err=%v err=%v payload=%s", result, writes.Load(), decodeErr, err, payload)
@@ -186,10 +185,10 @@ func TestRealGuestCapabilityFutureDrainsAfterEarlierError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	futurePass := futurePassSelection(t, plan)
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 90 * time.Second
-	config.Mechanisms = runtimeconfig.MechanismSet{SplitPhaseCalls: true}
-	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	runner, err := (wazeroengine.Factory{Passes: futurePass.registry, BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		return capability.NewBroker(capability.Config{RunIdentity: "future-drain-error-e2e", Plan: plan})
 	}}).New(context.Background(), artifact, config)
 	if err != nil {
@@ -201,7 +200,7 @@ func TestRealGuestCapabilityFutureDrainsAfterEarlierError(t *testing.T) {
 		Code:   "fixture.write(\"error\")\nfixture.write(\"ok\")\nresult = \"done\"\n",
 		Inputs: json.RawMessage(`{}`),
 	})
-	payload, runErr := runner.Run(context.Background(), request, futurePassPrelude(t, plan))
+	payload, runErr := runner.Run(context.Background(), request, futurePass.prelude)
 	var response struct {
 		Status string `json:"status"`
 		Error  *struct {
@@ -256,10 +255,10 @@ func TestRealGuestCapabilityFutureMaterializesAnyJSONResultShape(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	futurePass := futurePassSelection(t, plan)
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 90 * time.Second
-	config.Mechanisms = runtimeconfig.MechanismSet{SplitPhaseCalls: true}
-	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	runner, err := (wazeroengine.Factory{Passes: futurePass.registry, BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		return capability.NewBroker(capability.Config{RunIdentity: "future-json-shapes-e2e", Plan: plan})
 	}}).New(context.Background(), artifact, config)
 	if err != nil {
@@ -271,7 +270,7 @@ func TestRealGuestCapabilityFutureMaterializesAnyJSONResultShape(t *testing.T) {
 		Code:   "scalar = fixture.value(\"scalar\")\narray = fixture.value(\"array\")\nnone = fixture.value(\"null\")\nresult = [scalar, array, none]\n",
 		Inputs: json.RawMessage(`{}`),
 	})
-	payload, runErr := runner.Run(context.Background(), request, futurePassPrelude(t, plan))
+	payload, runErr := runner.Run(context.Background(), request, futurePass.prelude)
 	result, decodeErr := decodeSuccessfulGuestResult(payload)
 	if runErr != nil || decodeErr != nil || string(result) != `[7,[1,2],null]` {
 		t.Fatalf("result=%s decode_err=%v run_err=%v payload=%s", result, decodeErr, runErr, payload)
@@ -305,10 +304,10 @@ func TestRealGuestCapabilityFuturesUseWholePlanCallBudget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	futurePass := futurePassSelection(t, plan)
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 90 * time.Second
-	config.Mechanisms = runtimeconfig.MechanismSet{SplitPhaseCalls: true}
-	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	runner, err := (wazeroengine.Factory{Passes: futurePass.registry, BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		return capability.NewBroker(capability.Config{RunIdentity: "future-plan-budget-e2e", Plan: plan})
 	}}).New(context.Background(), artifact, config)
 	if err != nil {
@@ -320,7 +319,7 @@ func TestRealGuestCapabilityFuturesUseWholePlanCallBudget(t *testing.T) {
 		Code:   "a = fixture.read()\nb = fixture.read()\nc = fixture.read()\nd = fixture.read()\ne = fixture.read()\nresult = [a, b, c, d, e]\n",
 		Inputs: json.RawMessage(`{}`),
 	})
-	payload, runErr := runner.Run(context.Background(), request, futurePassPrelude(t, plan))
+	payload, runErr := runner.Run(context.Background(), request, futurePass.prelude)
 	_, decodeErr := decodeSuccessfulGuestResult(payload)
 	if runErr != nil || decodeErr != nil || calls.Load() != 5 {
 		t.Fatalf("calls=%d decode_err=%v run_err=%v payload=%s", calls.Load(), decodeErr, runErr, payload)
@@ -368,13 +367,18 @@ func TestRealGuestSplitPhaseSourcesReadOverlapsPhysicalWorkAndKeepsLogicalReceip
 	})
 	plan := splitPhaseE2EPlan(t, 2, handler)
 	prelude := splitPhaseDirectPrelude(source)
+	plugins := unifiedPassCatalog(t)
+	plugins, err = plugins.Enable(sourcepatch.SplitPhaseSourcesReadName)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var brokersMu sync.Mutex
 	brokers := make([]*capability.Broker, 0, 2)
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 90 * time.Second
-	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, StagedObservation: true, SplitPhaseCalls: true}
-	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, StagedObservation: true}
+	runner, err := (wazeroengine.Factory{Passes: plugins, BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		broker, createErr := capability.NewBroker(capability.Config{RunIdentity: "split-phase-e2e", Plan: plan})
 		if createErr == nil {
 			brokersMu.Lock()
@@ -401,18 +405,6 @@ func TestRealGuestSplitPhaseSourcesReadOverlapsPhysicalWorkAndKeepsLogicalReceip
 	}
 	maxActive.Store(0)
 
-	pass, err := sourcepatch.NewSplitPhaseSourcesRead(passregistration.SemanticAnalyzerSHA256)
-	if err != nil {
-		t.Fatal(err)
-	}
-	plugins, err := passplugin.New(pass)
-	if err != nil {
-		t.Fatal(err)
-	}
-	plugins, err = plugins.Enable(sourcepatch.SplitPhaseSourcesReadName)
-	if err != nil {
-		t.Fatal(err)
-	}
 	treatmentStarted := time.Now()
 	session, closeAnalysis := splitPhaseAnalysisSession(t, artifact, 4)
 	defer closeAnalysis()
@@ -479,6 +471,11 @@ func TestRealGuestSplitPhasePreservesDynamicActivation(t *testing.T) {
 				return json.Marshal(map[string]string{"body": request.Path + "-body"})
 			})
 			plan := splitPhaseE2EPlan(t, 2, handler)
+			plugins := unifiedPassCatalog(t)
+			plugins, enableErr := plugins.Enable(sourcepatch.SplitPhaseSourcesReadName)
+			if enableErr != nil {
+				t.Fatal(enableErr)
+			}
 			var broker *capability.Broker
 			factory := func(context.Context) (*capability.Broker, error) {
 				created, createErr := capability.NewBroker(capability.Config{RunIdentity: "dynamic-" + testCase.name, Plan: plan})
@@ -486,8 +483,8 @@ func TestRealGuestSplitPhasePreservesDynamicActivation(t *testing.T) {
 				return created, createErr
 			}
 			config := runtimeconfig.DefaultRunConfig()
-			config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, StagedObservation: true, SplitPhaseCalls: true}
-			runner, createErr := (wazeroengine.Factory{BrokerFactory: factory}).New(context.Background(), artifact, config)
+			config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, StagedObservation: true}
+			runner, createErr := (wazeroengine.Factory{Passes: plugins, BrokerFactory: factory}).New(context.Background(), artifact, config)
 			if createErr != nil {
 				t.Fatal(createErr)
 			}
@@ -495,9 +492,6 @@ func TestRealGuestSplitPhasePreservesDynamicActivation(t *testing.T) {
 			engine := trustedSemanticRunner(t, runner)
 			session, closeAnalysis := splitPhaseAnalysisSession(t, artifact, 2)
 			defer closeAnalysis()
-			pass, _ := sourcepatch.NewSplitPhaseSourcesRead(passregistration.SemanticAnalyzerSHA256)
-			plugins, _ := passplugin.New(pass)
-			plugins, _ = plugins.Enable(sourcepatch.SplitPhaseSourcesReadName)
 			request := runtimeconfig.RunRequest{RunID: "dynamic-" + strings.ReplaceAll(testCase.name, " ", "-"), Code: testCase.source, Inputs: json.RawMessage(testCase.inputs)}
 			raw, _ := runtimeconfig.EncodeRunRequest(request)
 			execution, runErr := plugins.ExecuteHostScheduled(context.Background(), sourcepatch.SplitPhaseSourcesReadName, session, engine, raw, "")
@@ -555,11 +549,16 @@ func TestRealGuestSplitPhaseFailureDiscardsLaterPhysicalReadWithoutLogicalReceip
 		return json.RawMessage(`{"body":"beta-body"}`), nil
 	})
 	plan := splitPhaseE2EPlan(t, 2, handler)
+	plugins := unifiedPassCatalog(t)
+	plugins, err = plugins.Enable(sourcepatch.SplitPhaseSourcesReadName)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var broker *capability.Broker
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 90 * time.Second
-	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, StagedObservation: true, SplitPhaseCalls: true}
-	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, StagedObservation: true}
+	runner, err := (wazeroengine.Factory{Passes: plugins, BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		created, createErr := capability.NewBroker(capability.Config{RunIdentity: "split-phase-failure", Plan: plan})
 		broker = created
 		return created, createErr
@@ -569,9 +568,6 @@ func TestRealGuestSplitPhaseFailureDiscardsLaterPhysicalReadWithoutLogicalReceip
 	}
 	defer runner.Close(context.Background())
 	engine := trustedSemanticRunner(t, runner)
-	pass, _ := sourcepatch.NewSplitPhaseSourcesRead(passregistration.SemanticAnalyzerSHA256)
-	plugins, _ := passplugin.New(pass)
-	plugins, _ = plugins.Enable(sourcepatch.SplitPhaseSourcesReadName)
 	session, closeAnalysis := splitPhaseAnalysisSession(t, artifact, 2)
 	defer closeAnalysis()
 	execution, err := plugins.ExecuteHostScheduled(
@@ -656,16 +652,24 @@ func splitPhaseE2EPlan(t *testing.T, maxCalls uint32, handler capability.Handler
 	return plan
 }
 
-func futurePassPrelude(t *testing.T, plan *capability.Plan) string {
+type futurePassExecution struct {
+	registry *passplugin.Registry
+	prelude  string
+}
+
+func unifiedPassCatalog(t *testing.T) *passplugin.Registry {
 	t.Helper()
-	pass, err := capability.NewFutureProjectionPass()
+	registry, err := passplugin.NewDefaultUnifiedCatalog()
 	if err != nil {
 		t.Fatal(err)
 	}
-	registry, err := passplugin.New(pass)
-	if err != nil {
-		t.Fatal(err)
-	}
+	return registry
+}
+
+func futurePassSelection(t *testing.T, plan *capability.Plan) futurePassExecution {
+	t.Helper()
+	registry := unifiedPassCatalog(t)
+	var err error
 	registry, err = registry.Enable(passregistration.CapabilityFutureProjection)
 	if err != nil {
 		t.Fatal(err)
@@ -674,7 +678,7 @@ func futurePassPrelude(t *testing.T, plan *capability.Plan) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return prelude
+	return futurePassExecution{registry: registry, prelude: prelude}
 }
 
 func splitPhaseCallID(source string, index int) string {

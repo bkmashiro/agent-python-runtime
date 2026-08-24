@@ -18,23 +18,42 @@ const (
 	SourceRegistrationSchemaVersion       = "pysolate.semantic-pass-registration.v2"
 	AnalyzerFreeRegistrationSchemaVersion = "pysolate.stage-aware-pass-registration.v3"
 
-	SemanticPreDispatch        Name = "semantic_pre_dispatch"
-	PreparedPureRegion         Name = "prepared_pure_region"
-	PreparedNumpyLoad          Name = "prepared_numpy_load"
-	CapabilityFutureProjection Name = "capability_future_projection"
-	PreparedValueBinding       Name = "prepared_value_binding"
+	SemanticPreDispatch          Name = "semantic_pre_dispatch"
+	PreparedPureRegion           Name = "prepared_pure_region"
+	PreparedNumpyLoad            Name = "prepared_numpy_load"
+	CapabilityFutureProjection   Name = "capability_future_projection"
+	PreparedValueBinding         Name = "prepared_value_binding"
+	SourceStreamingExecution     Name = "source_streaming_execution"
+	StreamedChildFanout          Name = "streamed_child_fanout"
+	AgentFunctionRetention       Name = "agent_function_retention"
+	AgentFunctionSingleFlight    Name = "agent_function_singleflight"
+	FreshWorkflowReevaluation    Name = "fresh_workflow_reevaluation"
+	PreparedRuntimeInstantiation Name = "prepared_runtime_instantiation"
+	PrivateMemoryCOW             Name = "private_memory_cow"
+	ColdIOResidency              Name = "cold_io_residency"
+	SemanticWholeRunReuse        Name = "semantic_whole_run_reuse"
 
-	SemanticPreDispatchVersion        = "pysolate.semantic-pre-dispatch-pass.v0"
-	PreparedPureRegionVersion         = "pysolate.prepared-pure-region-pass.v1"
-	PreparedNumpyLoadVersion          = "pysolate.prepared-numpy-load-pass.v1"
-	CapabilityFutureProjectionVersion = "pysolate.capability-future-projection-pass.v1"
-	PreparedValueBindingVersion       = "pysolate.prepared-value-binding-pass.v1"
-	SemanticAnalyzerSHA256            = "sha256:9ed43801b84228c031ba1c3df35dbeab924f1de6d43bb41836b9be894b7be94e"
+	SemanticPreDispatchVersion          = "pysolate.semantic-pre-dispatch-pass.v0"
+	PreparedPureRegionVersion           = "pysolate.prepared-pure-region-pass.v1"
+	PreparedNumpyLoadVersion            = "pysolate.prepared-numpy-load-pass.v1"
+	CapabilityFutureProjectionVersion   = "pysolate.capability-future-projection-pass.v1"
+	PreparedValueBindingVersion         = "pysolate.prepared-value-binding-pass.v1"
+	SourceStreamingExecutionVersion     = "pysolate.source-streaming-execution-pass.v1"
+	StreamedChildFanoutVersion          = "pysolate.streamed-child-fanout-pass.v1"
+	AgentFunctionRetentionVersion       = "pysolate.agent-function-retention-pass.v1"
+	AgentFunctionSingleFlightVersion    = "pysolate.agent-function-singleflight-pass.v1"
+	FreshWorkflowReevaluationVersion    = "pysolate.fresh-workflow-reevaluation-pass.v1"
+	PreparedRuntimeInstantiationVersion = "pysolate.prepared-runtime-instantiation-pass.v1"
+	PrivateMemoryCOWVersion             = "pysolate.private-memory-cow-pass.v1"
+	ColdIOResidencyVersion              = "pysolate.cold-io-residency-pass.v1"
+	SemanticWholeRunReuseVersion        = "pysolate.semantic-whole-run-reuse-pass.v1"
+	SemanticAnalyzerSHA256              = "sha256:9ed43801b84228c031ba1c3df35dbeab924f1de6d43bb41836b9be894b7be94e"
 
-	OverlayOnly    Consumer = "overlay_only"
-	ExecutionPatch Consumer = "execution_patch"
-	PlanProjection Consumer = "plan_projection"
-	RunBinding     Consumer = "run_binding"
+	OverlayOnly       Consumer = "overlay_only"
+	ExecutionPatch    Consumer = "execution_patch"
+	PlanProjection    Consumer = "plan_projection"
+	RunBinding        Consumer = "run_binding"
+	MechanismLowering Consumer = "mechanism_lowering"
 
 	StagePlanProjection     Stage = "plan_projection"
 	StagePrefixOverlay      Stage = "prefix_overlay"
@@ -42,6 +61,7 @@ const (
 	StageWholeProgramPatch  Stage = "whole_program_patch"
 	StageMultiProgramPatch  Stage = "multi_program_patch"
 	StageRunBinding         Stage = "run_binding"
+	StageRuntimeLowering    Stage = "runtime_lowering"
 
 	SourceSHA256           Binding = "source_sha256"
 	ASTSHA256              Binding = "ast_sha256"
@@ -55,11 +75,12 @@ const (
 	RegionID               Binding = "region_id"
 	RunIdentitySHA256      Binding = "run_identity_sha256"
 	FinalSourceSHA256      Binding = "final_source_sha256"
+	RuntimeConfigSHA256    Binding = "runtime_config_sha256"
 )
 
 var (
-	ErrInvalid    = errors.New("invalid semantic pass registration")
-	ErrDuplicate  = errors.New("duplicate semantic pass registration")
+	ErrInvalid    = errors.New("invalid pass registration")
+	ErrDuplicate  = errors.New("duplicate pass registration")
 	digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	namePattern   = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 )
@@ -78,11 +99,13 @@ var patchBindings = []Binding{
 
 var projectionBindings = []Binding{CapabilityPlanSHA256, PassConfigSHA256}
 var runBindings = []Binding{RegionID, RunIdentitySHA256, PassConfigSHA256}
+var mechanismBindings = []Binding{RuntimeConfigSHA256, PassConfigSHA256}
 
 func OverlayBindings() []Binding    { return append([]Binding(nil), overlayBindings...) }
 func PatchBindings() []Binding      { return append([]Binding(nil), patchBindings...) }
 func ProjectionBindings() []Binding { return append([]Binding(nil), projectionBindings...) }
 func RunBindings() []Binding        { return append([]Binding(nil), runBindings...) }
+func MechanismBindings() []Binding  { return append([]Binding(nil), mechanismBindings...) }
 
 type Definition struct {
 	name             Name
@@ -130,6 +153,29 @@ func PreparedValueBindingDefinition() Definition {
 	return value
 }
 
+func RuntimeOptimizationDefinitions() []Definition {
+	specs := []struct {
+		name    Name
+		version string
+	}{
+		{SourceStreamingExecution, SourceStreamingExecutionVersion},
+		{StreamedChildFanout, StreamedChildFanoutVersion},
+		{AgentFunctionRetention, AgentFunctionRetentionVersion},
+		{AgentFunctionSingleFlight, AgentFunctionSingleFlightVersion},
+		{FreshWorkflowReevaluation, FreshWorkflowReevaluationVersion},
+		{PreparedRuntimeInstantiation, PreparedRuntimeInstantiationVersion},
+		{PrivateMemoryCOW, PrivateMemoryCOWVersion},
+		{ColdIOResidency, ColdIOResidencyVersion},
+		{SemanticWholeRunReuse, SemanticWholeRunReuseVersion},
+	}
+	definitions := make([]Definition, 0, len(specs))
+	for _, spec := range specs {
+		definition, _ := Define(spec.name, spec.version, StageRuntimeLowering, MechanismLowering, MechanismBindings())
+		definitions = append(definitions, definition)
+	}
+	return definitions
+}
+
 func (definition Definition) Name() Name         { return definition.name }
 func (definition Definition) Version() string    { return definition.version }
 func (definition Definition) Stage() Stage       { return definition.stage }
@@ -145,7 +191,7 @@ func (definition Definition) Register(analyzerSHA256, configSHA256 string) (Regi
 	}
 	bindings := append([]Binding(nil), definition.requiredBindings...)
 	schemaVersion := SourceRegistrationSchemaVersion
-	if definition.consumer == PlanProjection || definition.consumer == RunBinding {
+	if definition.consumer == PlanProjection || definition.consumer == RunBinding || definition.consumer == MechanismLowering {
 		schemaVersion = AnalyzerFreeRegistrationSchemaVersion
 	}
 	value := identity{
@@ -176,6 +222,8 @@ func validStageForConsumer(stage Stage, consumer Consumer) bool {
 		return stage == StagePlanProjection
 	case RunBinding:
 		return stage == StageRunBinding
+	case MechanismLowering:
+		return stage == StageRuntimeLowering
 	default:
 		return false
 	}
@@ -191,13 +239,15 @@ func bindingsForConsumer(consumer Consumer) []Binding {
 		return projectionBindings
 	case RunBinding:
 		return runBindings
+	case MechanismLowering:
+		return mechanismBindings
 	default:
 		return nil
 	}
 }
 
 func validAnalyzerIdentity(consumer Consumer, analyzerSHA256 string) bool {
-	if consumer == PlanProjection || consumer == RunBinding {
+	if consumer == PlanProjection || consumer == RunBinding || consumer == MechanismLowering {
 		return analyzerSHA256 == ""
 	}
 	return digestPattern.MatchString(analyzerSHA256)

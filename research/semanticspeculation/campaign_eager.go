@@ -13,6 +13,8 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/streaming"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
@@ -36,6 +38,7 @@ type EagerGuestTreatmentConfig struct {
 	RunID               string
 	WorkspaceRoot       string
 	WorkspaceOwner      string
+	Passes              *passplugin.Registry
 }
 
 type eagerGuestRunResult struct {
@@ -61,6 +64,18 @@ func NewEagerGuestTreatment(config EagerGuestTreatmentConfig) (*EagerGuestTreatm
 	if len(config.Artifact) == 0 || config.Plan == nil || config.BrokerFactory == nil || config.RunID == "" || config.WorkspaceRoot == "" || config.WorkspaceOwner == "" {
 		return nil, errors.New("invalid EAGER Guest treatment")
 	}
+	if config.Passes == nil {
+		passes, err := passplugin.NewDefaultUnifiedCatalog()
+		if err != nil {
+			return nil, err
+		}
+		passes, err = passes.Enable(passregistration.SourceStreamingExecution)
+		if err != nil {
+			return nil, err
+		}
+		config.Passes = passes
+	}
+	config.RunConfig.Mechanisms.Streaming = false
 	return &EagerGuestTreatment{config: config}, nil
 }
 
@@ -89,7 +104,7 @@ func (t *EagerGuestTreatment) Begin(ctx context.Context, inputs json.RawMessage)
 		return err
 	}
 	t.manager, t.attempt = manager, attempt
-	factory := wazeroengine.Factory{WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: t.config.WorkspaceOwner, BrokerFactory: func(inner context.Context) (*capability.Broker, error) {
+	factory := wazeroengine.Factory{Passes: t.config.Passes, WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: t.config.WorkspaceOwner, BrokerFactory: func(inner context.Context) (*capability.Broker, error) {
 		broker, err := t.config.BrokerFactory(inner)
 		if err == nil {
 			t.broker = broker

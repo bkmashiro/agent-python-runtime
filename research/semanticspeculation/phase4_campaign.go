@@ -15,6 +15,8 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 )
 
 const Phase4TrialRecordSchemaVersion = "pysolate.semantic-speculation-phase4-trial.v2"
@@ -115,8 +117,23 @@ func RunPhase4CampaignCoordinate(ctx context.Context, config Phase4CampaignConfi
 		var prepared *wazeroengine.Engine
 		if coordinate.Profile == "preprovisioned_equivalent_capacity" {
 			semanticConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, PreparedRuntime: true, MemoryCOW: config.UseLinuxCOW}
+			preparedPass := passregistration.PreparedRuntimeInstantiation
+			if config.UseLinuxCOW {
+				preparedPass = passregistration.PrivateMemoryCOW
+			}
+			passes, passErr := passplugin.NewDefaultEnabledCatalog(preparedPass)
+			if passErr != nil {
+				return Phase4TrialRecord{}, passErr
+			}
+			preparedConfig := semanticConfig
+			preparedConfig.Mechanisms.PreparedRuntime = false
+			preparedConfig.Mechanisms.MemoryCOW = false
+			preparedConfig, _, passErr = passes.ApplyRunConfig(preparedConfig)
+			if passErr != nil {
+				return Phase4TrialRecord{}, passErr
+			}
 			provisionStarted := time.Now()
-			prepared, err = wazeroengine.New(ctx, config.Artifact, semanticConfig)
+			prepared, err = wazeroengine.New(ctx, config.Artifact, preparedConfig)
 			if err == nil {
 				err = prepared.PrepareSemanticRuntime(ctx)
 			}

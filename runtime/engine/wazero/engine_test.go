@@ -13,9 +13,24 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/valueslot"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
+
+func unifiedCatalog(t *testing.T) *passplugin.Registry {
+	t.Helper()
+	catalog, err := passplugin.NewUnifiedCatalog(passplugin.UnifiedCatalogConfig{
+		SemanticPreDispatchConfigSHA256: "sha256:" + strings.Repeat("a", 64),
+		PreparedNumpyLoadConfigSHA256:   "sha256:" + strings.Repeat("b", 64),
+		PreparedPureRegionConfigSHA256:  "sha256:" + strings.Repeat("c", 64),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return catalog
+}
 
 func TestFactoryRequiresBrokerForProgrammaticToolsAndApproval(t *testing.T) {
 	for _, configure := range []func(*runtimeconfig.RunConfig){
@@ -49,6 +64,27 @@ func TestFactoryRequiresBrokerForSplitPhaseCalls(t *testing.T) {
 	_, err := (wazeroengine.Factory{}).New(context.Background(), []byte("not wasm"), config)
 	if err == nil || !strings.Contains(err.Error(), "requires a capability Broker factory") {
 		t.Fatalf("factory error = %v", err)
+	}
+}
+
+func TestFactoryLowersEnabledPassesBeforeArtifactParsing(t *testing.T) {
+	catalog := unifiedCatalog(t)
+	enabled, err := catalog.Enable(passregistration.CapabilityFutureProjection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = (wazeroengine.Factory{Passes: enabled}).New(context.Background(), []byte("not wasm"), runtimeconfig.DefaultRunConfig())
+	if err == nil || !strings.Contains(err.Error(), "requires a capability Broker factory") {
+		t.Fatalf("pass lowering did not select Future runtime: %v", err)
+	}
+}
+
+func TestFactoryRejectsDirectOptimizationSelectionWhenPassCatalogIsBound(t *testing.T) {
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.SplitPhaseCalls = true
+	_, err := (wazeroengine.Factory{Passes: unifiedCatalog(t)}).New(context.Background(), []byte("not wasm"), config)
+	if !errors.Is(err, passplugin.ErrDirectOptimizationSelection) {
+		t.Fatalf("direct optimization bypass error=%v", err)
 	}
 }
 

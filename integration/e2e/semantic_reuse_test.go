@@ -14,6 +14,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semanticreuse"
 )
@@ -26,12 +27,17 @@ func TestRealGuestSemanticReuseCollapsesAndRetainsWholeRun(t *testing.T) {
 	code := "result={'value':inputs['value']+1}"
 	inputs := []byte(`{"value":41}`)
 	invocation, runConfig := sharedGuestInvocation(t, artifact, code, []string{"sys"}, inputs)
-	runConfig.Mechanisms = runtimeconfig.MechanismSet{
-		ImmutableBranches: true, FunctionCache: true, SingleFlight: true,
-		SemanticAnalysis: true, SemanticReuse: true,
+	passes := unifiedPassCatalog(t)
+	passes, err = passes.Enable(passregistration.AgentFunctionRetention, passregistration.SemanticWholeRunReuse)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection, err := passes.LowerMechanisms(runtimeconfig.MechanismSet{})
+	if err != nil {
+		t.Fatal(err)
 	}
 	analysisPhaseStarted := time.Now()
-	analysisRunner, err := (wazeroengine.Factory{}).New(context.Background(), artifact, runConfig)
+	analysisRunner, err := (wazeroengine.Factory{Passes: passes}).New(context.Background(), artifact, runConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,8 +89,8 @@ func TestRealGuestSemanticReuseCollapsesAndRetainsWholeRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	flights := agentfunction.NewFlightGroup()
-	pass := &semanticreuse.Pass{Enabled: true, FunctionEngine: agentfunction.Engine{
-		Store: store, CacheEnabled: true, Flights: flights,
+	pass := &semanticreuse.Pass{Enabled: selection.Mechanisms.SemanticReuse, FunctionEngine: agentfunction.Engine{
+		Store: store, CacheEnabled: selection.Mechanisms.FunctionCache, Flights: flights,
 	}}
 	var physical atomic.Int32
 	compute := agentfunction.FreshGuestCompute{

@@ -14,6 +14,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
 
@@ -134,7 +135,16 @@ func TestExactGuestSemanticAnalysisSessionConsumesSingleUsePreparedRuntime(t *te
 		t.Fatal(err)
 	}
 	config.ExecutionProfile = &profile
-	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, PreparedRuntime: true}
+	passes := unifiedPassCatalog(t)
+	passes, err = passes.Enable(passregistration.PreparedRuntimeInstantiation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
+	config, _, err = passes.ApplyRunConfig(config)
+	if err != nil {
+		t.Fatal(err)
+	}
 	registry := capability.NewRegistry()
 	spec, grant, err := capability.DemoCatalogDefinition(capability.DemoCatalogPolicy{Endpoint: "http://127.0.0.1:1", Timeout: time.Second, MaxResponseBytes: 1024})
 	if err != nil {

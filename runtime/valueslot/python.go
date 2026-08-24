@@ -22,5 +22,9 @@ elif _pysolate_value_slot_tag == 2:
     %s = bytearray(_pysolate_value_slot_response[1:])
 else:
     raise RuntimeError("value-slot strategy is invalid")
+del _pysolate_value_slot_response
+del _pysolate_value_slot_tag
+del _pysolate_value_slot_host
+del _pysolate_value_slot_json
 `, slotID, PythonValueName, PythonValueName), nil
 }

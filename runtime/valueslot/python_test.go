@@ -17,6 +17,7 @@ func TestPythonPreludeMaterializesOnePreparedValue(t *testing.T) {
 		valueslot.PythonValueName,
 		"json.loads",
 		"bytearray",
+		"del _pysolate_value_slot_host",
 	} {
 		if !strings.Contains(prelude, expected) {
 			t.Fatalf("prelude does not contain %q: %s", expected, prelude)

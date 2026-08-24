@@ -19,6 +19,8 @@ import (
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/numpycodec"
 	"github.com/bkmashiro/agent-python-runtime/runtime/numpyproducer"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/resultblob"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
@@ -439,8 +441,11 @@ func newEngine(ctx context.Context, b bundle, privateCOW bool) (*wazeroengine.En
 	config.ExecutionProfile = &profile
 	config.Mechanisms.SemanticAnalysis = true
 	if privateCOW {
-		config.Mechanisms.PreparedRuntime = true
-		config.Mechanisms.MemoryCOW = true
+		var err error
+		config, _, err = passplugin.LowerDefaultRunConfig(config, passregistration.PrivateMemoryCOW)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return wazeroengine.New(ctx, b.wasm, config)
 }
@@ -462,8 +467,11 @@ func analysisBindings(profile runtimeconfig.ExecutionProfile, privateCOW bool) (
 	config.ExecutionProfile = &bound
 	config.Mechanisms.SemanticAnalysis = true
 	if privateCOW {
-		config.Mechanisms.PreparedRuntime = true
-		config.Mechanisms.MemoryCOW = true
+		var err error
+		config, _, err = passplugin.LowerDefaultRunConfig(config, passregistration.PrivateMemoryCOW)
+		if err != nil {
+			return numpyproducer.Bindings{}, err
+		}
 	}
 	profileSHA, err := runtimeconfig.ExecutionProfileBindingSHA256(config)
 	if err != nil {

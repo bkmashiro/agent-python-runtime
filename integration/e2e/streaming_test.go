@@ -12,6 +12,7 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/streaming"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
@@ -82,8 +83,14 @@ func TestRealGuestStreamingAuthorityStagedExecution(t *testing.T) {
 		if err != nil {
 			return streaming.RunResult{}, attempt.Ref(), nil, err
 		}
+		passes := unifiedPassCatalog(t)
+		passes, err = passes.Enable(passregistration.SourceStreamingExecution)
+		if err != nil {
+			return streaming.RunResult{}, attempt.Ref(), nil, err
+		}
 		var broker *capability.Broker
 		factory := wazeroengine.Factory{
+			Passes:           passes,
 			WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: "stream-e2e",
 			BrokerFactory: func(context.Context) (*capability.Broker, error) {
 				broker, err = capability.NewBroker(capability.Config{RunIdentity: "stream-e2e", Plan: plan})
@@ -91,9 +98,7 @@ func TestRealGuestStreamingAuthorityStagedExecution(t *testing.T) {
 			},
 		}
 		runConfig := runtimeconfig.DefaultRunConfig()
-		runConfig.Mechanisms = runtimeconfig.MechanismSet{
-			Streaming: true, StagedObservation: true, PrivateWorkspace: true,
-		}
+		runConfig.Mechanisms.StagedObservation = true
 		runner, err := factory.New(context.Background(), artifact, runConfig)
 		if err != nil {
 			return streaming.RunResult{}, attempt.Ref(), broker, err

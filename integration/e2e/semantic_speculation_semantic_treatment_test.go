@@ -14,6 +14,8 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/playback"
 )
 
@@ -49,9 +51,16 @@ func TestExactGuestScheduledSemanticPreDispatchConsumesPreparedExternalRead(t *t
 	}))
 	runConfig := runtimeconfig.DefaultRunConfig()
 	runConfig.ExecutionProfile = &profile
-	runConfig.Mechanisms.PreparedRuntime = true
+	preparedPass := passregistration.PreparedRuntimeInstantiation
+	if goruntime.GOOS == "linux" {
+		preparedPass = passregistration.PrivateMemoryCOW
+	}
+	analyzerPasses, err := passplugin.NewDefaultEnabledCatalog(preparedPass)
+	if err != nil {
+		t.Fatal(err)
+	}
 	config := semanticspeculation.SemanticPreDispatchTreatmentConfig{
-		Artifact: artifact, RunConfig: runConfig, Plan: plan,
+		Artifact: artifact, RunConfig: runConfig, AnalyzerPasses: analyzerPasses, Plan: plan,
 		ProviderObservation: func() semanticspeculation.ProviderObservation {
 			attempts := physical.Load()
 			return semanticspeculation.ProviderObservation{
@@ -63,7 +72,6 @@ func TestExactGuestScheduledSemanticPreDispatchConsumesPreparedExternalRead(t *t
 		RunID: "phase3-semantic-external-read", WorkspaceRoot: t.TempDir(), WorkspaceOwner: "phase3-semantic-external-read",
 	}
 	if goruntime.GOOS == "linux" {
-		config.RunConfig.Mechanisms.MemoryCOW = true
 		config.NewAnalyzer = func(ctx context.Context, artifact []byte, runConfig runtimeconfig.RunConfig) (*wazeroengine.Engine, error) {
 			analyzer, newErr := wazeroengine.New(ctx, artifact, runConfig)
 			if newErr != nil {

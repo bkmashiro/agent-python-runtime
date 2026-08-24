@@ -18,6 +18,8 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
 
@@ -215,11 +217,17 @@ func runTrial(artifact []byte, profile runtimeconfig.ExecutionProfile, source st
 	config := runtimeconfig.DefaultRunConfig()
 	config.ExecutionProfile = &profile
 	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
+	passes, err := passplugin.NewDefaultUnifiedCatalog()
+	if err != nil {
+		return trial{}, err
+	}
 	var broker *capability.Broker
 	var controller *semantic.SemanticPreDispatch
 	if condition == "semantic_pre_dispatch" {
-		config.Mechanisms.SemanticPreDispatch = true
-		config.Mechanisms.StagedObservation = true
+		passes, err = passes.Enable(passregistration.SemanticPreDispatch)
+		if err != nil {
+			return trial{}, err
+		}
 		decision := semantic.CanPreissue(verified, plan, siteID, semantic.PreissueContext{
 			StreamEpoch: fmt.Sprintf("stream-%d", index), WorkflowEpoch: "workflow-experiment",
 			FreshnessEpoch: "plan-experiment", ExpiryEpoch: "expiry-experiment", PrivacyPartition: "private-experiment",
@@ -238,7 +246,7 @@ func runTrial(artifact []byte, profile runtimeconfig.ExecutionProfile, source st
 			return trial{}, err
 		}
 	}
-	factory := wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	factory := wazeroengine.Factory{Passes: passes, BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		var err error
 		brokerConfig := capability.Config{RunIdentity: fmt.Sprintf("experiment-%s-%d", condition, index), Plan: plan}
 		if controller != nil {

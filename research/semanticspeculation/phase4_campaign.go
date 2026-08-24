@@ -115,8 +115,9 @@ func RunPhase4CampaignCoordinate(ctx context.Context, config Phase4CampaignConfi
 	if coordinate.Treatment == "semantic_pre_dispatch" {
 		semanticConfig := config.RunConfig
 		var prepared *wazeroengine.Engine
+		var analyzerPasses *passplugin.Registry
 		if coordinate.Profile == "preprovisioned_equivalent_capacity" {
-			semanticConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, PreparedRuntime: true, MemoryCOW: config.UseLinuxCOW}
+			semanticConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
 			preparedPass := passregistration.PreparedRuntimeInstantiation
 			if config.UseLinuxCOW {
 				preparedPass = passregistration.PrivateMemoryCOW
@@ -125,9 +126,8 @@ func RunPhase4CampaignCoordinate(ctx context.Context, config Phase4CampaignConfi
 			if passErr != nil {
 				return Phase4TrialRecord{}, passErr
 			}
+			analyzerPasses = passes
 			preparedConfig := semanticConfig
-			preparedConfig.Mechanisms.PreparedRuntime = false
-			preparedConfig.Mechanisms.MemoryCOW = false
 			preparedConfig, _, passErr = passes.ApplyRunConfig(preparedConfig)
 			if passErr != nil {
 				return Phase4TrialRecord{}, passErr
@@ -153,7 +153,7 @@ func RunPhase4CampaignCoordinate(ctx context.Context, config Phase4CampaignConfi
 			}
 			return wazeroengine.New(inner, artifact, runConfig)
 		}
-		semanticTreatment, err = NewSemanticPreDispatchTreatment(SemanticPreDispatchTreatmentConfig{Artifact: config.Artifact, RunConfig: semanticConfig, NewAnalyzer: newAnalyzer, Plan: plan, ProviderObservation: observation, ImportClosureSHA256: digestBytes(config.Artifact), PhysicalReadBudget: 1, RunID: runID, WorkspaceRoot: workspaceRoot, WorkspaceOwner: runID})
+		semanticTreatment, err = NewSemanticPreDispatchTreatment(SemanticPreDispatchTreatmentConfig{Artifact: config.Artifact, RunConfig: semanticConfig, AnalyzerPasses: analyzerPasses, NewAnalyzer: newAnalyzer, Plan: plan, ProviderObservation: observation, ImportClosureSHA256: digestBytes(config.Artifact), PhysicalReadBudget: 1, RunID: runID, WorkspaceRoot: workspaceRoot, WorkspaceOwner: runID})
 		treatment = semanticTreatment
 	} else if coordinate.Treatment == "serial_whole_file" {
 		runConfig := config.RunConfig
@@ -161,7 +161,6 @@ func RunPhase4CampaignCoordinate(ctx context.Context, config Phase4CampaignConfi
 		treatment, err = NewSerialGuestTreatment(SerialGuestTreatmentConfig{Artifact: config.Artifact, RunConfig: runConfig, Plan: plan, BrokerFactory: brokerFactory, ProviderObservation: observation, RunID: runID, WorkspaceRoot: workspaceRoot, WorkspaceOwner: runID})
 	} else {
 		runConfig := config.RunConfig
-		runConfig.Mechanisms = runtimeconfig.MechanismSet{Streaming: true, PrivateWorkspace: true}
 		treatment, err = NewEagerGuestTreatment(EagerGuestTreatmentConfig{Artifact: config.Artifact, RunConfig: runConfig, Plan: plan, BrokerFactory: brokerFactory, AllowedImportRoots: config.RunConfig.ExecutionProfile.AllowedImports(), ProviderObservation: observation, RunID: runID, WorkspaceRoot: workspaceRoot, WorkspaceOwner: runID})
 	}
 	if err != nil {

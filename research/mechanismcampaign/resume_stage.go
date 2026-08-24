@@ -15,6 +15,8 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/streaming"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
@@ -92,11 +94,19 @@ func RunResumeStage(ctx context.Context, config ResumeStageConfig) (ResumeStageR
 	}
 	runConfig := runtimeconfig.DefaultRunConfig()
 	runConfig.ExecutionProfile = &profile
+	passes, err := passplugin.NewDefaultUnifiedCatalog()
+	if err != nil {
+		return ResumeStageResult{}, err
+	}
 	if config.EnableColdIO {
-		runConfig.Mechanisms = runtimeconfig.MechanismSet{PreparedRuntime: true, MemoryCOW: true, ColdIOContinuation: true}
+		passes, err = passes.Enable(passregistration.ColdIOResidency)
+		if err != nil {
+			return ResumeStageResult{}, err
+		}
 		runConfig.ColdIO = &runtimeconfig.ColdIOPolicy{ColdAfter: 10 * time.Millisecond, PageOutAfter: 20 * time.Millisecond}
 	}
 	factory := wazeroengine.Factory{
+		Passes:           passes,
 		WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: "campaign-resume-main",
 		BrokerFactory: func(context.Context) (*capability.Broker, error) {
 			return capability.NewBroker(capability.Config{RunIdentity: "campaign-resume-main", Plan: plan})

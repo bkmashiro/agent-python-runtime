@@ -17,6 +17,8 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/preparedregion"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
@@ -207,8 +209,7 @@ func TestExactGuestScratchExecutesOneScalarRegionAndPublishesBoundCapsule(t *tes
 	}
 
 	preparedConfig := config
-	preparedConfig.Mechanisms.PreparedRuntime = true
-	preparedConfig.Mechanisms.MemoryCOW = runtime.GOOS == "linux"
+	preparedConfig = preparedRegionPassConfig(t, preparedConfig)
 	preparedEngine, err := wazeroengine.New(ctx, artifact, preparedConfig)
 	if err != nil {
 		t.Fatal(err)
@@ -284,8 +285,7 @@ func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecut
 	artifact, profile := loadPreparedRegionArtifact(t)
 	config := runtimeconfig.DefaultRunConfig()
 	config.Mechanisms.SemanticAnalysis = true
-	config.Mechanisms.PreparedRuntime = true
-	config.Mechanisms.MemoryCOW = runtime.GOOS == "linux"
+	config = preparedRegionPassConfig(t, config)
 	config.ExecutionProfile = &profile
 	profileSHA256, err := runtimeconfig.ExecutionProfileBindingSHA256(config)
 	if err != nil {
@@ -378,8 +378,7 @@ func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecut
 		t.Fatal(err)
 	}
 	originalConfig := config
-	originalConfig.Mechanisms.PreparedRuntime = true
-	originalConfig.Mechanisms.MemoryCOW = runtime.GOOS == "linux"
+	originalConfig = preparedRegionPassConfig(t, originalConfig)
 	baselineEngine, err := wazeroengine.New(ctx, artifact, originalConfig)
 	if err != nil {
 		t.Fatal(err)
@@ -409,8 +408,7 @@ func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecut
 		t.Fatal(err)
 	}
 	derivedConfig := config
-	derivedConfig.Mechanisms.PreparedRuntime = true
-	derivedConfig.Mechanisms.MemoryCOW = runtime.GOOS == "linux"
+	derivedConfig = preparedRegionPassConfig(t, derivedConfig)
 	runner, err := (wazeroengine.Factory{PreparedRegions: table}).New(ctx, artifact, derivedConfig)
 	if err != nil {
 		t.Fatal(err)
@@ -483,8 +481,7 @@ func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecut
 		t.Fatal(err)
 	}
 	driftConfig := config
-	driftConfig.Mechanisms.PreparedRuntime = true
-	driftConfig.Mechanisms.MemoryCOW = runtime.GOOS == "linux"
+	driftConfig = preparedRegionPassConfig(t, driftConfig)
 	driftRunner, err := (wazeroengine.Factory{PreparedRegions: driftTable}).New(ctx, artifact, driftConfig)
 	if err != nil {
 		t.Fatal(err)
@@ -523,8 +520,7 @@ func qualifyPreparedDerivedFixture(t *testing.T, ctx context.Context, artifact [
 	t.Helper()
 	config := runtimeconfig.DefaultRunConfig()
 	config.Mechanisms.SemanticAnalysis = true
-	config.Mechanisms.PreparedRuntime = true
-	config.Mechanisms.MemoryCOW = runtime.GOOS == "linux"
+	config = preparedRegionPassConfig(t, config)
 	config.ExecutionProfile = &profile
 	profileSHA256, err := runtimeconfig.ExecutionProfileBindingSHA256(config)
 	if err != nil {
@@ -813,6 +809,19 @@ func preparedRegionASTSHA(t *testing.T, artifact []byte, config runtimeconfig.Ru
 		t.Fatal(err)
 	}
 	return analysis.ASTSHA256
+}
+
+func preparedRegionPassConfig(t *testing.T, config runtimeconfig.RunConfig) runtimeconfig.RunConfig {
+	t.Helper()
+	preparedPass := passregistration.PreparedRuntimeInstantiation
+	if runtime.GOOS == "linux" {
+		preparedPass = passregistration.PrivateMemoryCOW
+	}
+	lowered, _, err := passplugin.LowerDefaultRunConfig(config, preparedPass)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return lowered
 }
 
 func loadPreparedRegionArtifact(t *testing.T) ([]byte, runtimeconfig.ExecutionProfile) {

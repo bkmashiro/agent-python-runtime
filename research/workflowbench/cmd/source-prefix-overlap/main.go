@@ -14,6 +14,8 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/research/workflowbench"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
@@ -70,9 +72,17 @@ func run(ctx context.Context, artifactPath, contractPath, oraclePath, laneConfig
 	if err != nil {
 		return err
 	}
+	passes, err := passplugin.NewDefaultEnabledCatalog(passregistration.SourceStreamingExecution)
+	if err != nil {
+		return err
+	}
 	runConfig := runtimeconfig.DefaultRunConfig()
-	runConfig.Mechanisms = runtimeconfig.MechanismSet{Streaming: true, StagedObservation: true, PrivateWorkspace: true}
-	profileJSON, err := json.Marshal(runConfig)
+	runConfig.Mechanisms = runtimeconfig.MechanismSet{StagedObservation: true}
+	loweredConfig, _, err := passes.ApplyRunConfig(runConfig)
+	if err != nil {
+		return err
+	}
+	profileJSON, err := json.Marshal(loweredConfig)
 	if err != nil {
 		return err
 	}
@@ -93,7 +103,7 @@ func run(ctx context.Context, artifactPath, contractPath, oraclePath, laneConfig
 	if err != nil {
 		return err
 	}
-	environment := sourcePrefixEnvironment{artifact: artifact, manager: manager, base: base, config: runConfig}
+	environment := sourcePrefixEnvironment{artifact: artifact, manager: manager, base: base, config: runConfig, passes: passes}
 	identities := workflowbench.SourcePrefixRuntimeIdentities{
 		ArtifactSHA256: digestBytes(artifact), ArtifactSourceCommit: fixedGuestArtifactSourceCommit, HarnessSourceCommit: harnessCommit,
 		ExecutionProfileSHA256: digestBytes(profileJSON), CapabilityPlanSHA256: identityPlan.Identity(),

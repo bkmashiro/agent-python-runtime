@@ -148,7 +148,6 @@ func (campaign *ExactGuestCampaign) RunCoordinate(ctx context.Context, fixture S
 			})
 		case "eager_style_gate":
 			config := campaign.config.RunConfig
-			config.Mechanisms = runtimeconfig.MechanismSet{Streaming: true, PrivateWorkspace: true}
 			return NewEagerGuestTreatment(EagerGuestTreatmentConfig{
 				Artifact: campaign.config.Artifact, RunConfig: config, Plan: plan, BrokerFactory: brokerFactory,
 				AllowedImportRoots: campaign.config.RunConfig.ExecutionProfile.AllowedImports(), ProviderObservation: observation,

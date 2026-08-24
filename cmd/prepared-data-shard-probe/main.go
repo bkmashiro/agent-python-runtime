@@ -13,6 +13,8 @@ import (
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 )
 
 const trustedPrepareSHA256 = "sha256:d34aea06c990aeedd2f8f5ff809c1180b92fccca0381269b7c18654043b9a374"
@@ -57,8 +59,10 @@ func main() {
 	config.MaxResponseBytes = 16 << 20
 	config.MemoryLimitPages = 16384
 	config.ExecutionProfile = &profile
-	config.Mechanisms.PreparedRuntime = true
-	config.Mechanisms.MemoryCOW = true
+	config, _, err = passplugin.LowerDefaultRunConfig(config, passregistration.PrivateMemoryCOW)
+	if err != nil {
+		fail(err)
+	}
 	engine, err := wazeroengine.New(ctx, wasm, config)
 	if err != nil {
 		fail(err)

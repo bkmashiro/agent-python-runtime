@@ -14,6 +14,7 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/streaming"
 )
 
@@ -95,7 +96,7 @@ func TestExactGuestScheduledEagerTreatmentUsesFrozenCaseWithoutHints(t *testing.
 		return capability.NewBroker(capability.Config{RunIdentity: "eager-scheduled-pure-local", Plan: plan})
 	}
 	runConfig := runtimeconfig.DefaultRunConfig()
-	runConfig.Mechanisms = runtimeconfig.MechanismSet{Streaming: true, PrivateWorkspace: true}
+	runConfig.Mechanisms = runtimeconfig.MechanismSet{PrivateWorkspace: true}
 	treatment, err := semanticspeculation.NewEagerGuestTreatment(semanticspeculation.EagerGuestTreatmentConfig{
 		Artifact:      artifact,
 		RunConfig:     runConfig,
@@ -138,7 +139,7 @@ func TestExactGuestScheduledEagerTreatmentExecutesDeniedExternalReadOnlyAfterFin
 		return capability.NewBroker(capability.Config{RunIdentity: "eager-scheduled-external-read", Plan: plan})
 	}
 	runConfig := runtimeconfig.DefaultRunConfig()
-	runConfig.Mechanisms = runtimeconfig.MechanismSet{Streaming: true, PrivateWorkspace: true}
+	runConfig.Mechanisms = runtimeconfig.MechanismSet{PrivateWorkspace: true}
 	treatment, err := semanticspeculation.NewEagerGuestTreatment(semanticspeculation.EagerGuestTreatmentConfig{
 		Artifact: artifact, RunConfig: runConfig, Plan: plan, BrokerFactory: factory,
 		RunID: "eager-scheduled-external-read", WorkspaceRoot: t.TempDir(), WorkspaceOwner: "eager-scheduled-external-read",
@@ -179,14 +180,20 @@ func runExactGuestEagerComparator(
 	if err != nil {
 		t.Fatal(err)
 	}
+	passes := unifiedPassCatalog(t)
+	passes, err = passes.Enable(passregistration.SourceStreamingExecution)
+	if err != nil {
+		t.Fatal(err)
+	}
 	factory := wazeroengine.Factory{
+		Passes:           passes,
 		WorkspaceManager: binding.manager,
 		WorkspaceRef:     attempt.Ref(),
 		WorkspaceOwner:   label,
 		BrokerFactory:    brokerFactory,
 	}
 	runConfig := runtimeconfig.DefaultRunConfig()
-	runConfig.Mechanisms = runtimeconfig.MechanismSet{Streaming: true, PrivateWorkspace: true}
+	runConfig.Mechanisms = runtimeconfig.MechanismSet{PrivateWorkspace: true}
 	runner, err := factory.New(context.Background(), artifact, runConfig)
 	if err != nil {
 		t.Fatal(err)

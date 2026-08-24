@@ -18,6 +18,8 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
@@ -304,11 +306,18 @@ func executeCandidate(ctx context.Context, candidateID string, artifact []byte, 
 	}
 	config := runtimeconfig.DefaultRunConfig()
 	config.ExecutionProfile = &profile
-	config.Mechanisms = runtimeconfig.MechanismSet{
-		StagedObservation: true, PrivateWorkspace: true, SemanticAnalysis: true, SemanticPreDispatch: true,
-		PreparedRuntime: enableCOW, MemoryCOW: enableCOW,
+	config.Mechanisms = runtimeconfig.MechanismSet{PrivateWorkspace: true}
+	passNames := []passregistration.Name{passregistration.SemanticPreDispatch}
+	if enableCOW {
+		passNames = append(passNames, passregistration.PrivateMemoryCOW)
+	}
+	passes, err := passplugin.NewDefaultEnabledCatalog(passNames...)
+	if err != nil {
+		_ = attempt.Discard()
+		return CandidateStageOutput{}, err
 	}
 	runnerContract, err := (wazeroengine.Factory{
+		Passes:           passes,
 		WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: "candidate-" + candidateID,
 		BrokerFactory: func(context.Context) (*capability.Broker, error) {
 			return capability.NewBroker(capability.Config{

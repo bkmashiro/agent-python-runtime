@@ -15,6 +15,8 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semanticreuse"
 )
@@ -64,7 +66,15 @@ func RunOriginSharingStage(ctx context.Context, config OriginSharingConfig) (Ori
 	if err != nil {
 		return OriginSharingResult{}, err
 	}
-	analysisRunnerContract, err := (wazeroengine.Factory{}).New(ctx, artifact, runConfig)
+	passes, err := originReusePasses()
+	if err != nil {
+		return OriginSharingResult{}, err
+	}
+	selection, err := passes.LowerMechanisms(runConfig.Mechanisms)
+	if err != nil {
+		return OriginSharingResult{}, err
+	}
+	analysisRunnerContract, err := (wazeroengine.Factory{Passes: passes}).New(ctx, artifact, runConfig)
 	if err != nil {
 		return OriginSharingResult{}, err
 	}
@@ -116,7 +126,7 @@ func RunOriginSharingStage(ctx context.Context, config OriginSharingConfig) (Ori
 		return OriginSharingResult{}, err
 	}
 	flights := agentfunction.NewFlightGroup()
-	pass := &semanticreuse.Pass{Enabled: true, FunctionEngine: agentfunction.Engine{Store: store, CacheEnabled: true, Flights: flights}}
+	pass := &semanticreuse.Pass{Enabled: selection.Mechanisms.SemanticReuse, FunctionEngine: agentfunction.Engine{Store: store, CacheEnabled: selection.Mechanisms.FunctionCache, Flights: flights}}
 	var physical atomic.Int32
 	compute := agentfunction.FreshGuestCompute{
 		NewRunner: func(runContext context.Context) (string, enginecontract.Runner, error) {
@@ -126,7 +136,7 @@ func RunOriginSharingStage(ctx context.Context, config OriginSharingConfig) (Ori
 			for flights.Stats().Waiters != 1 && time.Now().Before(deadline) {
 				time.Sleep(time.Millisecond)
 			}
-			runner, createErr := (wazeroengine.Factory{}).New(runContext, artifact, runConfig)
+			runner, createErr := (wazeroengine.Factory{Passes: passes}).New(runContext, artifact, runConfig)
 			if createErr != nil {
 				return physicalID, nil, createErr
 			}
@@ -242,11 +252,15 @@ func originInvocation(artifact []byte, code string, inputs json.RawMessage) (age
 	config := runtimeconfig.DefaultRunConfig()
 	config.ExecutionProfile = &profile
 	config.DeterministicVerification = &deterministic
-	config.Mechanisms = runtimeconfig.MechanismSet{
-		ImmutableBranches: true, FunctionCache: true, SingleFlight: true,
-		SemanticAnalysis: true, SemanticReuse: true,
+	passes, err := originReusePasses()
+	if err != nil {
+		return agentfunction.Invocation{}, runtimeconfig.RunConfig{}, err
 	}
-	profileSHA, err := runtimeconfig.ExecutionProfileBindingSHA256(config)
+	loweredConfig, _, err := passes.ApplyRunConfig(config)
+	if err != nil {
+		return agentfunction.Invocation{}, runtimeconfig.RunConfig{}, err
+	}
+	profileSHA, err := runtimeconfig.ExecutionProfileBindingSHA256(loweredConfig)
 	if err != nil {
 		return agentfunction.Invocation{}, runtimeconfig.RunConfig{}, err
 	}
@@ -259,6 +273,14 @@ func originInvocation(artifact []byte, code string, inputs json.RawMessage) (age
 		DeterministicSettingsSHA256: deterministic.Identity(), OutputSchemaSHA256: digestBytes(nil),
 		PrivacyPartition: "unified-day-trip", PolicyEpochSHA256: digestTextValue("origin-policy-v1"),
 	}, config, nil
+}
+
+func originReusePasses() (*passplugin.Registry, error) {
+	return passplugin.NewDefaultEnabledCatalog(
+		passregistration.AgentFunctionRetention,
+		passregistration.AgentFunctionSingleFlight,
+		passregistration.SemanticWholeRunReuse,
+	)
 }
 
 type campaignObservedRunner struct {

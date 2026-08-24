@@ -14,6 +14,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
@@ -141,6 +142,7 @@ func TestExactGuestSemanticAnalysisSessionConsumesSingleUsePreparedRuntime(t *te
 		t.Fatal(err)
 	}
 	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
+	baseConfig := config
 	config, _, err = passes.ApplyRunConfig(config)
 	if err != nil {
 		t.Fatal(err)
@@ -239,8 +241,10 @@ func TestExactGuestSemanticAnalysisSessionConsumesSingleUsePreparedRuntime(t *te
 		t.Fatalf("cold identity=%s preprovisioned identity=%s", coldIdentity, warmIdentity)
 	}
 	if goruntime.GOOS != "linux" {
-		cowConfig := config
-		cowConfig.Mechanisms.MemoryCOW = true
+		cowConfig, _, lowerErr := passplugin.LowerDefaultRunConfig(baseConfig, passregistration.PrivateMemoryCOW)
+		if lowerErr != nil {
+			t.Fatal(lowerErr)
+		}
 		fallbackState, _, fallbackEvidence, fallbackIdentity := run(cowConfig, false, true)
 		if fallbackState.FreshFallbackRuns != 2 || fallbackEvidence.PreparedProvisionFailures != 1 ||
 			fallbackEvidence.FreshFallbacks != 2 || fallbackEvidence.Successes != 2 || fallbackEvidence.COWHits != 0 {
@@ -250,8 +254,10 @@ func TestExactGuestSemanticAnalysisSessionConsumesSingleUsePreparedRuntime(t *te
 			t.Fatalf("fallback identity=%s cold identity=%s", fallbackIdentity, coldIdentity)
 		}
 	} else {
-		cowConfig := config
-		cowConfig.Mechanisms.MemoryCOW = true
+		cowConfig, _, lowerErr := passplugin.LowerDefaultRunConfig(baseConfig, passregistration.PrivateMemoryCOW)
+		if lowerErr != nil {
+			t.Fatal(lowerErr)
+		}
 		cowState, image, cowEvidence, cowIdentity := run(cowConfig, false, false)
 		t.Logf("linux COW prepared=%+v image=%+v lifecycle=%+v", cowState, image, cowEvidence)
 		if !cowState.Ready || cowState.PreparedRuns != 1 || cowState.FreshFallbackRuns != 0 || !image.Available || image.BaselineBytes == 0 ||

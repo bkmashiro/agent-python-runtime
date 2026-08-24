@@ -100,7 +100,7 @@ func runExactGuestMatchedExternalCase(t *testing.T, caseIndex int, caseID string
 			})
 		case "eager_style_gate":
 			config := baseConfig
-			config.Mechanisms = runtimeconfig.MechanismSet{Streaming: true, PrivateWorkspace: true}
+			config.Mechanisms = runtimeconfig.MechanismSet{PrivateWorkspace: true}
 			return semanticspeculation.NewEagerGuestTreatment(semanticspeculation.EagerGuestTreatmentConfig{
 				Artifact: artifact, RunConfig: config, Plan: plan, BrokerFactory: brokerFactory, AllowedImportRoots: []string{"json"},
 				ProviderObservation: observation, RunID: runID, WorkspaceRoot: t.TempDir(), WorkspaceOwner: runID,

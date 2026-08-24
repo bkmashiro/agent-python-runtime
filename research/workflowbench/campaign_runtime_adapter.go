@@ -10,8 +10,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/subagent"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workflow"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
@@ -43,6 +46,7 @@ type RuntimeCampaignAdapter struct {
 	executionProfileSHA256 string
 	now                    func() time.Time
 	functions              agentfunction.Engine
+	optimizations          runtimeconfig.MechanismSet
 	counter                atomic.Uint64
 	mu                     sync.Mutex
 	workflows              map[string]campaignWorkflowState
@@ -99,6 +103,18 @@ func NewRuntimeCampaignAdapter(config RuntimeCampaignAdapterConfig) (*RuntimeCam
 	if err != nil {
 		return nil, err
 	}
+	passes, err := passplugin.NewDefaultEnabledCatalog(
+		passregistration.AgentFunctionRetention,
+		passregistration.AgentFunctionSingleFlight,
+		passregistration.FreshWorkflowReevaluation,
+	)
+	if err != nil {
+		return nil, err
+	}
+	selection, err := passes.LowerMechanisms(runtimeconfig.MechanismSet{})
+	if err != nil {
+		return nil, err
+	}
 	now := config.Now
 	if now == nil {
 		now = time.Now
@@ -107,8 +123,11 @@ func NewRuntimeCampaignAdapter(config RuntimeCampaignAdapterConfig) (*RuntimeCam
 		guest: config.Guest, plans: plans, manager: config.WorkspaceManager, baseRef: config.BaseWorkspaceRef,
 		baseSHA256: base.WorkspaceSHA256, baseLineageSHA256: lineage,
 		artifactSHA256: config.ArtifactSHA256, executionProfileSHA256: config.ExecutionProfileSHA256, now: now,
-		functions: agentfunction.Engine{Store: store, CacheEnabled: true, Flights: agentfunction.NewFlightGroup()},
-		workflows: make(map[string]campaignWorkflowState), delegations: make(map[string]*campaignDelegationState), stagedChildren: make(map[string]*campaignStagedChild),
+		functions: agentfunction.Engine{
+			Store: store, CacheEnabled: selection.Mechanisms.FunctionCache, Flights: agentfunction.NewFlightGroup(),
+		},
+		optimizations: selection.Mechanisms,
+		workflows:     make(map[string]campaignWorkflowState), delegations: make(map[string]*campaignDelegationState), stagedChildren: make(map[string]*campaignStagedChild),
 	}, nil
 }
 
@@ -129,7 +148,7 @@ func (adapter *RuntimeCampaignAdapter) Admit(ctx context.Context, request Campai
 		}
 		if request.Execution.Resume.Transition == CampaignResumeExpired {
 			authority := adapter.workflowAuthority(request, request.Execution.Resume.Transition, stored.authority)
-			evaluator, err := workflow.New(workflow.Config{Graph: adapter.workflowGraph(request, nil), Guests: campaignWorkflowGuestFactory{}, ResumeEnabled: true, Authority: authority})
+			evaluator, err := workflow.New(workflow.Config{Graph: adapter.workflowGraph(request, nil), Guests: campaignWorkflowGuestFactory{}, ResumeEnabled: adapter.optimizations.FreshReevaluation, Authority: authority})
 			if err == nil {
 				_, err = evaluator.Resume(ctx, stored.state)
 			}
@@ -367,7 +386,7 @@ func (adapter *RuntimeCampaignAdapter) workflowGraph(request CampaignRequest, ru
 
 func (adapter *RuntimeCampaignAdapter) executeWorkflowStart(ctx context.Context, request CampaignRequest, runtime *CampaignRuntime) CampaignOutcome {
 	authority := adapter.workflowAuthority(request, CampaignResumeSameAuthority, workflow.AuthorityEnvelope{})
-	evaluator, err := workflow.New(workflow.Config{Graph: adapter.workflowGraph(request, runtime), Guests: campaignWorkflowGuestFactory{}, ResumeEnabled: true, Authority: authority})
+	evaluator, err := workflow.New(workflow.Config{Graph: adapter.workflowGraph(request, runtime), Guests: campaignWorkflowGuestFactory{}, ResumeEnabled: adapter.optimizations.FreshReevaluation, Authority: authority})
 	if err != nil {
 		return CampaignOutcome{Disposition: "failed", Sharing: "independent", Err: err}
 	}
@@ -411,7 +430,7 @@ func (adapter *RuntimeCampaignAdapter) executeWorkflowResume(ctx context.Context
 		return CampaignOutcome{Disposition: "failed", Sharing: "independent", Err: ErrInvalidRuntimeCampaignAdapter}
 	}
 	authority := adapter.workflowAuthority(request, request.Execution.Resume.Transition, stored.authority)
-	evaluator, err := workflow.New(workflow.Config{Graph: adapter.workflowGraph(request, runtime), Guests: campaignWorkflowGuestFactory{}, ResumeEnabled: true, Authority: authority})
+	evaluator, err := workflow.New(workflow.Config{Graph: adapter.workflowGraph(request, runtime), Guests: campaignWorkflowGuestFactory{}, ResumeEnabled: adapter.optimizations.FreshReevaluation, Authority: authority})
 	if err != nil {
 		return CampaignOutcome{Disposition: "failed", Sharing: "independent", Err: err}
 	}

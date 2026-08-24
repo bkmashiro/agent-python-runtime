@@ -12,6 +12,7 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
 	"github.com/bkmashiro/agent-python-runtime/runtime/streaming"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
@@ -97,6 +98,7 @@ type sourcePrefixEnvironment struct {
 	manager  *workspace.Manager
 	base     workspace.Ref
 	config   runtimeconfig.RunConfig
+	passes   *passplugin.Registry
 }
 
 type laneOutcome struct {
@@ -122,6 +124,7 @@ func (environment sourcePrefixEnvironment) executeLane(ctx context.Context, cont
 	runID := fmt.Sprintf("source-prefix-%d-%d", pair, order)
 	var broker *capability.Broker
 	factory := wazeroengine.Factory{
+		Passes:           environment.passes,
 		WorkspaceManager: environment.manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: runID,
 		BrokerFactory: func(context.Context) (*capability.Broker, error) {
 			broker, err = capability.NewBroker(capability.Config{RunIdentity: runID, Plan: plan})

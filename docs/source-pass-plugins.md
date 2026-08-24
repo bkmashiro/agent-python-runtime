@@ -60,7 +60,7 @@ exact target-Guest analyzer identity.
 
 `LowerMechanisms` maps selected passes to the existing typed `MechanismSet`; Runtime owners retain
 all mutable state and lifecycle logic. `ResolveRuntime` applies Host availability after lowering
-and records `pysolate.optimization-pass-selection.v1`. `wazero.Factory.Passes` rejects direct
+and records `pysolate.optimization-pass-selection.v2`. `wazero.Factory.Passes` rejects direct
 optimization flags when a catalog is bound, so selection finishes before Runtime initialization
 or Guest effects.
 

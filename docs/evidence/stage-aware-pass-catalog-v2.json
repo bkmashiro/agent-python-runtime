@@ -11,7 +11,7 @@
       "pysolate.stage-aware-pass-registration.v3"
     ],
     "outcome_schema": "pysolate.stage-aware-pass-outcome.v2",
-    "selection_schema": "pysolate.optimization-pass-selection.v1"
+    "selection_schema": "pysolate.optimization-pass-selection.v2"
   },
   "catalog": [
     {"name": "capability_future_projection", "stage": "plan_projection", "status": "experimental_retained"},

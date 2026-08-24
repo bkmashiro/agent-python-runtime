@@ -2,6 +2,7 @@ package passplugin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -228,6 +229,16 @@ func TestUnifiedCatalogResolvesPassLoweringsAgainstHostAvailability(t *testing.T
 		if pass.Name == "" || pass.Version == "" || pass.Stage != passregistration.StageRuntimeLowering || !strings.HasPrefix(pass.RegistrationSHA256, "sha256:") {
 			t.Fatalf("pass evidence=%+v", pass)
 		}
+	}
+	if RuntimeSelectionEvidenceSchemaVersion != "pysolate.optimization-pass-selection.v2" {
+		t.Fatalf("selection evidence schema=%q", RuntimeSelectionEvidenceSchemaVersion)
+	}
+	encoded, err := json.Marshal(evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"passes":[{"name":`) {
+		t.Fatalf("structured pass evidence=%s", encoded)
 	}
 }
 

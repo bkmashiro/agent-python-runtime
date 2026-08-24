@@ -15,6 +15,8 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/preparedregion"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
@@ -57,8 +59,15 @@ func NewPhase5ExactGuestOperations(artifact []byte, config runtimeconfig.RunConf
 		return nil, errors.New("invalid phase 5 Exact Guest operations config")
 	}
 	config.Mechanisms.SemanticAnalysis = true
-	config.Mechanisms.PreparedRuntime = true
-	config.Mechanisms.MemoryCOW = runtime.GOOS == "linux"
+	preparedPass := passregistration.PreparedRuntimeInstantiation
+	if runtime.GOOS == "linux" {
+		preparedPass = passregistration.PrivateMemoryCOW
+	}
+	var err error
+	config, _, err = passplugin.LowerDefaultRunConfig(config, preparedPass)
+	if err != nil {
+		return nil, err
+	}
 	return &Phase5ExactGuestOperations{artifact: append([]byte(nil), artifact...), config: config}, nil
 }
 

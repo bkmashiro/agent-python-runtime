@@ -125,6 +125,14 @@ func NewDefaultEnabledCatalog(names ...passregistration.Name) (*Registry, error)
 	return registry.Enable(names...)
 }
 
+func LowerDefaultRunConfig(config runtimeconfig.RunConfig, names ...passregistration.Name) (runtimeconfig.RunConfig, RuntimeSelection, error) {
+	registry, err := NewDefaultEnabledCatalog(names...)
+	if err != nil {
+		return runtimeconfig.RunConfig{}, RuntimeSelection{}, err
+	}
+	return registry.ApplyRunConfig(config)
+}
+
 // NewUnifiedCatalog registers every retained optimization and historical source
 // optimizer in one default-off static pass catalog. Runtime owners remain the
 // lowering targets and keep all lifecycle state.
@@ -211,7 +219,7 @@ type RuntimeSelection struct {
 	Passes     []passregistration.Name
 }
 
-const RuntimeSelectionEvidenceSchemaVersion = "pysolate.optimization-pass-selection.v1"
+const RuntimeSelectionEvidenceSchemaVersion = "pysolate.optimization-pass-selection.v2"
 
 type RuntimeSelectionEvidence struct {
 	SchemaVersion string                          `json:"schema_version"`

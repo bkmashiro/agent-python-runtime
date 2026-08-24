@@ -65,7 +65,7 @@ selection, _ := passes.LowerMechanisms(runtime.MechanismSet{})
 ```
 
 `ResolveRuntime` then applies Host availability to the lowered mechanisms and records
-`pysolate.optimization-pass-selection.v1`, including each selected pass version, stage and
+`pysolate.optimization-pass-selection.v2`, including each selected pass version, stage and
 registration identity. A requested Linux COW pass can therefore fall back on another Host without
 rewriting the selected pass identity or pretending COW ran.
 

@@ -1,0 +1,68 @@
+{
+  "schema_version": "pysolate.direct-capability-futures-e2e.v1",
+  "study_id": "direct-capability-futures-v1",
+  "decision": "retain_experimental",
+  "root_cause": {
+    "rejected_path": "exact Guest source-pass analysis followed by a separate formal Guest execution",
+    "rejected_baseline_median_nanos": 2508013500,
+    "rejected_treatment_median_nanos": 7438827417,
+    "rejected_net_delta_nanos": 4930813917,
+    "rejected_implied_added_overhead_before_overlap_saving_nanos": 5080813917,
+    "finding": "The negative result measured a second cold CPython/WASI analyzer on the critical path, not intrinsic Future overhead."
+  },
+  "implementation": {
+    "host_commit": "35cd17b315c45a6002554efd7621011ff691ac61",
+    "guest_source_commit": "7bb75647ae5bf9249bb97403b56bc178016347ce",
+    "artifact_profile": "numpy-core",
+    "artifact_sha256": "sha256:15f5e415d19acc95eb2f304e881cde22e5fd657a532edad3d67c8e5ac608382c",
+    "analyzer_guests_per_run": 0,
+    "formal_guests_per_run": 1,
+    "selection": "Plan.FuturePythonPrelude",
+    "semantics": [
+      "Every live, non-approval Python capability projection returns a Future.",
+      "The physical call starts when Python dynamically reaches the tool call.",
+      "Using the proxy materializes it; final response encoding recursively materializes result Futures and drains unobserved Futures.",
+      "Playback and approval-gated capabilities remain outside direct Future execution."
+    ]
+  },
+  "matched_exact_guest_measurement": {
+    "test": "TestRealGuestCapabilityFuturesOverlapWithoutAnalyzer",
+    "repetitions": 5,
+    "tool_calls": 2,
+    "per_call_delay_nanos": 150000000,
+    "baseline_nanos": [
+      2436570833,
+      2450213875,
+      2501499833,
+      2473559667,
+      2495181417
+    ],
+    "treatment_nanos": [
+      2328585459,
+      2340996167,
+      2363813292,
+      2364729208,
+      2376555917
+    ],
+    "baseline_median_nanos": 2473559667,
+    "treatment_median_nanos": 2363813292,
+    "median_saved_nanos": 109746375,
+    "treatment_faster_percent": 4.436778965316142,
+    "treatment_to_baseline_ratio": 0.9556322103468385,
+    "captured_theoretical_overlap_percent": 73.16425,
+    "all_trials_faster": true,
+    "maximum_concurrent_handlers": 2
+  },
+  "additional_exact_guest_gates": {
+    "unobserved_write_future": {
+      "test": "TestRealGuestCapabilityFutureDrainsUnobservedWrite",
+      "repetitions": 3,
+      "passed": true,
+      "physical_calls": 1,
+      "logical_claims": 1,
+      "discarded": 0
+    },
+    "artifact_verifier": "passed"
+  },
+  "claim": "Removing the redundant cold analyzer turns the same two-call 150 ms fixture from a 196.60% slowdown into a 4.44% median speedup. Direct Future bookkeeping is small enough to retain for the paper story; the analyzer-based source-rewrite route remains rejected."
+}

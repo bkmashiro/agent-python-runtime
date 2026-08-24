@@ -45,9 +45,13 @@ experimental successor is the
 [Host-Scheduled Calls and Immutable Value Reuse Mega-Goal](docs/plans/2026-08-24-host-scheduled-python-reuse-autonomous-megagoal.md),
 which follows the completed
 [correctness-gated source-bound optimizer Mega-Goal](docs/plans/2026-08-23-correctness-gated-agent-python-optimizer-autonomous-megagoal.md).
-It preserved synchronous Python and fresh Runs, but rejected the measured split-phase
-source pass, NumPy data-local pass and broader shared-value cache lane on end-to-end cost;
-all new seams remain Experimental and off by default.
+It preserved fresh Runs, but its analyzer-driven split-phase source pass, NumPy data-local
+pass and broader shared-value cache lane failed their original end-to-end cost gates. A
+subsequent [direct capability Future](docs/research/direct-capability-futures-v1.md) removed
+the redundant cold analyzer entirely: every non-approval live projected tool submits when
+Python reaches the call and materializes on use or final output. The exact-Guest two-call
+fixture moved from a `196.60%` slowdown to a `4.44%` median speedup. This Future lane is
+retained Experimental/default-off; the analyzer-based rewrite remains rejected.
 The completed foundation records bounded Experimental target-Guest AST planning,
 exact whole-Run single-flight/retention, continuation-preserving cold-I/O evidence and a
 small static source-pass seam while keeping every mechanism off by default.

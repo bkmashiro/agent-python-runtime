@@ -6,8 +6,22 @@
 > slices. A green test, signed commit, or rejected candidate is a checkpoint, not a stop
 > condition. Stop only at the decision/resource/safety gates below or complete closeout.
 
-**Status:** Completed experimental campaign. Semantic seams remain Experimental/default-off;
-the tested split-phase pass, fixed data-local pass, cache widening and composition are no-go.
+**Status:** Completed experimental campaign with a post-closeout correction. The original
+analyzer-driven split-phase pass, fixed data-local pass, cache widening and composition remain
+no-go. A simpler direct capability Future successor is retained Experimental/default-off after
+positive exact-Guest evidence.
+
+**Post-closeout correction (2026-08-24):** the original split-phase treatment paid for a
+second cold exact analyzer Guest before formal execution. That was unnecessary for Future
+semantics and dominated the two-call fixture. `Plan.FuturePythonPrelude()` now projects every
+live, non-approval capability directly as a Future: submit occurs when Python reaches the call,
+and proxy use or final output materializes/drains it. This path uses zero analyzers and one
+formal fresh Guest. Five matched exact-Guest trials changed the result from the historical
+`2.508 s → 7.439 s` slowdown to `2.474 s → 2.364 s`, a `4.44%` median speedup. See
+[Direct Capability Futures v1](../research/direct-capability-futures-v1.md) and its
+[machine-readable evidence](../evidence/direct-capability-futures-e2e-v1.json). The historical
+source-rewrite result below remains valid for that rejected route; it is no longer the Future
+story.
 
 **Prepared:** 2026-08-24
 
@@ -596,8 +610,9 @@ remain Experimental/default-off.`
   `sha256:51e21abe95e2f5790bed431277bdd14b1dcb1da8bd92d0702a594372ddf02598`
   from `84520efa7397a23d03cdbf3cdbc4d60c29543e62` passed dynamic branch/loop
   activation, unsafe-layout fallback, source-ordered receipts, first-failure discard and
-  fresh-Run teardown. The five-repetition split-phase treatment was 196.60% slower, so
-  scheduler widening and the source-pass performance claim are rejected.
+  fresh-Run teardown. The five-repetition analyzer-driven split-phase source-pass treatment
+  was 196.60% slower, so scheduler widening and that source-pass performance claim were
+  rejected; the post-closeout direct Future correction above is a separate retained path.
 - 2026-08-24: Phases 4-7 closed. Exact fresh Guests passed scalar/private-byte slots and
   isolated consumers of one physical immutable object. The fixed 8,388,736-byte NumPy sum
   adapter copied 12 bytes per result but was 6.29% slower, so the pass is rejected. Existing

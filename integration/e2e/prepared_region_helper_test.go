@@ -378,7 +378,6 @@ func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecut
 		t.Fatal(err)
 	}
 	originalConfig := config
-	originalConfig = preparedRegionPassConfig(t, originalConfig)
 	baselineEngine, err := wazeroengine.New(ctx, artifact, originalConfig)
 	if err != nil {
 		t.Fatal(err)
@@ -408,7 +407,6 @@ func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecut
 		t.Fatal(err)
 	}
 	derivedConfig := config
-	derivedConfig = preparedRegionPassConfig(t, derivedConfig)
 	runner, err := (wazeroengine.Factory{PreparedRegions: table}).New(ctx, artifact, derivedConfig)
 	if err != nil {
 		t.Fatal(err)
@@ -481,7 +479,6 @@ func TestExactGuestPreparedRegionSelectionCommitsDerivedProgramBeforeFreshExecut
 		t.Fatal(err)
 	}
 	driftConfig := config
-	driftConfig = preparedRegionPassConfig(t, driftConfig)
 	driftRunner, err := (wazeroengine.Factory{PreparedRegions: driftTable}).New(ctx, artifact, driftConfig)
 	if err != nil {
 		t.Fatal(err)

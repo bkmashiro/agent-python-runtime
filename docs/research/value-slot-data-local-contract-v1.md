@@ -38,18 +38,20 @@ global, iterator, handle, or mutable Python heap crosses a Run boundary.
 
 ## First data-local adapter
 
-The only first-pass adapter matches this exact three-line source shape:
+The only first-pass adapter matches this exact four-line source shape:
 
 ```python
+import io
 import numpy as np
-dataset = np.load("/workspace/input.npy", allow_pickle=False)
+dataset = np.load(io.BytesIO(open("/workspace/input.npy", "rb").read()), allow_pickle=False)
 result = int(dataset.sum())
 ```
 
 The adapter law is narrower than general NumPy semantics:
 
 - the canonical checked-in NumPy int64 fixture format is decoded by the Host;
-- `allow_pickle=False`, path, alias, assignment names, and call shape are fixed;
+- `io.BytesIO`, binary `open`, `allow_pickle=False`, path, aliases, assignment names,
+  and call shape are fixed;
 - the reduction result is a canonical signed-int64 Python `int`;
 - the slot input identity must equal the current workspace snapshot digest for
   `input.npy` at execution;

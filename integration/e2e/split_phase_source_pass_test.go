@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -101,13 +102,8 @@ func TestRealGuestSplitPhaseSourcesReadOverlapsPhysicalWorkAndKeepsLogicalReceip
 	if err != nil {
 		t.Fatal(err)
 	}
-	session, err := engine.NewSemanticAnalysisSession(context.Background(), wazeroengine.SemanticAnalysisSessionLimits{
-		MaxRequests: 4, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer session.Close(context.Background())
+	session, closeAnalysis := splitPhaseAnalysisSession(t, artifact, 4)
+	defer closeAnalysis()
 	execution, err := plugins.ExecuteHostScheduled(
 		context.Background(), sourcepatch.SplitPhaseSourcesReadName, session, engine, request, prelude,
 	)
@@ -127,9 +123,80 @@ func TestRealGuestSplitPhaseSourcesReadOverlapsPhysicalWorkAndKeepsLogicalReceip
 	}
 	for index, broker := range captured {
 		receipts := broker.SnapshotReceipts()
-		if broker.CallCount() != 2 || len(receipts) != 2 || receipts[0].CallID != splitPhaseCallID(source, 1) || receipts[1].CallID != splitPhaseCallID(source, 2) {
+		firstID, secondID := splitPhaseCallID(source, 1), splitPhaseCallID(source, 2)
+		if index == 1 {
+			firstID, secondID = firstID+"-1", secondID+"-1"
+		}
+		if broker.CallCount() != 2 || len(receipts) != 2 || receipts[0].CallID != firstID || receipts[1].CallID != secondID {
 			t.Fatalf("broker[%d] calls=%d receipts=%#v", index, broker.CallCount(), receipts)
 		}
+	}
+	physicalEvidence := engine.SplitPhaseEvidence()
+	if physicalEvidence.Submitted != 2 || physicalEvidence.PhysicalStarts != 2 || physicalEvidence.PhysicalFinishes != 2 || physicalEvidence.LogicalClaims != 2 || physicalEvidence.Consumed != 2 || physicalEvidence.MaximumConcurrent != 2 {
+		t.Fatalf("physical evidence=%+v", physicalEvidence)
+	}
+}
+
+func TestRealGuestSplitPhasePreservesDynamicActivation(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name, source, inputs string
+		submitted, maximum   uint32
+	}{
+		{"branch-not-taken", "if inputs[\"take\"]:\n    first = sources.read(\"alpha\")\n    second = sources.read(\"beta\")\n    result = [first, second]\nelse:\n    result = []\n", `{"take":false}`, 0, 0},
+		{"branch-taken", "if inputs[\"take\"]:\n    first = sources.read(\"alpha\")\n    second = sources.read(\"beta\")\n    result = [first, second]\nelse:\n    result = []\n", `{"take":true}`, 2, 2},
+		{"zero-loop", "result = []\nfor item in inputs[\"items\"]:\n    first = sources.read(\"alpha\")\n    result.append(first)\n", `{"items":[]}`, 0, 0},
+		{"two-loop-iterations", "result = []\nfor item in inputs[\"items\"]:\n    first = sources.read(\"alpha\")\n    result.append(first)\n", `{"items":[1,2]}`, 2, 1},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			handler := capability.HandlerFunc(func(ctx context.Context, arguments json.RawMessage) (json.RawMessage, error) {
+				var request struct {
+					Path string `json:"path"`
+				}
+				if json.Unmarshal(arguments, &request) != nil {
+					return nil, capability.ErrInvalidTool
+				}
+				return json.Marshal(map[string]string{"body": request.Path + "-body"})
+			})
+			plan := splitPhaseE2EPlan(t, 2, handler)
+			var broker *capability.Broker
+			factory := func(context.Context) (*capability.Broker, error) {
+				created, createErr := capability.NewBroker(capability.Config{RunIdentity: "dynamic-" + testCase.name, Plan: plan})
+				broker = created
+				return created, createErr
+			}
+			config := runtimeconfig.DefaultRunConfig()
+			config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, StagedObservation: true, SplitPhaseCalls: true}
+			runner, createErr := (wazeroengine.Factory{BrokerFactory: factory}).New(context.Background(), artifact, config)
+			if createErr != nil {
+				t.Fatal(createErr)
+			}
+			defer runner.Close(context.Background())
+			engine := trustedSemanticRunner(t, runner)
+			session, closeAnalysis := splitPhaseAnalysisSession(t, artifact, 2)
+			defer closeAnalysis()
+			pass, _ := sourcepatch.NewSplitPhaseSourcesRead(passregistration.SemanticAnalyzerSHA256)
+			plugins, _ := passplugin.New(pass)
+			plugins, _ = plugins.Enable(sourcepatch.SplitPhaseSourcesReadName)
+			request := runtimeconfig.RunRequest{RunID: "dynamic-" + strings.ReplaceAll(testCase.name, " ", "-"), Code: testCase.source, Inputs: json.RawMessage(testCase.inputs)}
+			raw, _ := runtimeconfig.EncodeRunRequest(request)
+			execution, runErr := plugins.ExecuteHostScheduled(context.Background(), sourcepatch.SplitPhaseSourcesReadName, session, engine, raw, "")
+			if runErr != nil {
+				t.Fatal(runErr)
+			}
+			response, decodeErr := runtimeconfig.DecodeAndValidateRunResponse(request, execution.Payload)
+			if decodeErr != nil || response.Status != runtimeconfig.RunResponseOK {
+				t.Fatalf("response=%s decoded=%+v err=%v", execution.Payload, response, decodeErr)
+			}
+			evidence := engine.SplitPhaseEvidence()
+			if evidence.Submitted != testCase.submitted || evidence.LogicalClaims != testCase.submitted || evidence.MaximumConcurrent != testCase.maximum || broker.CallCount() != testCase.submitted {
+				t.Fatalf("evidence=%+v calls=%d", evidence, broker.CallCount())
+			}
+		})
 	}
 }
 
@@ -186,13 +253,8 @@ func TestRealGuestSplitPhaseFailureDiscardsLaterPhysicalReadWithoutLogicalReceip
 	pass, _ := sourcepatch.NewSplitPhaseSourcesRead(passregistration.SemanticAnalyzerSHA256)
 	plugins, _ := passplugin.New(pass)
 	plugins, _ = plugins.Enable(sourcepatch.SplitPhaseSourcesReadName)
-	session, err := engine.NewSemanticAnalysisSession(context.Background(), wazeroengine.SemanticAnalysisSessionLimits{
-		MaxRequests: 2, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer session.Close(context.Background())
+	session, closeAnalysis := splitPhaseAnalysisSession(t, artifact, 2)
+	defer closeAnalysis()
 	execution, err := plugins.ExecuteHostScheduled(
 		context.Background(), sourcepatch.SplitPhaseSourcesReadName, session, engine, request, splitPhaseDirectPrelude(source),
 	)
@@ -209,8 +271,39 @@ func TestRealGuestSplitPhaseFailureDiscardsLaterPhysicalReadWithoutLogicalReceip
 		t.Fatalf("response=%+v payload=%s", response, execution.Payload)
 	}
 	receipts := broker.SnapshotReceipts()
-	if broker.CallCount() != 1 || len(receipts) != 1 || receipts[0].CallID != splitPhaseCallID(source, 1) || receipts[0].Outcome != "error" {
+	if broker.CallCount() != 1 || len(receipts) != 1 || receipts[0].CallID != splitPhaseCallID(source, 1)+"-1" || receipts[0].Outcome != "error" {
 		t.Fatalf("calls=%d receipts=%#v", broker.CallCount(), receipts)
+	}
+	physicalEvidence := engine.SplitPhaseEvidence()
+	if physicalEvidence.Submitted != 2 || physicalEvidence.LogicalClaims != 1 || physicalEvidence.Consumed != 1 || physicalEvidence.Discarded != 1 {
+		t.Fatalf("physical evidence=%+v", physicalEvidence)
+	}
+}
+
+func splitPhaseAnalysisSession(t *testing.T, artifact []byte, maxRequests uint32) (sourcepatch.Transformer, func()) {
+	t.Helper()
+	config := runtimeconfig.DefaultRunConfig()
+	config.Timeout = 90 * time.Second
+	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
+	runner, err := (wazeroengine.Factory{}).New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := trustedSemanticRunner(t, runner)
+	session, err := engine.NewSemanticAnalysisSession(context.Background(), wazeroengine.SemanticAnalysisSessionLimits{
+		MaxRequests: maxRequests, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
+	})
+	if err != nil {
+		_ = runner.Close(context.Background())
+		t.Fatal(err)
+	}
+	return session, func() {
+		if closeErr := session.Close(context.Background()); closeErr != nil {
+			t.Fatalf("close analysis session: %v", closeErr)
+		}
+		if closeErr := runner.Close(context.Background()); closeErr != nil {
+			t.Fatalf("close analysis runner: %v", closeErr)
+		}
 	}
 }
 

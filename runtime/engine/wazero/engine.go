@@ -233,6 +233,35 @@ type Engine struct {
 	semanticLifecycle   semanticAnalysisLifecycleStore
 	preparedRegions     *preparedregion.PreparedRegionTable
 	valueSlots          *valueslot.Table
+	splitPhaseEvidence  splitPhaseEvidenceStore
+}
+
+type splitPhaseEvidenceStore struct {
+	mu       sync.Mutex
+	snapshot capability.SplitPhaseSnapshot
+}
+
+func (store *splitPhaseEvidenceStore) set(snapshot capability.SplitPhaseSnapshot) {
+	store.mu.Lock()
+	store.snapshot = snapshot
+	store.mu.Unlock()
+}
+
+func (store *splitPhaseEvidenceStore) get() capability.SplitPhaseSnapshot {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	copy := store.snapshot
+	copy.Events = append([]capability.SplitPhaseEvent(nil), store.snapshot.Events...)
+	return copy
+}
+
+// SplitPhaseEvidence returns the last completed Run's physical-work ledger.
+// Logical call receipts remain owned by Broker and are intentionally separate.
+func (engine *Engine) SplitPhaseEvidence() capability.SplitPhaseSnapshot {
+	if engine == nil {
+		return capability.SplitPhaseSnapshot{}
+	}
+	return engine.splitPhaseEvidence.get()
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
@@ -1005,7 +1034,7 @@ func (engine *Engine) RunValueSlotSourcePatchDerived(ctx context.Context, reques
 		return nil, runtimeconfig.ErrMechanismDisabled
 	}
 	spec, strategy, backingIdentity, err := engine.valueSlots.Describe("slot-numpy-sum-v1")
-	if err != nil || spec.ID != "slot-numpy-sum-v1" || spec.SourceOccurrence != "line-3:result" ||
+	if err != nil || spec.ID != "slot-numpy-sum-v1" || spec.SourceOccurrence != "line-4:result" ||
 		spec.ProducerIdentity != "numpy-int64-sum-v1" || spec.InputIdentity == "" || spec.PrivacyPartition == "" ||
 		spec.Kind != valueslot.KindJSONScalar || spec.MaxBytes > 32 || spec.ClaimPolicy != valueslot.ClaimSingleUse ||
 		spec.MaxClaims != 1 || strategy != valueslot.StrategyInlineJSON || backingIdentity == "" {
@@ -1116,6 +1145,7 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 	}
 	observation := observationLifecycle{session: observationSession}
 	var broker *capability.Broker
+	var splitPhaseTable *capability.SplitPhaseTable
 	capabilityCallsObserved := false
 	if hasObservation && observationSession.Mode() != observe.Off {
 		profileSHA256, profileErr := runtimeconfig.ExecutionProfileBindingSHA256(engine.config)
@@ -1262,23 +1292,32 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 			}
 		}
 		if engine.config.Mechanisms.SplitPhaseCalls {
-			table, tableErr := capability.NewSplitPhaseTable(broker.CapabilityPlan(), capability.SplitPhaseLimits{
-				MaxCalls: 4, MaxCostUnits: 4, MaxResultBytes: uint64(engine.config.MaxResponseBytes) * 4,
+			maxCalls := broker.CapabilityPlan().MaxCalls()
+			if maxCalls > 4 {
+				maxCalls = 4
+			}
+			var tableErr error
+			splitPhaseTable, tableErr = capability.NewSplitPhaseTable(broker.CapabilityPlan(), capability.SplitPhaseLimits{
+				MaxCalls: maxCalls, MaxCostUnits: uint64(maxCalls) * 4, MaxResultBytes: uint64(engine.config.MaxResponseBytes) * uint64(maxCalls),
 			})
 			if tableErr != nil {
 				return nil, fmt.Errorf("create split-phase call table: %w", tableErr)
 			}
-			if tableErr = broker.AttachStagedClaimer(table); tableErr != nil {
+			if tableErr = broker.AttachStagedClaimer(splitPhaseTable); tableErr != nil {
 				return nil, fmt.Errorf("attach split-phase call table: %w", tableErr)
 			}
-			runContext = context.WithValue(runContext, splitPhaseContextKey{}, table)
+			runContext = context.WithValue(runContext, splitPhaseContextKey{}, splitPhaseTable)
 		}
 		runContext = context.WithValue(runContext, brokerContextKey{}, broker)
 	}
 	defer func() {
 		if broker != nil && !brokerFinalized {
 			cancel()
-			runErr = errors.Join(runErr, broker.Finalize(false))
+			finalizeErr := broker.Finalize(false)
+			runErr = errors.Join(runErr, finalizeErr)
+			if splitPhaseTable != nil {
+				engine.splitPhaseEvidence.set(splitPhaseTable.Snapshot())
+			}
 		}
 	}()
 	runContext = context.WithValue(runContext, streamingContextKey{}, streaming)
@@ -1311,6 +1350,9 @@ prepareComplete:
 		brokerFinalized = true
 		if err := broker.Finalize(true); err != nil {
 			return nil, fmt.Errorf("finalize capability broker: %w", err)
+		}
+		if splitPhaseTable != nil {
+			engine.splitPhaseEvidence.set(splitPhaseTable.Snapshot())
 		}
 	}
 	var receipts []receipt.Receipt

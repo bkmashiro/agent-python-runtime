@@ -49,6 +49,8 @@ _PREPARED_REGION_PAYLOAD_MAX = 256
 _SPLIT_PHASE_SUBMIT_HELPER = "_pysolate_call_submit"
 _SPLIT_PHASE_MATERIALIZE_HELPER = "_pysolate_call_materialize"
 _VALUE_SLOT_HELPER = "_pysolate_materialize_slot"
+_split_phase_occurrence_counts: dict[str, int] = {}
+_split_phase_pending_slots: dict[str, list[str]] = {}
 _FUTURE_FLAGS = sum(getattr(__future__, name).compiler_flag for name in __future__.all_feature_names)
 
 
@@ -959,12 +961,12 @@ def _prepare_source_pass_execution(patch_json: str) -> None:
     allowed_runtime_names = frozenset()
     if (
         patch.get("pass_name") == "split_phase_sources_read"
-        and patch.get("pass_version") == "pysolate.split-phase-sources-read-pass.v1"
+        and patch.get("pass_version") == "pysolate.split-phase-sources-read-pass.v2"
     ):
         allowed_runtime_names = frozenset({_SPLIT_PHASE_SUBMIT_HELPER, _SPLIT_PHASE_MATERIALIZE_HELPER})
     elif (
         patch.get("pass_name") == "data_local_numpy_sum"
-        and patch.get("pass_version") == "pysolate.data-local-numpy-sum-pass.v1"
+        and patch.get("pass_version") == "pysolate.data-local-numpy-sum-pass.v2"
     ):
         allowed_runtime_names = frozenset({_VALUE_SLOT_HELPER})
     _install_derived_tree(tree, request, allowed_runtime_names, preload_derived_imports=True)
@@ -1009,20 +1011,42 @@ def _submit_split_phase_call(slot_id: str, request_json: str) -> None:
     if (
         not isinstance(slot_id, str)
         or not slot_id.startswith("slot-")
-        or len(slot_id) > 96
+        or len(slot_id) > 80
         or not isinstance(request_json, str)
         or not request_json
     ):
         raise RuntimeError("split-phase call submission is invalid")
+    try:
+        request = json.loads(request_json)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("split-phase call submission is invalid") from exc
+    if not isinstance(request, dict) or set(request) != {"call_id", "capability", "arguments"} or not isinstance(request.get("call_id"), str):
+        raise RuntimeError("split-phase call submission is invalid")
+    occurrence = _split_phase_occurrence_counts.get(slot_id, 0) + 1
+    _split_phase_occurrence_counts[slot_id] = occurrence
+    suffix = "-" + str(occurrence)
+    dynamic_slot = slot_id + suffix
+    dynamic_call_id = request["call_id"] + suffix
+    if len(dynamic_slot) > 96 or len(dynamic_call_id) > 96:
+        raise RuntimeError("split-phase call occurrence is invalid")
+    request["call_id"] = dynamic_call_id
+    dynamic_request = json.dumps(request, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
     import _agent_runtime_host  # type: ignore[import-not-found]
-    _agent_runtime_host.submit_call(slot_id, request_json)
+    _agent_runtime_host.submit_call(dynamic_slot, dynamic_request)
+    _split_phase_pending_slots.setdefault(slot_id, []).append(dynamic_slot)
 
 
 def _materialize_split_phase_call(slot_id: str) -> dict[str, Any]:
-    if not isinstance(slot_id, str) or not slot_id.startswith("slot-") or len(slot_id) > 96:
+    if not isinstance(slot_id, str) or not slot_id.startswith("slot-") or len(slot_id) > 80:
         raise RuntimeError("split-phase call materialization is invalid")
+    pending = _split_phase_pending_slots.get(slot_id)
+    if not pending:
+        raise RuntimeError("split-phase call occurrence is missing")
+    dynamic_slot = pending.pop(0)
+    if not pending:
+        _split_phase_pending_slots.pop(slot_id, None)
     import _agent_runtime_host  # type: ignore[import-not-found]
-    raw = _agent_runtime_host.materialize_call(slot_id)
+    raw = _agent_runtime_host.materialize_call(dynamic_slot)
     try:
         response = json.loads(raw)
         if not isinstance(response, dict) or response.get("status") not in {"ok", "denied", "error"}:
@@ -1088,6 +1112,9 @@ def _execute(request_json: str) -> str:
     code = _validated_code
     if code is None:
         return _encode(_error("guest_internal", "validated code is unavailable"))
+
+    _split_phase_occurrence_counts.clear()
+    _split_phase_pending_slots.clear()
 
     started = time.monotonic()
     namespace = dict(_prepared_globals)
@@ -1188,5 +1215,7 @@ def _execute(request_json: str) -> str:
         failure["logs"] = logs
         return _encode(failure)
     finally:
+        _split_phase_occurrence_counts.clear()
+        _split_phase_pending_slots.clear()
         sys.stdout = previous_stdout
         sys.__stdout__ = previous_dunder_stdout

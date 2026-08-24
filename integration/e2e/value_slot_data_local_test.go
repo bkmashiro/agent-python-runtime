@@ -23,7 +23,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
-const dataLocalSource = "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\nresult = int(dataset.sum())\n"
+const dataLocalSource = "import io\nimport numpy as np\ndataset = np.load(io.BytesIO(open('/workspace/input.npy', 'rb').read()), allow_pickle=False)\nresult = int(dataset.sum())\n"
 
 func TestValueSlotExactGuestMaterializesPrivateBytes(t *testing.T) {
 	artifact, _ := numpyCoreGuest(t)
@@ -125,6 +125,9 @@ func TestDataLocalNumpySumMatchedEndToEnd(t *testing.T) {
 	artifact, profile := numpyCoreGuest(t)
 	fixture := preparedfixture.CanonicalFixture()
 	workspaceRoot := t.TempDir()
+	if err := os.Chmod(workspaceRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	manager, err := workspace.NewManager(workspaceRoot)
 	if err != nil {
 		t.Fatal(err)
@@ -148,6 +151,7 @@ func TestDataLocalNumpySumMatchedEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	analysisConfig := runtimeconfig.DefaultRunConfig()
+	analysisConfig.Timeout = 90 * time.Second
 	analysisConfig.ExecutionProfile = profile
 	analysisConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
 	analysisRunner, err := (wazeroengine.Factory{}).New(context.Background(), artifact, analysisConfig)
@@ -156,7 +160,7 @@ func TestDataLocalNumpySumMatchedEndToEnd(t *testing.T) {
 	}
 	analysisEngine := trustedSemanticRunner(t, analysisRunner)
 	analysisSession, err := analysisEngine.NewSemanticAnalysisSession(context.Background(), wazeroengine.SemanticAnalysisSessionLimits{
-		MaxRequests: 2, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
+		MaxRequests: 4, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -164,6 +168,9 @@ func TestDataLocalNumpySumMatchedEndToEnd(t *testing.T) {
 	selectedPatch, err := registry.Transform(context.Background(), sourcepatch.DataLocalNumpySumName, analysisSession, dataLocalSource)
 	if err != nil || !selectedPatch.Applied() {
 		t.Fatalf("selected patch=%+v err=%v", selectedPatch, err)
+	}
+	if err := analysisSession.Close(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 	if err := analysisRunner.Close(context.Background()); err != nil {
 		t.Fatal(err)
@@ -249,13 +256,13 @@ func numpyCoreGuest(t *testing.T) ([]byte, *runtimeconfig.ExecutionProfile) {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(artifact)
-	profile, err := runtimeconfig.NewExecutionProfile("numpy-core", []string{"numpy"})
+	profile, err := runtimeconfig.NewExecutionProfile("numpy-core", []string{"io", "numpy"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	profile, err = profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{
 		ProfileID: "numpy-core", ArtifactSHA256: fmt.Sprintf("sha256:%x", digest[:]), ManifestSHA256: "sha256:" + strings.Repeat("a", 64),
-		ImportRoots: []string{"numpy"}, QualifiedImportRoots: []string{"numpy"},
+		ImportRoots: []string{"io", "numpy"}, QualifiedImportRoots: []string{"io", "numpy"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -267,7 +274,7 @@ func dataLocalRunRequest(t *testing.T, runID string) runtimeconfig.RunRequest {
 	t.Helper()
 	return runtimeconfig.RunRequest{
 		RunID: runID, Code: dataLocalSource, Inputs: json.RawMessage(`{}`),
-		Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: "numpy-core", Imports: []string{"numpy"}},
+		Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: "numpy-core", Imports: []string{"io", "numpy"}},
 	}
 }
 
@@ -298,7 +305,7 @@ func dataLocalValueTable(t *testing.T, sum, inputIdentity, privacy string) *valu
 	}
 	table, err := valueslot.NewTable([]valueslot.Entry{{
 		Spec: valueslot.SlotSpec{
-			ID: "slot-numpy-sum-v1", SourceOccurrence: "line-3:result", ProducerIdentity: "numpy-int64-sum-v1", InputIdentity: inputIdentity,
+			ID: "slot-numpy-sum-v1", SourceOccurrence: "line-4:result", ProducerIdentity: "numpy-int64-sum-v1", InputIdentity: inputIdentity,
 			Kind: valueslot.KindJSONScalar, MaxBytes: 32, PrivacyPartition: privacy, ClaimPolicy: valueslot.ClaimSingleUse, MaxClaims: 1,
 		},
 		Object: object, Strategy: valueslot.StrategyInlineJSON,

@@ -37,6 +37,20 @@ class BootstrapTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     self.runtime._materialize_value_slot("slot-invalid")
 
+    def test_split_phase_helpers_bind_repeated_dynamic_occurrences_without_exposing_tokens(self):
+        submitted = []
+        self.native_stub.submit_call = lambda slot, request: submitted.append((slot, json.loads(request)))  # type: ignore[attr-defined]
+        self.native_stub.materialize_call = lambda slot: json.dumps({"status": "ok", "result": {"body": slot}})  # type: ignore[attr-defined]
+        request = json.dumps({"call_id": "split-source-1", "capability": "sources.read", "arguments": {"path": "alpha"}}, sort_keys=True, separators=(",", ":"))
+        self.assertIsNone(self.runtime._submit_split_phase_call("slot-source-1", request))
+        self.assertIsNone(self.runtime._submit_split_phase_call("slot-source-1", request))
+        self.assertEqual(["slot-source-1-1", "slot-source-1-2"], [item[0] for item in submitted])
+        self.assertEqual(["split-source-1-1", "split-source-1-2"], [item[1]["call_id"] for item in submitted])
+        self.assertEqual("slot-source-1-1", self.runtime._materialize_split_phase_call("slot-source-1")["body"])
+        self.assertEqual("slot-source-1-2", self.runtime._materialize_split_phase_call("slot-source-1")["body"])
+        with self.assertRaises(RuntimeError):
+            self.runtime._materialize_split_phase_call("slot-source-1")
+
     def setUp(self):
         self._native_module = sys.modules.get("_agent_runtime_host")
         native_stub = types.ModuleType("_agent_runtime_host")

@@ -28,20 +28,21 @@ def request(source, pass_name="pure_scalar_cse", pass_version="pysolate.pure-sca
 class SourcePassTests(unittest.TestCase):
     def test_data_local_numpy_sum_emits_one_value_slot_materialization(self):
         source = (
+            "import io\n"
             "import numpy as np\n"
-            "dataset = np.load('/workspace/input.npy', allow_pickle=False)\n"
+            "dataset = np.load(io.BytesIO(open('/workspace/input.npy', 'rb').read()), allow_pickle=False)\n"
             "result = int(dataset.sum())\n"
         )
         raw_request = request(
             source,
             "data_local_numpy_sum",
-            "pysolate.data-local-numpy-sum-pass.v1",
+            "pysolate.data-local-numpy-sum-pass.v2",
         )
         patch = json.loads(emit_source_pass_patch_request_json(raw_request))
         self.assertEqual("applied", patch["status"])
         self.assertEqual(1, patch["replacement_count"])
         self.assertEqual(
-            "pass\npass\nresult = _pysolate_materialize_slot('slot-numpy-sum-v1')\n",
+            "pass\npass\npass\nresult = _pysolate_materialize_slot('slot-numpy-sum-v1')\n",
             patch["derived_source"],
         )
         tree = validate_source_pass_execution_request(source, json.dumps(patch, separators=(",", ":")))
@@ -49,6 +50,11 @@ class SourcePassTests(unittest.TestCase):
 
     def test_data_local_numpy_sum_rejects_variants_without_rewrite(self):
         variants = (
+            "import io\nimport numpy as np\ndataset = np.load(io.BytesIO(open(path, 'rb').read()), allow_pickle=False)\nresult = int(dataset.sum())\n",
+            "import io\nimport numpy as np\ndataset = np.load(io.BytesIO(open('/workspace/input.npy', 'r').read()), allow_pickle=False)\nresult = int(dataset.sum())\n",
+            "import io as bytes_io\nimport numpy as np\ndataset = np.load(bytes_io.BytesIO(open('/workspace/input.npy', 'rb').read()), allow_pickle=False)\nresult = int(dataset.sum())\n",
+            "import io\nimport numpy as np\ndataset = np.load(io.BytesIO(open('/workspace/input.npy', 'rb').read()), allow_pickle=True)\nresult = int(dataset.sum())\n",
+            "import io\nimport numpy as np\nraw = open('/workspace/input.npy', 'rb').read()\ndataset = np.load(io.BytesIO(raw), allow_pickle=False)\nresult = int(dataset.sum())\n",
             "import numpy as np\ndataset = np.load(path, allow_pickle=False)\nresult = int(dataset.sum())\n",
             "import numpy as np\ndataset = np.load('/workspace/input.npy')\nresult = int(dataset.sum())\n",
             "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=True)\nresult = int(dataset.sum())\n",
@@ -67,7 +73,7 @@ class SourcePassTests(unittest.TestCase):
                 raw_request = request(
                     source,
                     "data_local_numpy_sum",
-                    "pysolate.data-local-numpy-sum-pass.v1",
+                    "pysolate.data-local-numpy-sum-pass.v2",
                 )
                 patch = json.loads(emit_source_pass_patch_request_json(raw_request))
                 self.assertEqual("not_applicable", patch["status"])
@@ -78,7 +84,7 @@ class SourcePassTests(unittest.TestCase):
         raw = emit_source_pass_patch_request_json(request(
             source,
             "split_phase_sources_read",
-            "pysolate.split-phase-sources-read-pass.v1",
+            "pysolate.split-phase-sources-read-pass.v2",
         ))
         patch = json.loads(raw)
         self.assertEqual("applied", patch["status"])
@@ -98,7 +104,7 @@ class SourcePassTests(unittest.TestCase):
         raw = emit_source_pass_patch_request_json(request(
             source,
             "split_phase_sources_read",
-            "pysolate.split-phase-sources-read-pass.v1",
+            "pysolate.split-phase-sources-read-pass.v2",
         ))
         patch = json.loads(raw)
         self.assertEqual("applied", patch["status"])
@@ -109,6 +115,103 @@ class SourcePassTests(unittest.TestCase):
         self.assertEqual(1, lines[1].count("_pysolate_call_materialize"))
         self.assertNotIn("_pysolate_call_submit", lines[1])
         self.assertEqual(source.count("\n"), patch["derived_source"].count("\n"))
+
+    def test_split_phase_sources_read_preserves_dynamic_branch_and_loop_activation(self):
+        branch = (
+            'if inputs["take"]:\n'
+            '    first = sources.read("alpha")\n'
+            '    second = sources.read("beta")\n'
+            '    result = [first, second]\n'
+            'else:\n'
+            '    result = []\n'
+        )
+        loop = (
+            'result = []\n'
+            'for item in inputs["items"]:\n'
+            '    first = sources.read("alpha")\n'
+            '    result.append(first)\n'
+        )
+        for source, count in ((branch, 2), (loop, 1)):
+            with self.subTest(source=source):
+                patch = json.loads(emit_source_pass_patch_request_json(request(
+                    source,
+                    "split_phase_sources_read",
+                    "pysolate.split-phase-sources-read-pass.v2",
+                )))
+                self.assertEqual("applied", patch["status"])
+                self.assertEqual(count, patch["replacement_count"])
+                self.assertEqual(source.count("\n"), patch["derived_source"].count("\n"))
+                self.assertIn("_pysolate_call_submit", patch["derived_source"])
+                validate_source_pass_execution_request(source, json.dumps(patch, separators=(",", ":")))
+
+    def test_split_phase_structured_lowering_submits_only_on_active_dynamic_paths(self):
+        branch = (
+            'if inputs["take"]:\n'
+            '    first = sources.read("alpha")\n'
+            '    second = sources.read("beta")\n'
+            '    result = [first, second]\n'
+            'else:\n'
+            '    result = []\n'
+        )
+        loop = (
+            'result = []\n'
+            'for item in inputs["items"]:\n'
+            '    first = sources.read("alpha")\n'
+            '    result.append(first)\n'
+        )
+        def execute(source, inputs):
+            patch = json.loads(emit_source_pass_patch_request_json(request(
+                source, "split_phase_sources_read", "pysolate.split-phase-sources-read-pass.v2",
+            )))
+            submitted = []
+            materialized = []
+            namespace = {
+                "inputs": inputs,
+                "_pysolate_call_submit": lambda slot, raw: submitted.append(slot),
+                "_pysolate_call_materialize": lambda slot: materialized.append(slot) or {"body": slot},
+            }
+            exec(compile(patch["derived_source"], "<derived>", "exec"), namespace, namespace)
+            return namespace["result"], submitted, materialized
+        result, submitted, materialized = execute(branch, {"take": False})
+        self.assertEqual(([], [], []), (result, submitted, materialized))
+        result, submitted, materialized = execute(branch, {"take": True})
+        self.assertEqual(2, len(result))
+        self.assertEqual(2, len(submitted))
+        self.assertEqual(submitted, materialized)
+        result, submitted, materialized = execute(loop, {"items": []})
+        self.assertEqual(([], [], []), (result, submitted, materialized))
+        result, submitted, materialized = execute(loop, {"items": [1, 2]})
+        self.assertEqual(2, len(result))
+        self.assertEqual(2, len(submitted))
+        self.assertEqual(submitted, materialized)
+
+        patch = json.loads(emit_source_pass_patch_request_json(request(
+            loop, "split_phase_sources_read", "pysolate.split-phase-sources-read-pass.v2",
+        )))
+        submitted = []
+        namespace = {
+            "inputs": {"items": [1, 2]},
+            "_pysolate_call_submit": lambda slot, raw: submitted.append(slot),
+            "_pysolate_call_materialize": lambda slot: (_ for _ in ()).throw(RuntimeError("first failure")),
+        }
+        with self.assertRaisesRegex(RuntimeError, "first failure"):
+            exec(compile(patch["derived_source"], "<derived>", "exec"), namespace, namespace)
+        self.assertEqual(1, len(submitted))
+
+    def test_split_phase_sources_read_rejects_unsafe_activation(self):
+        source = (
+            'if decide():\n'
+            '    first = sources.read("alpha")\n'
+            '    result = first\n'
+            'else:\n'
+            '    result = None\n'
+        )
+        patch = json.loads(emit_source_pass_patch_request_json(request(
+            source,
+            "split_phase_sources_read",
+            "pysolate.split-phase-sources-read-pass.v2",
+        )))
+        self.assertEqual("not_applicable", patch["status"])
 
     def test_split_phase_sources_read_rejects_dynamic_or_observable_programs(self):
         cases = [
@@ -124,7 +227,7 @@ class SourcePassTests(unittest.TestCase):
                 patch = json.loads(emit_source_pass_patch_request_json(request(
                     source,
                     "split_phase_sources_read",
-                    "pysolate.split-phase-sources-read-pass.v1",
+                    "pysolate.split-phase-sources-read-pass.v2",
                 )))
                 self.assertEqual("not_applicable", patch["status"])
 

@@ -1,6 +1,6 @@
 # Host-scheduled synchronous calls contract v1
 
-Status: **Proposed, default-off, Phase 0 contract**
+Status: **Implemented Experimental, default-off; exact-Guest economics pending**
 
 Baseline source: `fde07939f3d1865a83bfb59b16a3ac16abf46e8f`
 
@@ -31,8 +31,9 @@ The first Stratum-derived data operation is separately fixed to the existing
 `numpy_npy_c_v1` prepared-data research family:
 
 ```python
+import io
 import numpy as np
-dataset = np.load('/workspace/input.npy', allow_pickle=False)
+dataset = np.load(io.BytesIO(open('/workspace/input.npy', 'rb').read()), allow_pickle=False)
 result = int(dataset.sum())
 ```
 
@@ -195,6 +196,20 @@ No unmaterialized slot may increment Broker calls or create a receipt.
 - Python controls branches, loops and `try`; these are rejected in v1 and added only by
   later dynamic-occurrence slices.
 - Compensation never qualifies an early write.
+
+The registered `split_phase_sources_read` pass is now v2. It keeps the v1 straight-line
+lane and adds only two source-shaped dynamic forms:
+
+- a top-level `if` whose condition reads only bounded `inputs` values and whose active
+  branch is itself a closed read/result block;
+- a top-level result-list loop over a bounded `inputs` iterable with one literal-path read
+  and one append per iteration.
+
+The submit helper owns a fresh per-Run occurrence counter and a private queue from each
+static source slot to its dynamic Host slot. Generated source still receives no token.
+An unselected branch and a zero-iteration loop submit nothing; a repeated loop occurrence
+gets a distinct call identity; `try`, dynamic paths, unknown calls, and arbitrary nested
+control flow remain rejected.
 
 ## Measurement and retention gates
 

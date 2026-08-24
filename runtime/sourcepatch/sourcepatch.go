@@ -21,11 +21,11 @@ const (
 	PureScalarFoldVersion                                   = "pysolate.pure-scalar-fold-pass.v1"
 	PureScalarFoldConfigSHA256                              = "sha256:ebd1a5f88e49f6170044cc146ad394b9967aa5aad5443f9d2734c86c98b130c6"
 	SplitPhaseSourcesReadName         passregistration.Name = "split_phase_sources_read"
-	SplitPhaseSourcesReadVersion                            = "pysolate.split-phase-sources-read-pass.v1"
-	SplitPhaseSourcesReadConfigSHA256                       = "sha256:2a402e54fb4a0dc196737b03d8f2e03c9b1a8509bd729563b1f24f95a0ae1d7f"
+	SplitPhaseSourcesReadVersion                            = "pysolate.split-phase-sources-read-pass.v2"
+	SplitPhaseSourcesReadConfigSHA256                       = "sha256:1a691c630f611a7c0bf50c898cedc542d49782c01e7cab3dd1ff34ca22307026"
 	DataLocalNumpySumName             passregistration.Name = "data_local_numpy_sum"
-	DataLocalNumpySumVersion                                = "pysolate.data-local-numpy-sum-pass.v1"
-	DataLocalNumpySumConfigSHA256                           = "sha256:2de3ebe7ec484955cec783ca0fbbf091598d8217bff9f7cc95d9a241fbbeac64"
+	DataLocalNumpySumVersion                                = "pysolate.data-local-numpy-sum-pass.v2"
+	DataLocalNumpySumConfigSHA256                           = "sha256:391f84660ff12c489c3275ae9073622d1baf4ea6b54a629b51804b331a1b4c7b"
 )
 
 var (

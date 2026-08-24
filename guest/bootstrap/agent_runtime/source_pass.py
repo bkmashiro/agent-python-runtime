@@ -13,9 +13,9 @@ PURE_SCALAR_CSE_VERSION = "pysolate.pure-scalar-cse-pass.v1"
 PURE_SCALAR_FOLD = "pure_scalar_fold"
 PURE_SCALAR_FOLD_VERSION = "pysolate.pure-scalar-fold-pass.v1"
 SPLIT_PHASE_SOURCES_READ = "split_phase_sources_read"
-SPLIT_PHASE_SOURCES_READ_VERSION = "pysolate.split-phase-sources-read-pass.v1"
+SPLIT_PHASE_SOURCES_READ_VERSION = "pysolate.split-phase-sources-read-pass.v2"
 DATA_LOCAL_NUMPY_SUM = "data_local_numpy_sum"
-DATA_LOCAL_NUMPY_SUM_VERSION = "pysolate.data-local-numpy-sum-pass.v1"
+DATA_LOCAL_NUMPY_SUM_VERSION = "pysolate.data-local-numpy-sum-pass.v2"
 _REQUEST_KEYS = {"pass_name", "pass_version", "registration_sha256", "source"}
 _PATCH_KEYS = {
     "schema_version", "status", "pass_name", "pass_version", "registration_sha256",
@@ -233,6 +233,138 @@ def _pure_scalar_fold(source):
     return tree, derived_source, len(replacements)
 
 
+def _split_phase_read_assignment(statement):
+    assignment = _simple_assignment(statement)
+    if assignment is None:
+        return None
+    name, value = assignment
+    if (
+        not isinstance(value, ast.Call)
+        or not isinstance(value.func, ast.Attribute)
+        or value.func.attr != "read"
+        or not isinstance(value.func.value, ast.Name)
+        or value.func.value.id != "sources"
+        or len(value.args) != 1
+        or value.keywords
+        or not isinstance(value.args[0], ast.Constant)
+        or type(value.args[0].value) is not str
+        or not value.args[0].value
+        or len(value.args[0].value.encode("utf-8")) > 256
+    ):
+        return None
+    return name, value.args[0].value
+
+
+def _safe_activation_value(node):
+    if isinstance(node, ast.Constant):
+        return type(node.value) in (bool, int, str, type(None))
+    if isinstance(node, ast.Name):
+        return node.id == "inputs"
+    if isinstance(node, ast.Subscript):
+        return _safe_activation_value(node.value) and _safe_activation_value(node.slice)
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        return _safe_activation_value(node.operand)
+    if isinstance(node, ast.BoolOp) and isinstance(node.op, (ast.And, ast.Or)):
+        return all(_safe_activation_value(value) for value in node.values)
+    if isinstance(node, ast.Compare):
+        return _safe_activation_value(node.left) and all(
+            isinstance(operator, (ast.Eq, ast.NotEq, ast.Is, ast.IsNot, ast.Lt, ast.LtE, ast.Gt, ast.GtE))
+            for operator in node.ops
+        ) and all(_safe_activation_value(value) for value in node.comparators)
+    return False
+
+
+def _split_phase_parts(source_identity, static_index, name, path):
+    slot_id = "slot-" + source_identity[:16] + "-" + str(static_index)
+    call_id = "split-" + source_identity[:16] + "-" + str(static_index)
+    request = _canonical({
+        "call_id": call_id,
+        "capability": "sources.read",
+        "arguments": {"path": path},
+    })
+    submit = "_pysolate_call_submit(" + repr(slot_id) + ", " + repr(request) + ")"
+    materialize = name + " = _pysolate_call_materialize(" + repr(slot_id) + ")[\"body\"]"
+    return submit, materialize
+
+
+def _rewrite_split_phase_read_block(statements, lines, source_identity, static_index):
+    if len(statements) < 2:
+        return None
+    reads = []
+    names = set()
+    for statement in statements[:-1]:
+        parsed = _split_phase_read_assignment(statement)
+        if parsed is None or parsed[0] in names or statement.lineno != statement.end_lineno:
+            return None
+        names.add(parsed[0])
+        reads.append((statement, parsed[0], parsed[1]))
+    result = _simple_assignment(statements[-1])
+    if not reads or result is None or result[0] != "result" or statements[-1].lineno != statements[-1].end_lineno or not _safe_output_value(result[1], frozenset(names)):
+        return None
+    submits = []
+    materializations = []
+    for offset, (_, name, path) in enumerate(reads):
+        submit, materialize = _split_phase_parts(source_identity, static_index + offset, name, path)
+        submits.append(submit)
+        materializations.append(materialize)
+    first_line = reads[0][0].lineno - 1
+    indent = lines[first_line][: len(lines[first_line]) - len(lines[first_line].lstrip(" "))]
+    newline = "\n" if lines[first_line].endswith("\n") else ""
+    lines[first_line] = indent + "; ".join(submits + [materializations[0]]) + newline
+    for offset, (statement, _, _) in enumerate(reads[1:], start=1):
+        line_index = statement.lineno - 1
+        indent = lines[line_index][: len(lines[line_index]) - len(lines[line_index].lstrip(" "))]
+        newline = "\n" if lines[line_index].endswith("\n") else ""
+        lines[line_index] = indent + materializations[offset] + newline
+    return len(reads)
+
+
+def _split_phase_structured(tree, lines, source_identity):
+    derived = list(lines)
+    if len(tree.body) == 1 and isinstance(tree.body[0], ast.If):
+        statement = tree.body[0]
+        if not _safe_activation_value(statement.test):
+            return None
+        count = _rewrite_split_phase_read_block(statement.body, derived, source_identity, 1)
+        if count is None:
+            return None
+        if statement.orelse:
+            second = _rewrite_split_phase_read_block(statement.orelse, derived, source_identity, count + 1)
+            if second is None:
+                lone = _simple_assignment(statement.orelse[0]) if len(statement.orelse) == 1 else None
+                if lone is None or lone[0] != "result" or not _safe_output_value(lone[1], frozenset()):
+                    return None
+            else:
+                count += second
+        return "".join(derived), count
+    if len(tree.body) == 2 and isinstance(tree.body[1], ast.For):
+        initial = _simple_assignment(tree.body[0])
+        loop = tree.body[1]
+        if (
+            initial is None or initial[0] != "result" or not isinstance(initial[1], ast.List) or initial[1].elts
+            or not isinstance(loop.target, ast.Name) or not _safe_activation_value(loop.iter) or loop.orelse
+            or len(loop.body) != 2
+        ):
+            return None
+        read = _split_phase_read_assignment(loop.body[0])
+        append = loop.body[1]
+        if not (
+            read is not None and isinstance(append, ast.Expr) and isinstance(append.value, ast.Call)
+            and isinstance(append.value.func, ast.Attribute) and append.value.func.attr == "append"
+            and isinstance(append.value.func.value, ast.Name) and append.value.func.value.id == "result"
+            and len(append.value.args) == 1 and isinstance(append.value.args[0], ast.Name) and append.value.args[0].id == read[0]
+            and not append.value.keywords
+        ):
+            return None
+        submit, materialize = _split_phase_parts(source_identity, 1, read[0], read[1])
+        line_index = loop.body[0].lineno - 1
+        indent = derived[line_index][: len(derived[line_index]) - len(derived[line_index].lstrip(" "))]
+        newline = "\n" if derived[line_index].endswith("\n") else ""
+        derived[line_index] = indent + submit + "; " + materialize + newline
+        return "".join(derived), 1
+    return None
+
+
 def _split_phase_sources_read(source):
     if (
         not isinstance(source, str)
@@ -243,6 +375,12 @@ def _split_phase_sources_read(source):
         raise ValueError("invalid source pass input")
     tree = ast.parse(source, filename="<agent-run>", mode="exec")
     lines = source.splitlines(keepends=True)
+    source_identity = _digest(source.encode("utf-8"))[7:]
+    structured = _split_phase_structured(tree, lines, source_identity)
+    if structured is not None:
+        derived_source, replacement_count = structured
+        ast.parse(derived_source, filename="<agent-run>", mode="exec")
+        return tree, derived_source, replacement_count
     if not 2 <= len(tree.body) <= 5 or len(lines) != len(tree.body):
         return tree, "", 0
 
@@ -282,7 +420,6 @@ def _split_phase_sources_read(source):
     ):
         return tree, "", 0
 
-    source_identity = _digest(source.encode("utf-8"))[7:]
     submit_parts = []
     materialize_lines = []
     for index, (name, path) in enumerate(reads, start=1):
@@ -317,20 +454,26 @@ def _data_local_numpy_sum(source):
         raise ValueError("invalid source pass input")
     tree = ast.parse(source, filename="<agent-run>", mode="exec")
     lines = source.splitlines(keepends=True)
-    if len(tree.body) != 3 or len(lines) != 3:
+    if len(tree.body) != 4 or len(lines) != 4:
         return tree, "", 0
-    import_statement, load_statement, result_statement = tree.body
+    io_import, numpy_import, load_statement, result_statement = tree.body
     if (
-        not isinstance(import_statement, ast.Import)
-        or len(import_statement.names) != 1
-        or import_statement.names[0].name != "numpy"
-        or import_statement.names[0].asname != "np"
-        or import_statement.lineno != 1
-        or import_statement.end_lineno != 1
+        not isinstance(io_import, ast.Import)
+        or len(io_import.names) != 1
+        or io_import.names[0].name != "io"
+        or io_import.names[0].asname is not None
+        or io_import.lineno != 1
+        or io_import.end_lineno != 1
+        or not isinstance(numpy_import, ast.Import)
+        or len(numpy_import.names) != 1
+        or numpy_import.names[0].name != "numpy"
+        or numpy_import.names[0].asname != "np"
+        or numpy_import.lineno != 2
+        or numpy_import.end_lineno != 2
     ):
         return tree, "", 0
     load_assignment = _simple_assignment(load_statement)
-    if load_assignment is None or load_assignment[0] != "dataset" or load_statement.lineno != 2 or load_statement.end_lineno != 2:
+    if load_assignment is None or load_assignment[0] != "dataset" or load_statement.lineno != 3 or load_statement.end_lineno != 3:
         return tree, "", 0
     load_call = load_assignment[1]
     if (
@@ -340,16 +483,47 @@ def _data_local_numpy_sum(source):
         or not isinstance(load_call.func.value, ast.Name)
         or load_call.func.value.id != "np"
         or len(load_call.args) != 1
-        or not isinstance(load_call.args[0], ast.Constant)
-        or load_call.args[0].value != "/workspace/input.npy"
         or len(load_call.keywords) != 1
         or load_call.keywords[0].arg != "allow_pickle"
         or not isinstance(load_call.keywords[0].value, ast.Constant)
         or load_call.keywords[0].value.value is not False
     ):
         return tree, "", 0
+    bytes_io = load_call.args[0]
+    if (
+        not isinstance(bytes_io, ast.Call)
+        or not isinstance(bytes_io.func, ast.Attribute)
+        or bytes_io.func.attr != "BytesIO"
+        or not isinstance(bytes_io.func.value, ast.Name)
+        or bytes_io.func.value.id != "io"
+        or len(bytes_io.args) != 1
+        or bytes_io.keywords
+    ):
+        return tree, "", 0
+    read_call = bytes_io.args[0]
+    if (
+        not isinstance(read_call, ast.Call)
+        or read_call.args
+        or read_call.keywords
+        or not isinstance(read_call.func, ast.Attribute)
+        or read_call.func.attr != "read"
+    ):
+        return tree, "", 0
+    open_call = read_call.func.value
+    if (
+        not isinstance(open_call, ast.Call)
+        or not isinstance(open_call.func, ast.Name)
+        or open_call.func.id != "open"
+        or len(open_call.args) != 2
+        or open_call.keywords
+        or not isinstance(open_call.args[0], ast.Constant)
+        or open_call.args[0].value != "/workspace/input.npy"
+        or not isinstance(open_call.args[1], ast.Constant)
+        or open_call.args[1].value != "rb"
+    ):
+        return tree, "", 0
     result_assignment = _simple_assignment(result_statement)
-    if result_assignment is None or result_assignment[0] != "result" or result_statement.lineno != 3 or result_statement.end_lineno != 3:
+    if result_assignment is None or result_assignment[0] != "result" or result_statement.lineno != 4 or result_statement.end_lineno != 4:
         return tree, "", 0
     outer_call = result_assignment[1]
     if (
@@ -372,7 +546,7 @@ def _data_local_numpy_sum(source):
     ):
         return tree, "", 0
     trailing_newline = "\n" if source.endswith("\n") else ""
-    derived_source = "pass\npass\nresult = _pysolate_materialize_slot('slot-numpy-sum-v1')" + trailing_newline
+    derived_source = "pass\npass\npass\nresult = _pysolate_materialize_slot('slot-numpy-sum-v1')" + trailing_newline
     ast.parse(derived_source, filename="<agent-run>", mode="exec")
     return tree, derived_source, 1
 

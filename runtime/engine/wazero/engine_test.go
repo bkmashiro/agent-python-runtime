@@ -68,6 +68,28 @@ func TestFactoryRequiresValueSlotTableExactlyWhenSelected(t *testing.T) {
 	}
 }
 
+func TestFactoryFailureClosesTransferredValueSlotTable(t *testing.T) {
+	object, err := valueslot.NewPreparedObject(valueslot.KindJSONScalar, []byte("1"), "producer-v1", "input-v1", "run-one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	table, err := valueslot.NewTable([]valueslot.Entry{{
+		Spec:   valueslot.SlotSpec{ID: "slot-one", SourceOccurrence: "line-1", ProducerIdentity: "producer-v1", InputIdentity: "input-v1", Kind: valueslot.KindJSONScalar, MaxBytes: 16, PrivacyPartition: "run-one", ClaimPolicy: valueslot.ClaimSingleUse, MaxClaims: 1},
+		Object: object, Strategy: valueslot.StrategyInlineJSON,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, ValueSlots: true}
+	if _, err := (wazeroengine.Factory{ValueSlots: table}).New(context.Background(), []byte("short"), config); err == nil {
+		t.Fatal("expected short artifact failure")
+	}
+	if evidence := table.Evidence(); !evidence.Closed || !object.CanEvict() || object.ConsumerCount() != 0 {
+		t.Fatalf("evidence=%+v consumers=%d can_evict=%t", evidence, object.ConsumerCount(), object.CanEvict())
+	}
+}
+
 func TestFactoryRejectsInvalidMechanismsBeforeArtifactParsing(t *testing.T) {
 	config := runtimeconfig.DefaultRunConfig()
 	config.Mechanisms = runtimeconfig.MechanismSet{Streaming: true}

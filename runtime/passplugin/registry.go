@@ -47,7 +47,15 @@ type HostScheduledSourcePatchRunner interface {
 
 type ValueSlotSourcePatchRunner interface {
 	Run(context.Context, []byte, string) ([]byte, error)
-	RunValueSlotSourcePatchDerived(context.Context, []byte, sourcepatch.Patch, passregistration.Registration) ([]byte, error)
+	RunValueSlotSourcePatchDerived(context.Context, []byte, sourcepatch.Patch, passregistration.Registration) (ValueSlotRun, error)
+	Close(context.Context) error
+}
+
+type ValueSlotSourcePatchRunnerFactory func(context.Context) (ValueSlotSourcePatchRunner, error)
+
+type ValueSlotRun struct {
+	Payload []byte
+	Applied bool
 }
 
 type Execution struct {
@@ -213,12 +221,19 @@ func (registry *Registry) ExecuteHostScheduled(ctx context.Context, name passreg
 	return Execution{Payload: payload, Patch: patch, Applied: runErr == nil}, runErr
 }
 
-// ExecuteSelectedValueSlot runs a previously selected value-slot patch. Callers
-// must select the patch first, then prepare the immutable Host value, and only
-// then construct the runner. This ordering keeps both pass rejection and producer
-// failure on the unchanged pre-effect fallback path.
-func (registry *Registry) ExecuteSelectedValueSlot(ctx context.Context, name passregistration.Name, runner ValueSlotSourcePatchRunner, request []byte, patch sourcepatch.Patch) (Execution, error) {
-	if runner == nil || !patch.Applied() {
+// ExecuteValueSlot selects and validates one fixed value-slot patch before it
+// invokes the selected runner factory. Rejection and producer failure construct
+// only an ordinary runner and execute the unchanged source.
+func (registry *Registry) ExecuteValueSlot(
+	ctx context.Context,
+	name passregistration.Name,
+	transformer sourcepatch.Transformer,
+	baselineFactory ValueSlotSourcePatchRunnerFactory,
+	selectedFactory ValueSlotSourcePatchRunnerFactory,
+	request []byte,
+	trustedPrepare string,
+) (Execution, error) {
+	if transformer == nil || baselineFactory == nil || selectedFactory == nil {
 		return Execution{}, ErrInvalidPlugin
 	}
 	runRequest, err := runtimeconfig.DecodeRunRequest(request)
@@ -226,14 +241,44 @@ func (registry *Registry) ExecuteSelectedValueSlot(ctx context.Context, name pas
 		return Execution{}, err
 	}
 	plugin, exists := registry.Lookup(name)
-	if !exists || !registry.enabled[name] {
+	if !exists {
 		return Execution{}, ErrInvalidPlugin
 	}
 	slotPlugin, valueSlotBound := plugin.(ValueSlotSourcePatchPlugin)
-	if !valueSlotBound || !slotPlugin.ValueSlotBound() || plugin.Registration().Stage() != passregistration.StageWholeProgramPatch ||
-		patch.Validate(runRequest.Code, plugin.Registration()) != nil {
+	if !valueSlotBound || !slotPlugin.ValueSlotBound() || plugin.Registration().Stage() != passregistration.StageWholeProgramPatch {
 		return Execution{}, ErrUnsupportedStage
 	}
-	payload, runErr := runner.RunValueSlotSourcePatchDerived(ctx, request, patch, plugin.Registration())
-	return Execution{Payload: payload, Patch: patch, Applied: runErr == nil}, runErr
+	if !registry.enabled[name] {
+		payload, runErr := runValueSlotBaseline(ctx, baselineFactory, request, trustedPrepare)
+		return Execution{Payload: payload}, runErr
+	}
+	patch, passErr := slotPlugin.Transform(ctx, transformer, runRequest.Code)
+	if passErr != nil || !patch.Applied() || patch.Validate(runRequest.Code, plugin.Registration()) != nil {
+		payload, runErr := runValueSlotBaseline(ctx, baselineFactory, request, trustedPrepare)
+		return Execution{Payload: payload, Patch: patch, PassError: passErr}, runErr
+	}
+	runner, factoryErr := selectedFactory(ctx)
+	if factoryErr != nil || runner == nil {
+		if factoryErr == nil {
+			factoryErr = ErrInvalidPlugin
+		}
+		payload, runErr := runValueSlotBaseline(ctx, baselineFactory, request, trustedPrepare)
+		return Execution{Payload: payload, Patch: patch, PassError: factoryErr}, runErr
+	}
+	result, runErr := runner.RunValueSlotSourcePatchDerived(ctx, request, patch, plugin.Registration())
+	closeErr := runner.Close(ctx)
+	runErr = errors.Join(runErr, closeErr)
+	return Execution{Payload: result.Payload, Patch: patch, Applied: result.Applied && runErr == nil}, runErr
+}
+
+func runValueSlotBaseline(ctx context.Context, factory ValueSlotSourcePatchRunnerFactory, request []byte, trustedPrepare string) ([]byte, error) {
+	runner, err := factory(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if runner == nil {
+		return nil, ErrInvalidPlugin
+	}
+	payload, runErr := runner.Run(ctx, request, trustedPrepare)
+	return payload, errors.Join(runErr, runner.Close(ctx))
 }

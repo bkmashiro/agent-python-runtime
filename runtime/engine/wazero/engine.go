@@ -20,6 +20,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	"github.com/bkmashiro/agent-python-runtime/runtime/observe"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/playback"
 	"github.com/bkmashiro/agent-python-runtime/runtime/preparedregion"
@@ -51,9 +52,16 @@ func (Factory) Name() string { return "wazero" }
 func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (enginecontract.Runner, error) {
 	binding, err := factory.validatedBinding(config)
 	if err != nil {
+		if factory.ValueSlots != nil {
+			err = errors.Join(err, factory.ValueSlots.Close())
+		}
 		return nil, err
 	}
-	return newEngine(ctx, wasm, config, factory.BrokerFactory, binding, factory.PreparedRegions, factory.ValueSlots)
+	runner, err := newEngine(ctx, wasm, config, factory.BrokerFactory, binding, factory.PreparedRegions, factory.ValueSlots)
+	if err != nil && factory.ValueSlots != nil {
+		err = errors.Join(err, factory.ValueSlots.Close())
+	}
+	return runner, err
 }
 
 func (factory Factory) validatedBinding(config runtimeconfig.RunConfig) (*workspaceBinding, error) {
@@ -1056,35 +1064,50 @@ func (engine *Engine) RunHostScheduledSourcePatchDerived(ctx context.Context, re
 
 // RunValueSlotSourcePatchDerived executes the single v1 data-local reduction adapter.
 // The pass describes one semantic scalar slot; the Host-selected table owns materialization.
-func (engine *Engine) RunValueSlotSourcePatchDerived(ctx context.Context, request []byte, patch sourcepatch.Patch, registration passregistration.Registration) ([]byte, error) {
+func (engine *Engine) RunValueSlotSourcePatchDerived(ctx context.Context, request []byte, patch sourcepatch.Patch, registration passregistration.Registration) (passplugin.ValueSlotRun, error) {
 	if !engine.config.Mechanisms.ValueSlots || engine.valueSlots == nil || engine.config.ProgramSurface != runtimeconfig.ProgramSurfaceDirect {
-		return nil, runtimeconfig.ErrMechanismDisabled
+		return engine.runValueSlotFallback(ctx, request)
 	}
 	spec, strategy, backingIdentity, err := engine.valueSlots.Describe("slot-numpy-sum-v1")
 	if !engine.valueSlots.IsCanonicalNumpyInt64Sum() || err != nil || spec.ID != "slot-numpy-sum-v1" || spec.SourceOccurrence != "line-4:result" ||
 		spec.ProducerIdentity != "numpy-int64-sum-v1" || spec.InputIdentity == "" || spec.PrivacyPartition == "" ||
 		spec.Kind != valueslot.KindJSONScalar || spec.MaxBytes > 32 || spec.ClaimPolicy != valueslot.ClaimSingleUse ||
 		spec.MaxClaims != 1 || strategy != valueslot.StrategyInlineJSON || backingIdentity == "" {
-		return nil, valueslot.ErrInvalidEntry
+		return engine.runValueSlotFallback(ctx, request)
 	}
 	runRequest, err := runtimeconfig.DecodeRunRequest(request)
 	if err != nil {
-		return nil, err
+		return passplugin.ValueSlotRun{}, err
 	}
 	if registration.Name() != sourcepatch.DataLocalNumpySumName || registration.Stage() != passregistration.StageWholeProgramPatch ||
 		!patch.Applied() || patch.Validate(runRequest.Code, registration) != nil {
-		return nil, sourcepatch.ErrInvalidPatch
+		return engine.runValueSlotFallback(ctx, request)
+	}
+	if err := engine.ensureWorkspace(); err != nil {
+		return passplugin.ValueSlotRun{}, err
+	}
+	if err := engine.verifyDataLocalValueInput(); err != nil {
+		if errors.Is(err, valueslot.ErrInvalidEntry) {
+			return engine.runValueSlotFallback(ctx, request)
+		}
+		return passplugin.ValueSlotRun{}, err
 	}
 	patchRaw, err := json.Marshal(patch)
 	if err != nil {
-		return nil, err
+		return passplugin.ValueSlotRun{}, err
 	}
 	prepares := make(chan string)
 	close(prepares)
-	return engine.runWithPrepares(ctx, request, prepares, false, &derivedSelection{
+	payload, runErr := engine.runWithPrepares(ctx, request, prepares, false, &derivedSelection{
 		export: "runtime_select_source_pass_execution", payload: append(patchRaw, '\n'),
 		sourceValidationExport: "runtime_validate_source_for_patch",
 	})
+	return passplugin.ValueSlotRun{Payload: payload, Applied: runErr == nil}, runErr
+}
+
+func (engine *Engine) runValueSlotFallback(ctx context.Context, request []byte) (passplugin.ValueSlotRun, error) {
+	payload, err := engine.Run(ctx, request, "")
+	return passplugin.ValueSlotRun{Payload: payload}, err
 }
 
 // RunStream keeps one fresh Guest alive while Host-trusted preparation chunks
@@ -1161,9 +1184,6 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		defer func() { <-engine.workspaceRun }()
 	}
 	if err := engine.ensureWorkspace(); err != nil {
-		return nil, err
-	}
-	if err := engine.verifyDataLocalValueInput(); err != nil {
 		return nil, err
 	}
 	if err := engine.ensurePrepared(runContext); err != nil {

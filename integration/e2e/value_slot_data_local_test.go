@@ -52,11 +52,132 @@ func TestDataLocalNumpySumRejectsUnattestedScalarBeforeGuest(t *testing.T) {
 		t.Fatal(err)
 	}
 	engine := trustedSemanticRunner(t, runner)
-	if _, err := engine.RunValueSlotSourcePatchDerived(context.Background(), nil, sourcepatch.Patch{}, passregistration.Registration{}); !errors.Is(err, valueslot.ErrInvalidEntry) {
-		t.Fatalf("unattested scalar error=%v", err)
+	request := runtimeconfig.RunRequest{RunID: "unattested-scalar", Code: "result = 7", Inputs: json.RawMessage(`{}`)}
+	raw, err := runtimeconfig.EncodeRunRequest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, runErr := engine.RunValueSlotSourcePatchDerived(context.Background(), raw, sourcepatch.Patch{}, passregistration.Registration{})
+	decoded, decodeErr := runtimeconfig.DecodeAndValidateRunResponse(request, result.Payload)
+	if runErr != nil || decodeErr != nil || result.Applied || string(decoded.Result) != "7" {
+		t.Fatalf("result=%+v run=%v decode=%v decoded=%+v", result, runErr, decodeErr, decoded)
 	}
 	if err := runner.Close(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDataLocalNumpySumDigestDriftFallsBackWithoutSlotClaim(t *testing.T) {
+	artifact, profile := numpyCoreGuest(t)
+	fixture := preparedfixture.CanonicalFixture()
+	workspaceRoot := t.TempDir()
+	if err := os.Chmod(workspaceRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := workspace.NewManager(workspaceRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	ref, err := manager.Create([]workspace.InitialFile{{Path: "input.npy", Data: fixture}}, workspace.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pass, err := sourcepatch.NewDataLocalNumpySum(passregistration.SemanticAnalyzerSHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := passplugin.New(pass)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err = registry.Enable(sourcepatch.DataLocalNumpySumName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysisConfig := runtimeconfig.DefaultRunConfig()
+	analysisConfig.Timeout = 90 * time.Second
+	analysisConfig.ExecutionProfile = profile
+	analysisConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
+	analysisRunner, err := (wazeroengine.Factory{}).New(context.Background(), artifact, analysisConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysisEngine := trustedSemanticRunner(t, analysisRunner)
+	analysisSession, err := analysisEngine.NewSemanticAnalysisSession(context.Background(), wazeroengine.SemanticAnalysisSessionLimits{
+		MaxRequests: 4, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer analysisSession.Close(context.Background())
+	defer analysisRunner.Close(context.Background())
+
+	request := dataLocalRunRequest(t, "data-local-digest-drift")
+	raw, err := runtimeconfig.EncodeRunRequest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var selectedEngine *wazeroengine.Engine
+	execution, runErr := registry.ExecuteValueSlot(
+		context.Background(), sourcepatch.DataLocalNumpySumName, analysisSession,
+		func(context.Context) (passplugin.ValueSlotSourcePatchRunner, error) {
+			return nil, errors.New("unexpected registry fallback factory")
+		},
+		func(context.Context) (passplugin.ValueSlotSourcePatchRunner, error) {
+			lease, acquireErr := manager.Acquire(ref, "digest-drift-producer")
+			if acquireErr != nil {
+				return nil, acquireErr
+			}
+			root, bindErr := lease.BindMountSource()
+			if bindErr != nil {
+				_ = lease.Release()
+				return nil, bindErr
+			}
+			payload, readErr := os.ReadFile(filepath.Join(root, "input.npy"))
+			if readErr != nil {
+				_ = lease.Release()
+				return nil, readErr
+			}
+			table, producerErr := valueslot.NewCanonicalNumpyInt64SumTable(payload, "digest-drift-treatment")
+			if producerErr != nil {
+				_ = lease.Release()
+				return nil, producerErr
+			}
+			payload[len(payload)-1] ^= 1
+			writeErr := os.WriteFile(filepath.Join(root, "input.npy"), payload, 0o600)
+			releaseErr := lease.Release()
+			if writeErr != nil || releaseErr != nil {
+				_ = table.Close()
+				return nil, errors.Join(writeErr, releaseErr)
+			}
+			config := runtimeconfig.DefaultRunConfig()
+			config.ExecutionProfile = profile
+			config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, ValueSlots: true}
+			runner, factoryErr := (wazeroengine.Factory{
+				WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "digest-drift-treatment", ValueSlots: table,
+			}).New(context.Background(), artifact, config)
+			if factoryErr != nil {
+				_ = table.Close()
+				return nil, factoryErr
+			}
+			selectedEngine = trustedSemanticRunner(t, runner)
+			return selectedEngine, nil
+		},
+		raw, "",
+	)
+	if runErr != nil {
+		t.Fatal(runErr)
+	}
+	decoded, err := runtimeconfig.DecodeAndValidateRunResponse(request, execution.Payload)
+	if err != nil || decoded.Status != runtimeconfig.RunResponseOK || string(decoded.Result) == valueslot.CanonicalNumpyInt64Sum || execution.Applied {
+		t.Fatalf("execution=%+v decoded=%+v err=%v", execution, decoded, err)
+	}
+	if selectedEngine == nil {
+		t.Fatal("selected runner was not constructed")
+	}
+	if evidence := selectedEngine.ValueSlotEvidence(); evidence.Claims != 0 || !evidence.Closed {
+		t.Fatalf("evidence=%+v", evidence)
 	}
 }
 
@@ -203,22 +324,11 @@ func TestDataLocalNumpySumMatchedEndToEnd(t *testing.T) {
 	}
 	analysisEngine := trustedSemanticRunner(t, analysisRunner)
 	analysisSession, err := analysisEngine.NewSemanticAnalysisSession(context.Background(), wazeroengine.SemanticAnalysisSessionLimits{
-		MaxRequests: 4, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
+		MaxRequests: 8, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 90 * time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	selectedPatch, err := registry.Transform(context.Background(), sourcepatch.DataLocalNumpySumName, analysisSession, dataLocalSource)
-	if err != nil || !selectedPatch.Applied() {
-		t.Fatalf("selected patch=%+v err=%v", selectedPatch, err)
-	}
-	if err := analysisSession.Close(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if err := analysisRunner.Close(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-
 	var baselineDurations, treatmentDurations []time.Duration
 	var treatmentCopiedBytes []uint64
 	for index := 0; index < 5; index++ {
@@ -250,36 +360,60 @@ func TestDataLocalNumpySumMatchedEndToEnd(t *testing.T) {
 			t.Fatal(err)
 		}
 		started = time.Now()
-		producerBytes := readWorkspaceInput(t, manager, ref, treatmentOwner+"-producer")
-		table, err := valueslot.NewCanonicalNumpyInt64SumTable(producerBytes, treatmentOwner)
-		if err != nil {
-			t.Fatal(err)
-		}
-		treatmentConfig := runtimeconfig.DefaultRunConfig()
-		treatmentConfig.ExecutionProfile = profile
-		treatmentConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, ValueSlots: true}
-		runner, err := (wazeroengine.Factory{
-			WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: treatmentOwner, ValueSlots: table,
-		}).New(context.Background(), artifact, treatmentConfig)
-		if err != nil {
-			t.Fatal(err)
-		}
-		engine := trustedSemanticRunner(t, runner)
-		execution, runErr := registry.ExecuteSelectedValueSlot(context.Background(), sourcepatch.DataLocalNumpySumName, engine, raw, selectedPatch)
+		var selectedEngine *wazeroengine.Engine
+		execution, runErr := registry.ExecuteValueSlot(
+			context.Background(), sourcepatch.DataLocalNumpySumName, analysisSession,
+			func(context.Context) (passplugin.ValueSlotSourcePatchRunner, error) {
+				fallbackConfig := runtimeconfig.DefaultRunConfig()
+				fallbackConfig.ExecutionProfile = profile
+				fallback, factoryErr := (wazeroengine.Factory{
+					WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: treatmentOwner + "-fallback",
+				}).New(context.Background(), artifact, fallbackConfig)
+				if factoryErr != nil {
+					return nil, factoryErr
+				}
+				return trustedSemanticRunner(t, fallback), nil
+			},
+			func(context.Context) (passplugin.ValueSlotSourcePatchRunner, error) {
+				producerBytes := readWorkspaceInput(t, manager, ref, treatmentOwner+"-producer")
+				table, producerErr := valueslot.NewCanonicalNumpyInt64SumTable(producerBytes, treatmentOwner)
+				if producerErr != nil {
+					return nil, producerErr
+				}
+				treatmentConfig := runtimeconfig.DefaultRunConfig()
+				treatmentConfig.ExecutionProfile = profile
+				treatmentConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, ValueSlots: true}
+				runner, factoryErr := (wazeroengine.Factory{
+					WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: treatmentOwner, ValueSlots: table,
+				}).New(context.Background(), artifact, treatmentConfig)
+				if factoryErr != nil {
+					_ = table.Close()
+					return nil, factoryErr
+				}
+				selectedEngine = trustedSemanticRunner(t, runner)
+				return selectedEngine, nil
+			},
+			raw, "",
+		)
 		treatmentDurations = append(treatmentDurations, time.Since(started))
-		closeErr = runner.Close(context.Background())
 		assertDataLocalResult(t, request, execution.Payload, runErr)
-		if closeErr != nil {
-			t.Fatal(closeErr)
-		}
 		if !execution.Applied || execution.Patch.ReplacementCount != 1 {
 			t.Fatalf("execution=%+v", execution)
 		}
-		evidence := engine.ValueSlotEvidence()
+		if selectedEngine == nil {
+			t.Fatal("selected runner was not constructed")
+		}
+		evidence := selectedEngine.ValueSlotEvidence()
 		if evidence.Claims != 1 || evidence.Discarded != 0 || !evidence.Closed {
 			t.Fatalf("evidence=%+v", evidence)
 		}
 		treatmentCopiedBytes = append(treatmentCopiedBytes, evidence.CopiedBytes)
+	}
+	if err := analysisSession.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := analysisRunner.Close(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 	baselineMedian := medianDuration(baselineDurations)
 	treatmentMedian := medianDuration(treatmentDurations)

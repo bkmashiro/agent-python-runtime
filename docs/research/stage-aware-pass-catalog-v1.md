@@ -7,7 +7,7 @@ independent evidence. Do not force them through one `AST -> AST` interface and d
 generic IR, dynamic plugin loader, dependency solver or fixed-point manager.
 
 The implementation target is Host commit
-`b0a377cf36c25f9f3952c7112564b701cbe111e2`. It adds two analyzer-free stages to the
+`bedc894115adb6354660f9e9beab335160d8f97d`. It adds two analyzer-free stages to the
 existing source-bound stages and routes the two direct mechanisms through the same
 `passplugin.Registry` used by source plugins.
 

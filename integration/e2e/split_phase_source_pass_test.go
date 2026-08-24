@@ -56,6 +56,8 @@ func TestRealGuestCapabilityFuturesOverlapWithoutAnalyzer(t *testing.T) {
 		return json.Marshal(map[string]string{"body": arguments.Path + "-body"})
 	})
 	plan := splitPhaseE2EPlan(t, 2, handler)
+	baselinePrelude := plan.PythonPrelude()
+	futurePrelude := futurePassPrelude(t, plan)
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 90 * time.Second
 	config.Mechanisms = runtimeconfig.MechanismSet{SplitPhaseCalls: true}
@@ -68,7 +70,7 @@ func TestRealGuestCapabilityFuturesOverlapWithoutAnalyzer(t *testing.T) {
 	defer runner.Close(context.Background())
 
 	baselineStarted := time.Now()
-	baseline, err := runner.Run(context.Background(), request, plan.PythonPrelude())
+	baseline, err := runner.Run(context.Background(), request, baselinePrelude)
 	baselineDuration := time.Since(baselineStarted)
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +82,7 @@ func TestRealGuestCapabilityFuturesOverlapWithoutAnalyzer(t *testing.T) {
 
 	maxActive.Store(0)
 	treatmentStarted := time.Now()
-	treatment, err := runner.Run(context.Background(), request, futurePassPrelude(t, plan))
+	treatment, err := runner.Run(context.Background(), request, futurePrelude)
 	treatmentDuration := time.Since(treatmentStarted)
 	if err != nil {
 		t.Fatal(err)

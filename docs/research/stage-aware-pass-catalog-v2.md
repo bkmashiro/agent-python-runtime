@@ -8,8 +8,8 @@ passes. It gives each optimization an explicit stage, immutable registration and
 to the existing Runtime owner.
 
 The code target is Host commit
-`c78df632bc96c38ad8464fd5c3144a31316c6020`, tree
-`6450f5e4ebaaff2473a28bf3ad3c8873a92b029c`.
+`d793acdc2fbe26ea640b46336610c9f12bd9d813`, tree
+`df72d9ab8ede752cd2830b1a23413ae0afad09fe`.
 
 V2 extends the four-pass catalog from v1. It registers the runnable source transforms, the
 prepared-region adapter and all optional execution-cost mechanisms represented in
@@ -123,8 +123,8 @@ A fresh exact-Guest verification on the code target observed:
 
 | pass or lane | baseline median | treatment median | change | decision |
 |---|---:|---:|---:|---|
-| Future projection, one paired verification | `2.598 s` | `2.498 s` | `-3.84%` | retained Experimental |
-| prepared-value, five pairs | `4.876 s` | `2.285 s` | `-53.14%` | retained Experimental |
+| Future projection, one paired verification | `2.606 s` | `2.456 s` | `-5.75%` | retained Experimental |
+| prepared-value, five pairs | `4.856 s` | `2.274 s` | `-53.18%` | retained Experimental |
 | scalar CSE, three pairs | `2.489 s` | `2.890 s` | `+16.10%` | no-go |
 | scalar fold, three pairs | `2.290 s` | `2.386 s` | `+4.20%` | no-go |
 | analyzer-driven split-phase read, one paired verification | `2.574 s` | `7.601 s` | `+195.31%` | no-go |

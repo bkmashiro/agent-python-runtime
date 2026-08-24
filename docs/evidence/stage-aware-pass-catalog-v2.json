@@ -2,10 +2,11 @@
   "schema_version": "pysolate.stage-aware-pass-catalog.v2",
   "decision": "all_retained_optimizations_pass_selected_default_off",
   "implementation": {
-    "commit": "c78df632bc96c38ad8464fd5c3144a31316c6020",
-    "tree": "6450f5e4ebaaff2473a28bf3ad3c8873a92b029c",
+    "commit": "d793acdc2fbe26ea640b46336610c9f12bd9d813",
+    "tree": "df72d9ab8ede752cd2830b1a23413ae0afad09fe",
     "core_migration_commit": "f997821a9faf7b0c1661c0603101314d74706a80",
     "selection_validation_commit": "f07b7e52c9e63d4e6eec6ab798dee2d8be31f27e",
+    "entrypoint_and_selection_schema_fix_commit": "d793acdc2fbe26ea640b46336610c9f12bd9d813",
     "registration_schemas": [
       "pysolate.semantic-pass-registration.v2",
       "pysolate.stage-aware-pass-registration.v3"
@@ -51,20 +52,20 @@
     "measurements": {
       "capability_future_projection": {
         "samples": 1,
-        "baseline_median_ns": 2597793083,
-        "treatment_median_ns": 2498108458,
-        "treatment_ratio": 0.9616271882,
-        "change_percent": -3.8372811773,
+        "baseline_median_ns": 2605859583,
+        "treatment_median_ns": 2455912958,
+        "treatment_ratio": 0.942457903,
+        "change_percent": -5.7542097041,
         "analyzer_invocations": 0
       },
       "prepared_value_binding": {
         "samples": 5,
-        "baseline_ns": [4876064458, 4865138500, 4902766417, 4877184041, 4875347958],
-        "treatment_ns": [2283576625, 2284929792, 2278449000, 2295645625, 2301360750],
-        "baseline_median_ns": 4876064458,
-        "treatment_median_ns": 2284929792,
-        "treatment_ratio": 0.4686012278,
-        "change_percent": -53.1398772169,
+        "baseline_ns": [4883493208, 4855581583, 4850059083, 4848011458, 4863133709],
+        "treatment_ns": [2273601417, 2281057875, 2262242041, 2283699542, 2264118959],
+        "baseline_median_ns": 4855581583,
+        "treatment_median_ns": 2273601417,
+        "treatment_ratio": 0.4682449215,
+        "change_percent": -53.1755078535,
         "analyzer_invocations": 0,
         "host_to_guest_bytes": 12
       },

@@ -84,6 +84,16 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual([], response["receipts"])
         self.assertIsNone(response["error"])
 
+    def test_final_result_resolves_capability_futures_from_trusted_prelude(self):
+        marker = object()
+        self.runtime._prepared_globals["future_value"] = marker
+        self.runtime._prepared_globals["_resolve_capability_futures"] = (
+            lambda value: {"resolved": True} if value is marker else value
+        )
+        response = self.execute(code="result = future_value")
+        self.assertEqual("ok", response["status"])
+        self.assertEqual({"resolved": True}, response["result"])
+
     def test_prepared_region_helper_reconstructs_only_bool_or_int_from_native_claim(self):
         decision = "sha256:" + "a" * 64
         calls = []

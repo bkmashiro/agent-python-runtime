@@ -21,6 +21,83 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
 )
 
+func TestRealGuestCapabilityFuturesOverlapWithoutAnalyzer(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := "first = sources.read(\"alpha\")\nsecond = sources.read(\"beta\")\nresult = first + second\n"
+	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
+		RunID: "future-overlap-e2e", Code: source, Inputs: json.RawMessage(`{}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var active atomic.Int32
+	var maxActive atomic.Int32
+	handler := capability.HandlerFunc(func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
+		var arguments struct {
+			Path string `json:"path"`
+		}
+		if json.Unmarshal(raw, &arguments) != nil {
+			return nil, capability.ErrInvalidTool
+		}
+		current := active.Add(1)
+		for observed := maxActive.Load(); current > observed && !maxActive.CompareAndSwap(observed, current); observed = maxActive.Load() {
+		}
+		select {
+		case <-ctx.Done():
+			active.Add(-1)
+			return nil, ctx.Err()
+		case <-time.After(150 * time.Millisecond):
+		}
+		active.Add(-1)
+		return json.Marshal(map[string]string{"body": arguments.Path + "-body"})
+	})
+	plan := splitPhaseE2EPlan(t, 2, handler)
+	config := runtimeconfig.DefaultRunConfig()
+	config.Timeout = 90 * time.Second
+	config.Mechanisms = runtimeconfig.MechanismSet{SplitPhaseCalls: true}
+	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+		return capability.NewBroker(capability.Config{RunIdentity: "future-overlap-e2e", Plan: plan})
+	}}).New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+
+	baselineStarted := time.Now()
+	baseline, err := runner.Run(context.Background(), request, plan.PythonPrelude())
+	baselineDuration := time.Since(baselineStarted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baselineResult, err := decodeSuccessfulGuestResult(baseline)
+	if err != nil || string(baselineResult) != `"alpha-bodybeta-body"` || maxActive.Load() != 1 {
+		t.Fatalf("baseline result=%s max_active=%d err=%v payload=%s", baselineResult, maxActive.Load(), err, baseline)
+	}
+
+	maxActive.Store(0)
+	treatmentStarted := time.Now()
+	treatment, err := runner.Run(context.Background(), request, plan.FuturePythonPrelude())
+	treatmentDuration := time.Since(treatmentStarted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	treatmentResult, err := decodeSuccessfulGuestResult(treatment)
+	if err != nil || string(treatmentResult) != string(baselineResult) || maxActive.Load() != 2 {
+		t.Fatalf("treatment result=%s max_active=%d err=%v payload=%s", treatmentResult, maxActive.Load(), err, treatment)
+	}
+	if evidence := trustedSemanticRunner(t, runner).SplitPhaseEvidence(); evidence.Submitted != 2 || evidence.Consumed != 2 || evidence.Discarded != 0 {
+		t.Fatalf("future evidence=%+v", evidence)
+	}
+	if treatmentDuration >= baselineDuration {
+		t.Fatalf("Future path did not reduce latency: baseline=%s treatment=%s", baselineDuration, treatmentDuration)
+	}
+	t.Logf("direct Future evidence: baseline=%s treatment=%s saved=%s ratio=%.4f analyzers=0", baselineDuration, treatmentDuration, baselineDuration-treatmentDuration, float64(treatmentDuration)/float64(baselineDuration))
+}
+
 func TestRealGuestSplitPhaseSourcesReadOverlapsPhysicalWorkAndKeepsLogicalReceipts(t *testing.T) {
 	artifact, err := os.ReadFile(guestArtifact(t))
 	if err != nil {

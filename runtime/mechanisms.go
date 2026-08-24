@@ -98,9 +98,6 @@ func (set MechanismSet) Validate() error {
 	if set.SemanticPreDispatch && (!set.SemanticAnalysis || !set.StagedObservation) {
 		return ErrInvalidMechanismSet
 	}
-	if set.SplitPhaseCalls && (!set.SemanticAnalysis || !set.StagedObservation) {
-		return ErrInvalidMechanismSet
-	}
 	if set.SplitPhaseCalls && set.SemanticPreDispatch {
 		return ErrInvalidMechanismSet
 	}

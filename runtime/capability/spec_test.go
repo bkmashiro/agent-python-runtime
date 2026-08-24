@@ -304,6 +304,40 @@ func TestStreamingPythonPreludeExcludesWriteCapabilities(t *testing.T) {
 	}
 }
 
+func TestFuturePythonPreludeSubmitsEveryProjectedCapability(t *testing.T) {
+	registry := capability.NewRegistry()
+	read := testSpec()
+	read.Name = "fixture.read"
+	read.Version = "fixture.read.v1"
+	read.Description = "read"
+	read.EffectClass = capability.EffectExternalRead
+	read.Python = &capability.PythonProjection{Module: "fixture", Method: "read", Arguments: []string{"path"}, ResultField: "body"}
+	write := read
+	write.Name = "fixture.write"
+	write.Version = "fixture.write.v1"
+	write.Description = "write"
+	write.EffectClass = capability.EffectWorkspaceWrite
+	write.Python = &capability.PythonProjection{Module: "fixture", Method: "write", Arguments: []string{"path"}, ResultField: "written"}
+	for _, spec := range []capability.Spec{read, write} {
+		if err := registry.Register(spec, basicGrant(t), noopHandler); err != nil {
+			t.Fatal(err)
+		}
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prelude := plan.FuturePythonPrelude()
+	for _, required := range []string{"fixture.read", "fixture.write", "submit_call", "materialize_call", "_resolve_capability_futures"} {
+		if !strings.Contains(prelude, required) {
+			t.Fatalf("future prelude is missing %q: %s", required, prelude)
+		}
+	}
+	if strings.Contains(prelude, "_host_bridge.call(") {
+		t.Fatalf("future prelude retained synchronous capability call: %s", prelude)
+	}
+}
+
 func TestCapabilitySpecRejectsInvalidSchemaAndProjection(t *testing.T) {
 	for name, mutate := range map[string]func(*capability.Spec){
 		"invalid input schema": func(spec *capability.Spec) { spec.InputSchema = json.RawMessage(`{"type":`) },

@@ -1165,6 +1165,11 @@ def _execute(request_json: str) -> str:
             result_source = "missing"
         else:
             raise RuntimeError("agent output wrapper returned an invalid disposition")
+        resolver = namespace.get("_resolve_capability_futures")
+        if callable(resolver):
+            resolved_result = resolver(result if result_present else None)
+            if result_present:
+                result = resolved_result
         effective_digest = _validated_effective_ast_sha256
         if effective_digest is None:
             raise RuntimeError("agent effective source identity is unavailable")

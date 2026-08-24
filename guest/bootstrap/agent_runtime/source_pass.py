@@ -290,6 +290,9 @@ def _split_phase_parts(source_identity, static_index, name, path):
 def _rewrite_split_phase_read_block(statements, lines, source_identity, static_index):
     if len(statements) < 2:
         return None
+    statement_lines = [statement.lineno for statement in statements]
+    if len(set(statement_lines)) != len(statement_lines) or statement_lines != sorted(statement_lines):
+        return None
     reads = []
     names = set()
     for statement in statements[:-1]:
@@ -323,7 +326,7 @@ def _split_phase_structured(tree, lines, source_identity):
     derived = list(lines)
     if len(tree.body) == 1 and isinstance(tree.body[0], ast.If):
         statement = tree.body[0]
-        if not _safe_activation_value(statement.test):
+        if not _safe_activation_value(statement.test) or not statement.body or statement.body[0].lineno == statement.lineno:
             return None
         count = _rewrite_split_phase_read_block(statement.body, derived, source_identity, 1)
         if count is None:
@@ -350,6 +353,8 @@ def _split_phase_structured(tree, lines, source_identity):
         append = loop.body[1]
         if not (
             read is not None and isinstance(append, ast.Expr) and isinstance(append.value, ast.Call)
+            and loop.body[0].lineno != loop.lineno and loop.body[0].lineno == loop.body[0].end_lineno
+            and append.lineno == append.end_lineno and append.lineno != loop.body[0].lineno
             and isinstance(append.value.func, ast.Attribute) and append.value.func.attr == "append"
             and isinstance(append.value.func.value, ast.Name) and append.value.func.value.id == "result"
             and len(append.value.args) == 1 and isinstance(append.value.args[0], ast.Name) and append.value.args[0].id == read[0]

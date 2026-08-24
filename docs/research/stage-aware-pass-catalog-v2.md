@@ -8,8 +8,8 @@ passes. It gives each optimization an explicit stage, immutable registration and
 to the existing Runtime owner.
 
 The code target is Host commit
-`f07b7e52c9e63d4e6eec6ab798dee2d8be31f27e`, tree
-`75f344ad785cc432248119fa5da6b3de98a0fcc4`.
+`c78df632bc96c38ad8464fd5c3144a31316c6020`, tree
+`6450f5e4ebaaff2473a28bf3ad3c8873a92b029c`.
 
 V2 extends the four-pass catalog from v1. It registers the runnable source transforms, the
 prepared-region adapter and all optional execution-cost mechanisms represented in

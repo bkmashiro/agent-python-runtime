@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
@@ -44,8 +45,11 @@ type CampaignConfig struct {
 }
 
 type LaneResult struct {
-	Lane                  string `json:"lane"`
-	ElapsedNS             int64  `json:"elapsed_ns"`
+	Lane      string `json:"lane"`
+	ElapsedNS int64  `json:"elapsed_ns"`
+	// SourceCompleteNS is the final source-arrival boundary: the last recorded
+	// source chunk has been handed to the semantic pipeline. It is not the later
+	// semantic source-sealed timestamp.
 	SourceCompleteNS      int64  `json:"source_complete_ns"`
 	GuestStartNS          int64  `json:"guest_start_ns"`
 	GuestEndNS            int64  `json:"guest_end_ns"`
@@ -108,22 +112,35 @@ type CampaignResult struct {
 }
 
 type laneRecorder struct {
-	mu     sync.Mutex
-	start  time.Time
-	events []ProviderEvent
+	mu       sync.Mutex
+	sequence atomic.Uint64
+	start    time.Time
+	events   []ProviderEvent
 }
 
 func (recorder *laneRecorder) observe(phase, capability string) {
+	atNS := time.Since(recorder.start).Nanoseconds()
+	event := ProviderEvent{
+		Phase: phase, Capability: capability,
+		AtNS: atNS, Sequence: recorder.sequence.Add(1),
+	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
-	recorder.events = append(recorder.events, ProviderEvent{Phase: phase, Capability: capability, AtNS: time.Since(recorder.start).Nanoseconds()})
+	recorder.events = append(recorder.events, event)
 }
 
 func (recorder *laneRecorder) metrics(sourceComplete int64) (physical, early, maxConcurrent int) {
 	recorder.mu.Lock()
-	defer recorder.mu.Unlock()
+	events := append([]ProviderEvent(nil), recorder.events...)
+	recorder.mu.Unlock()
+	sort.SliceStable(events, func(left, right int) bool {
+		if events[left].AtNS != events[right].AtNS {
+			return events[left].AtNS < events[right].AtNS
+		}
+		return events[left].Sequence < events[right].Sequence
+	})
 	active := 0
-	for _, event := range recorder.events {
+	for _, event := range events {
 		switch event.Phase {
 		case "start":
 			physical++
@@ -202,7 +219,7 @@ func RunCampaign(ctx context.Context, config CampaignConfig) (CampaignResult, er
 		if baseline.PhysicalRequests != 4 || baseline.EarlyPhysicalRequests != 0 || baseline.MaxConcurrentRequests != 1 ||
 			parallel.PhysicalRequests != 4 || parallel.EarlyPhysicalRequests != 0 || parallel.MaxConcurrentRequests != 4 ||
 			parallel.LogicalClaims != 4 || parallel.Consumed != 4 || parallel.QualifiedCalls != 4 ||
-			optimized.PhysicalRequests != 4 || optimized.EarlyPhysicalRequests != 4 || optimized.LogicalClaims != 4 ||
+			optimized.PhysicalRequests != 4 || optimized.EarlyPhysicalRequests != 4 || optimized.MaxConcurrentRequests != 4 || optimized.LogicalClaims != 4 ||
 			optimized.Consumed != 4 || optimized.QualifiedCalls != 4 || baseline.GuestStartNS <= baseline.SourceCompleteNS ||
 			parallel.GuestStartNS <= parallel.SourceCompleteNS || optimized.GuestStartNS <= optimized.SourceCompleteNS {
 			return CampaignResult{}, fmt.Errorf("group %d mechanism gate failed: baseline=%+v parallel=%+v optimized=%+v", groupIndex+1, baseline, parallel, optimized)
@@ -317,7 +334,10 @@ func runLane(ctx context.Context, lane string, artifact []byte, profile runtimec
 			return LaneResult{}, err
 		}
 		if lane == "optimized" {
-			sourceComplete = <-complete
+			sourceComplete, err = waitForSourceComplete(ctx, complete)
+			if err != nil {
+				return LaneResult{}, err
+			}
 		}
 	} else {
 		sourceComplete, err = waitRecordedSource(ctx, start, workload, scheduleScale)
@@ -401,6 +421,15 @@ func runLane(ctx context.Context, lane string, artifact []byte, profile runtimec
 		}
 	}
 	return laneResult, nil
+}
+
+func waitForSourceComplete(ctx context.Context, complete <-chan int64) (int64, error) {
+	select {
+	case sourceComplete := <-complete:
+		return sourceComplete, nil
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
 }
 
 func feedAvailableSource(ctx context.Context, workload RecordedWorkload, chunks chan<- string) {

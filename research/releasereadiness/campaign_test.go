@@ -2,8 +2,10 @@ package releasereadiness
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -99,8 +101,23 @@ func TestMatchedGroupUsesFreshFinalGuestsAndPostSourceParallelReads(t *testing.T
 func TestThreeLaneOrdersAreBalancedAcrossReportableCampaign(t *testing.T) {
 	lanes := []string{"baseline", "post_source_parallel", "optimized"}
 	counts := make(map[string][3]int, len(lanes))
-	for group := 0; group < 30; group++ {
-		order := campaignLaneOrders[group%len(campaignLaneOrders)]
+	seen := make(map[string]struct{}, len(campaignLaneOrders))
+	for _, order := range campaignLaneOrders {
+		if len(order) != len(lanes) {
+			t.Fatalf("invalid lane order: %v", order)
+		}
+		members := append([]string(nil), order...)
+		sort.Strings(members)
+		if strings.Join(members, ",") != "baseline,optimized,post_source_parallel" {
+			t.Fatalf("lane order is not a permutation: %v", order)
+		}
+		seen[strings.Join(order, ",")] = struct{}{}
+	}
+	if len(seen) != 6 {
+		t.Fatalf("unique lane orders=%d want=6", len(seen))
+	}
+	for groupIndex := 0; groupIndex < 30; groupIndex++ {
+		order := campaignLaneOrders[groupIndex%len(campaignLaneOrders)]
 		if len(order) != 3 {
 			t.Fatalf("order=%v", order)
 		}
@@ -119,14 +136,22 @@ func TestThreeLaneOrdersAreBalancedAcrossReportableCampaign(t *testing.T) {
 
 func TestLaneRecorderTracksObservedConcurrency(t *testing.T) {
 	recorder := &laneRecorder{events: []ProviderEvent{
-		{Phase: "start", Capability: "a", AtNS: 1},
-		{Phase: "start", Capability: "b", AtNS: 2},
-		{Phase: "finish", Capability: "a", AtNS: 3},
-		{Phase: "finish", Capability: "b", AtNS: 4},
+		{Phase: "start", Capability: "b", AtNS: 2, Sequence: 2},
+		{Phase: "finish", Capability: "a", AtNS: 3, Sequence: 3},
+		{Phase: "start", Capability: "a", AtNS: 1, Sequence: 1},
+		{Phase: "finish", Capability: "b", AtNS: 4, Sequence: 4},
 	}}
 	physical, early, concurrent := recorder.metrics(2)
 	if physical != 2 || early != 1 || concurrent != 2 {
 		t.Fatalf("physical=%d early=%d concurrent=%d", physical, early, concurrent)
+	}
+}
+
+func TestWaitForSourceCompleteStopsOnCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := waitForSourceComplete(ctx, make(chan int64)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("error=%v", err)
 	}
 }
 

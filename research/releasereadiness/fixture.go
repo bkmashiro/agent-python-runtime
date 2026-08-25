@@ -16,6 +16,7 @@ type ProviderEvent struct {
 	Phase      string
 	Capability string
 	AtNS       int64
+	Sequence   uint64
 }
 
 type ProviderObserver func(phase, capability string)

@@ -17,7 +17,7 @@ func main() {
 	workload := flag.String("workload", "research/releasereadiness/testdata/recorded-run-1.json", "recorded workload projection")
 	workspaceRoot := flag.String("workspace-root", "", "absolute private workspace root")
 	output := flag.String("output", "", "absolute JSON output path")
-	groups := flag.Int("groups", 3, "number of balanced three-lane groups")
+	groups := flag.Int("groups", 3, "three-lane groups; 30 is reportable and smaller values are smoke runs")
 	scheduleScale := flag.Float64("schedule-scale", 1, "recorded source schedule multiplier")
 	providerScale := flag.Float64("provider-scale", 1, "recorded provider latency multiplier")
 	timeout := flag.Duration("lane-timeout", 90*time.Second, "timeout for each lane")

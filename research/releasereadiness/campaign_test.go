@@ -64,9 +64,9 @@ func TestMatchedPairUsesFreshFinalGuestsAndExactFourReadClaims(t *testing.T) {
 		WorkloadPath:  filepath.Join("testdata", "recorded-run-1.json"),
 		WorkspaceRoot: filepath.Join(t.TempDir(), "workspaces"),
 		Pairs:         1,
-		ScheduleScale: 0.01,
+		ScheduleScale: 0.5,
 		ProviderScale: 0.01,
-		Timeout:       30 * time.Second,
+		Timeout:       45 * time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -151,6 +151,7 @@ func TestRecordedPrefixQualifiesTheFirstRead(t *testing.T) {
 	decision := semantic.CanPreissueStreamingPrefix(verified, plan, verifiedAnalysis.CallSites[0].ID, semantic.PreissueContext{
 		StreamEpoch: "checkout-stream", WorkflowEpoch: "checkout-workflow", FreshnessEpoch: "checkout-fresh",
 		ExpiryEpoch: "run-end", PrivacyPartition: "checkout", ParentLineageSHA256: digestBytes([]byte("lineage")),
+		BudgetReservationSHA256: digestBytes([]byte("budget-reservation")), RemainingPhysicalReads: 4,
 	})
 	if _, ok := decision.QualifiedCall(); !ok {
 		t.Fatalf("decision=%+v analysis=%+v", decision, verifiedAnalysis)

@@ -50,7 +50,7 @@ func TestFixtureOracleIsStableAndReleaseReady(t *testing.T) {
 	}
 }
 
-func TestMatchedPairUsesFreshFinalGuestsAndExactFourReadClaims(t *testing.T) {
+func TestMatchedGroupUsesFreshFinalGuestsAndPostSourceParallelReads(t *testing.T) {
 	artifact := os.Getenv("AGENT_RUNTIME_GUEST")
 	if artifact == "" {
 		t.Skip("AGENT_RUNTIME_GUEST is required")
@@ -63,7 +63,7 @@ func TestMatchedPairUsesFreshFinalGuestsAndExactFourReadClaims(t *testing.T) {
 		ArtifactPath:  absoluteArtifact,
 		WorkloadPath:  filepath.Join("testdata", "recorded-run-1.json"),
 		WorkspaceRoot: filepath.Join(t.TempDir(), "workspaces"),
-		Pairs:         1,
+		Groups:        1,
 		ScheduleScale: 0.5,
 		ProviderScale: 0.01,
 		Timeout:       45 * time.Second,
@@ -71,21 +71,80 @@ func TestMatchedPairUsesFreshFinalGuestsAndExactFourReadClaims(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Pairs) != 1 {
-		t.Fatalf("pairs=%d", len(result.Pairs))
+	if result.SchemaVersion != "pysolate.release-readiness-three-lane-campaign.v2" || len(result.Groups) != 1 {
+		t.Fatalf("schema=%q groups=%d", result.SchemaVersion, len(result.Groups))
 	}
-	pair := result.Pairs[0]
-	if pair.Baseline.ResultSHA256 != pair.Optimized.ResultSHA256 || pair.Baseline.WorkspaceSHA256 != pair.Optimized.WorkspaceSHA256 {
-		t.Fatalf("baseline=%+v optimized=%+v", pair.Baseline, pair.Optimized)
+	group := result.Groups[0]
+	lanes := []LaneResult{group.Baseline, group.PostSourceParallel, group.Optimized}
+	for _, lane := range lanes {
+		if lane.ResultSHA256 != ExpectedFixtureResultSHA256 || lane.WorkspaceSHA256 != group.Baseline.WorkspaceSHA256 || lane.SourceSHA256 != group.Baseline.SourceSHA256 {
+			t.Fatalf("lane parity failed: %+v", lane)
+		}
+		if lane.GuestStartNS <= lane.SourceCompleteNS || lane.PhysicalRequests != 4 {
+			t.Fatalf("lane mechanism failed: %+v", lane)
+		}
 	}
-	if pair.Baseline.PhysicalRequests != 4 || pair.Optimized.PhysicalRequests != 4 || pair.Optimized.LogicalClaims != 4 || pair.Optimized.Consumed != 4 {
-		t.Fatalf("baseline=%+v optimized=%+v", pair.Baseline, pair.Optimized)
+	parallel := group.PostSourceParallel
+	if parallel.EarlyPhysicalRequests != 0 || parallel.MaxConcurrentRequests != 4 || parallel.LogicalClaims != 4 || parallel.Consumed != 4 || parallel.QualifiedCalls != 4 {
+		t.Fatalf("post-source parallel=%+v", parallel)
 	}
-	if pair.Baseline.EarlyPhysicalRequests != 0 || pair.Optimized.EarlyPhysicalRequests != 4 {
-		t.Fatalf("baseline early=%d optimized early=%d", pair.Baseline.EarlyPhysicalRequests, pair.Optimized.EarlyPhysicalRequests)
+	if group.Baseline.EarlyPhysicalRequests != 0 || group.Baseline.MaxConcurrentRequests != 1 || group.Optimized.EarlyPhysicalRequests != 4 {
+		t.Fatalf("baseline=%+v optimized=%+v", group.Baseline, group.Optimized)
 	}
-	if pair.Baseline.GuestStartNS <= pair.Baseline.SourceCompleteNS || pair.Optimized.GuestStartNS <= pair.Optimized.SourceCompleteNS {
-		t.Fatalf("baseline guest/source=%d/%d optimized=%d/%d", pair.Baseline.GuestStartNS, pair.Baseline.SourceCompleteNS, pair.Optimized.GuestStartNS, pair.Optimized.SourceCompleteNS)
+	if len(group.LaneOrder) != 3 || group.LaneOrder[0] != "baseline" || group.LaneOrder[1] != "post_source_parallel" || group.LaneOrder[2] != "optimized" {
+		t.Fatalf("lane order=%v", group.LaneOrder)
+	}
+}
+
+func TestThreeLaneOrdersAreBalancedAcrossReportableCampaign(t *testing.T) {
+	lanes := []string{"baseline", "post_source_parallel", "optimized"}
+	counts := make(map[string][3]int, len(lanes))
+	for group := 0; group < 30; group++ {
+		order := campaignLaneOrders[group%len(campaignLaneOrders)]
+		if len(order) != 3 {
+			t.Fatalf("order=%v", order)
+		}
+		for position, lane := range order {
+			row := counts[lane]
+			row[position]++
+			counts[lane] = row
+		}
+	}
+	for _, lane := range lanes {
+		if counts[lane] != [3]int{10, 10, 10} {
+			t.Fatalf("lane=%s counts=%v", lane, counts[lane])
+		}
+	}
+}
+
+func TestLaneRecorderTracksObservedConcurrency(t *testing.T) {
+	recorder := &laneRecorder{events: []ProviderEvent{
+		{Phase: "start", Capability: "a", AtNS: 1},
+		{Phase: "start", Capability: "b", AtNS: 2},
+		{Phase: "finish", Capability: "a", AtNS: 3},
+		{Phase: "finish", Capability: "b", AtNS: 4},
+	}}
+	physical, early, concurrent := recorder.metrics(2)
+	if physical != 2 || early != 1 || concurrent != 2 {
+		t.Fatalf("physical=%d early=%d concurrent=%d", physical, early, concurrent)
+	}
+}
+
+func TestThreeLaneSummaryUsesWithinGroupComparisons(t *testing.T) {
+	groups := []GroupResult{
+		{Baseline: LaneResult{ElapsedNS: 100}, PostSourceParallel: LaneResult{ElapsedNS: 80}, Optimized: LaneResult{ElapsedNS: 70}},
+		{Baseline: LaneResult{ElapsedNS: 120}, PostSourceParallel: LaneResult{ElapsedNS: 90}, Optimized: LaneResult{ElapsedNS: 75}},
+		{Baseline: LaneResult{ElapsedNS: 110}, PostSourceParallel: LaneResult{ElapsedNS: 85}, Optimized: LaneResult{ElapsedNS: 72}},
+	}
+	summary := summarizeGroups(groups)
+	if summary.BaselineMedianNS != 110 || summary.PostSourceParallelMedianNS != 85 || summary.OptimizedMedianNS != 72 {
+		t.Fatalf("summary=%+v", summary)
+	}
+	if summary.BaselineVsParallel.MedianPairedSavingNS != 25 || summary.ParallelVsOptimized.MedianPairedSavingNS != 13 || summary.BaselineVsOptimized.MedianPairedSavingNS != 38 {
+		t.Fatalf("summary=%+v", summary)
+	}
+	if summary.BaselineVsParallel.ImprovedGroups != 3 || summary.ParallelVsOptimized.ImprovedGroups != 3 || summary.BaselineVsOptimized.ImprovedGroups != 3 {
+		t.Fatalf("summary=%+v", summary)
 	}
 }
 

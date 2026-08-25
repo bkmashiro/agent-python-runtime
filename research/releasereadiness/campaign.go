@@ -24,11 +24,20 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
+var campaignLaneOrders = [][]string{
+	{"baseline", "post_source_parallel", "optimized"},
+	{"baseline", "optimized", "post_source_parallel"},
+	{"post_source_parallel", "baseline", "optimized"},
+	{"post_source_parallel", "optimized", "baseline"},
+	{"optimized", "baseline", "post_source_parallel"},
+	{"optimized", "post_source_parallel", "baseline"},
+}
+
 type CampaignConfig struct {
 	ArtifactPath  string
 	WorkloadPath  string
 	WorkspaceRoot string
-	Pairs         int
+	Groups        int
 	ScheduleScale float64
 	ProviderScale float64
 	Timeout       time.Duration
@@ -42,6 +51,7 @@ type LaneResult struct {
 	GuestEndNS            int64  `json:"guest_end_ns"`
 	PhysicalRequests      int    `json:"physical_requests"`
 	EarlyPhysicalRequests int    `json:"early_physical_requests"`
+	MaxConcurrentRequests int    `json:"max_concurrent_requests"`
 	LogicalClaims         uint32 `json:"logical_claims"`
 	Consumed              uint32 `json:"consumed"`
 	QualifiedCalls        uint32 `json:"qualified_calls"`
@@ -50,27 +60,39 @@ type LaneResult struct {
 	SourceSHA256          string `json:"source_sha256"`
 }
 
-type PairResult struct {
-	PairIndex  int        `json:"pair_index"`
-	FirstLane  string     `json:"first_lane"`
-	Baseline   LaneResult `json:"baseline"`
-	Optimized  LaneResult `json:"optimized"`
-	SavingNS   int64      `json:"saving_ns"`
-	SavingRate float64    `json:"saving_rate"`
+type GroupResult struct {
+	GroupIndex                  int        `json:"group_index"`
+	LaneOrder                   []string   `json:"lane_order"`
+	Baseline                    LaneResult `json:"baseline"`
+	PostSourceParallel          LaneResult `json:"post_source_parallel"`
+	Optimized                   LaneResult `json:"optimized"`
+	BaselineVsParallelSavingNS  int64      `json:"baseline_vs_post_source_parallel_saving_ns"`
+	ParallelVsOptimizedSavingNS int64      `json:"post_source_parallel_vs_optimized_saving_ns"`
+	BaselineVsOptimizedSavingNS int64      `json:"baseline_vs_optimized_saving_ns"`
 }
 
-type CampaignSummary struct {
-	BaselineMedianNS       int64   `json:"baseline_median_ns"`
-	OptimizedMedianNS      int64   `json:"optimized_median_ns"`
-	ScheduleMedianDiffNS   int64   `json:"schedule_median_difference_ns"`
+type ComparisonSummary struct {
+	LeftLane               string  `json:"left_lane"`
+	RightLane              string  `json:"right_lane"`
+	LeftMedianNS           int64   `json:"left_median_ns"`
+	RightMedianNS          int64   `json:"right_median_ns"`
 	MedianPairedSavingNS   int64   `json:"median_paired_saving_ns"`
 	MedianPairedSavingRate float64 `json:"median_paired_saving_rate"`
 	BootstrapLowNS         int64   `json:"bootstrap_95_low_ns"`
 	BootstrapHighNS        int64   `json:"bootstrap_95_high_ns"`
-	ImprovedPairs          int     `json:"improved_pairs"`
-	TiedPairs              int     `json:"tied_pairs"`
-	RegressedPairs         int     `json:"regressed_pairs"`
+	ImprovedGroups         int     `json:"improved_groups"`
+	TiedGroups             int     `json:"tied_groups"`
+	RegressedGroups        int     `json:"regressed_groups"`
 	SignTestP              float64 `json:"two_sided_sign_test_p"`
+}
+
+type CampaignSummary struct {
+	BaselineMedianNS           int64             `json:"baseline_median_ns"`
+	PostSourceParallelMedianNS int64             `json:"post_source_parallel_median_ns"`
+	OptimizedMedianNS          int64             `json:"optimized_median_ns"`
+	BaselineVsParallel         ComparisonSummary `json:"baseline_vs_post_source_parallel"`
+	ParallelVsOptimized        ComparisonSummary `json:"post_source_parallel_vs_optimized"`
+	BaselineVsOptimized        ComparisonSummary `json:"baseline_vs_optimized"`
 }
 
 type CampaignResult struct {
@@ -78,7 +100,7 @@ type CampaignResult struct {
 	ArtifactSHA256 string          `json:"artifact_sha256"`
 	SourceSHA256   string          `json:"source_sha256"`
 	RunIndex       int             `json:"recorded_run_index"`
-	Pairs          []PairResult    `json:"pairs"`
+	Groups         []GroupResult   `json:"groups"`
 	Summary        CampaignSummary `json:"summary"`
 	ScheduleScale  float64         `json:"schedule_scale"`
 	ProviderScale  float64         `json:"provider_scale"`
@@ -97,24 +119,33 @@ func (recorder *laneRecorder) observe(phase, capability string) {
 	recorder.events = append(recorder.events, ProviderEvent{Phase: phase, Capability: capability, AtNS: time.Since(recorder.start).Nanoseconds()})
 }
 
-func (recorder *laneRecorder) counts(sourceComplete int64) (physical, early int) {
+func (recorder *laneRecorder) metrics(sourceComplete int64) (physical, early, maxConcurrent int) {
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
+	active := 0
 	for _, event := range recorder.events {
-		if event.Phase != "start" {
-			continue
-		}
-		physical++
-		if event.AtNS < sourceComplete {
-			early++
+		switch event.Phase {
+		case "start":
+			physical++
+			active++
+			if active > maxConcurrent {
+				maxConcurrent = active
+			}
+			if event.AtNS < sourceComplete {
+				early++
+			}
+		case "finish", "finish_error":
+			if active > 0 {
+				active--
+			}
 		}
 	}
-	return physical, early
+	return physical, early, maxConcurrent
 }
 
 func RunCampaign(ctx context.Context, config CampaignConfig) (CampaignResult, error) {
 	if ctx == nil || config.ArtifactPath == "" || !filepath.IsAbs(config.ArtifactPath) || config.WorkloadPath == "" ||
-		config.WorkspaceRoot == "" || !filepath.IsAbs(config.WorkspaceRoot) || config.Pairs < 1 || config.Pairs > 30 ||
+		config.WorkspaceRoot == "" || !filepath.IsAbs(config.WorkspaceRoot) || config.Groups < 1 || config.Groups > 30 ||
 		config.ScheduleScale <= 0 || config.ProviderScale <= 0 {
 		return CampaignResult{}, errors.New("invalid release-readiness campaign config")
 	}
@@ -137,54 +168,62 @@ func RunCampaign(ctx context.Context, config CampaignConfig) (CampaignResult, er
 		return CampaignResult{}, err
 	}
 	result := CampaignResult{
-		SchemaVersion: "pysolate.release-readiness-matched-campaign.v1", ArtifactSHA256: digestBytes(artifact),
-		SourceSHA256: workload.SourceSHA256, RunIndex: workload.RunIndex, Pairs: make([]PairResult, 0, config.Pairs),
+		SchemaVersion: "pysolate.release-readiness-three-lane-campaign.v2", ArtifactSHA256: digestBytes(artifact),
+		SourceSHA256: workload.SourceSHA256, RunIndex: workload.RunIndex, Groups: make([]GroupResult, 0, config.Groups),
 		ScheduleScale: config.ScheduleScale, ProviderScale: config.ProviderScale,
-		Reportable: config.Pairs == 30 && config.ScheduleScale == 1 && config.ProviderScale == 1,
+		Reportable: config.Groups == 30 && config.ScheduleScale == 1 && config.ProviderScale == 1,
 	}
-	for pairIndex := 0; pairIndex < config.Pairs; pairIndex++ {
-		first := "baseline"
-		if pairIndex%2 == 1 {
-			first = "optimized"
-		}
-		var baseline, optimized LaneResult
-		for _, lane := range []string{first, opposite(first)} {
+	for groupIndex := 0; groupIndex < config.Groups; groupIndex++ {
+		order := campaignLaneOrders[groupIndex%len(campaignLaneOrders)]
+		var baseline, parallel, optimized LaneResult
+		for _, lane := range order {
 			laneContext, cancel := context.WithTimeout(ctx, config.Timeout)
-			laneRoot := filepath.Join(config.WorkspaceRoot, fmt.Sprintf("pair-%02d-%s", pairIndex+1, lane))
+			laneRoot := filepath.Join(config.WorkspaceRoot, fmt.Sprintf("group-%02d-%s", groupIndex+1, lane))
 			laneResult, laneErr := runLane(laneContext, lane, artifact, profile, workload, laneRoot, config.ScheduleScale, config.ProviderScale)
 			cancel()
 			if laneErr != nil {
-				return CampaignResult{}, fmt.Errorf("pair %d %s: %w", pairIndex+1, lane, laneErr)
+				return CampaignResult{}, fmt.Errorf("group %d %s: %w", groupIndex+1, lane, laneErr)
 			}
-			if lane == "baseline" {
+			switch lane {
+			case "baseline":
 				baseline = laneResult
-			} else {
+			case "post_source_parallel":
+				parallel = laneResult
+			case "optimized":
 				optimized = laneResult
 			}
 		}
-		if baseline.ResultSHA256 != optimized.ResultSHA256 || baseline.ResultSHA256 != ExpectedFixtureResultSHA256 ||
-			baseline.WorkspaceSHA256 != optimized.WorkspaceSHA256 || baseline.SourceSHA256 != optimized.SourceSHA256 {
-			return CampaignResult{}, fmt.Errorf("pair %d result or workspace parity failed", pairIndex+1)
+		if baseline.ResultSHA256 != parallel.ResultSHA256 || baseline.ResultSHA256 != optimized.ResultSHA256 ||
+			baseline.ResultSHA256 != ExpectedFixtureResultSHA256 || baseline.WorkspaceSHA256 != parallel.WorkspaceSHA256 ||
+			baseline.WorkspaceSHA256 != optimized.WorkspaceSHA256 || baseline.SourceSHA256 != parallel.SourceSHA256 ||
+			baseline.SourceSHA256 != optimized.SourceSHA256 {
+			return CampaignResult{}, fmt.Errorf("group %d result, workspace or source parity failed", groupIndex+1)
 		}
-		if baseline.PhysicalRequests != 4 || baseline.EarlyPhysicalRequests != 0 || optimized.PhysicalRequests != 4 ||
-			optimized.EarlyPhysicalRequests != 4 || optimized.LogicalClaims != 4 || optimized.Consumed != 4 || optimized.QualifiedCalls != 4 ||
-			baseline.GuestStartNS <= baseline.SourceCompleteNS || optimized.GuestStartNS <= optimized.SourceCompleteNS {
-			return CampaignResult{}, fmt.Errorf("pair %d mechanism gate failed: baseline=%+v optimized=%+v", pairIndex+1, baseline, optimized)
+		if baseline.PhysicalRequests != 4 || baseline.EarlyPhysicalRequests != 0 || baseline.MaxConcurrentRequests != 1 ||
+			parallel.PhysicalRequests != 4 || parallel.EarlyPhysicalRequests != 0 || parallel.MaxConcurrentRequests != 4 ||
+			parallel.LogicalClaims != 4 || parallel.Consumed != 4 || parallel.QualifiedCalls != 4 ||
+			optimized.PhysicalRequests != 4 || optimized.EarlyPhysicalRequests != 4 || optimized.LogicalClaims != 4 ||
+			optimized.Consumed != 4 || optimized.QualifiedCalls != 4 || baseline.GuestStartNS <= baseline.SourceCompleteNS ||
+			parallel.GuestStartNS <= parallel.SourceCompleteNS || optimized.GuestStartNS <= optimized.SourceCompleteNS {
+			return CampaignResult{}, fmt.Errorf("group %d mechanism gate failed: baseline=%+v parallel=%+v optimized=%+v", groupIndex+1, baseline, parallel, optimized)
 		}
-		saving := baseline.ElapsedNS - optimized.ElapsedNS
-		result.Pairs = append(result.Pairs, PairResult{
-			PairIndex: pairIndex + 1, FirstLane: first, Baseline: baseline, Optimized: optimized,
-			SavingNS: saving, SavingRate: float64(saving) / float64(baseline.ElapsedNS),
+		result.Groups = append(result.Groups, GroupResult{
+			GroupIndex: groupIndex + 1, LaneOrder: append([]string(nil), order...), Baseline: baseline,
+			PostSourceParallel: parallel, Optimized: optimized,
+			BaselineVsParallelSavingNS:  baseline.ElapsedNS - parallel.ElapsedNS,
+			ParallelVsOptimizedSavingNS: parallel.ElapsedNS - optimized.ElapsedNS,
+			BaselineVsOptimizedSavingNS: baseline.ElapsedNS - optimized.ElapsedNS,
 		})
 	}
-	result.Summary = summarizePairs(result.Pairs)
+	result.Summary = summarizeGroups(result.Groups)
 	return result, nil
 }
 
 func runLane(ctx context.Context, lane string, artifact []byte, profile runtimeconfig.ExecutionProfile, workload RecordedWorkload, root string, scheduleScale, providerScale float64) (LaneResult, error) {
-	if lane != "baseline" && lane != "optimized" {
+	if lane != "baseline" && lane != "post_source_parallel" && lane != "optimized" {
 		return LaneResult{}, errors.New("unknown campaign lane")
 	}
+	usesPreDispatch := lane != "baseline"
 	if err := os.Mkdir(root, 0o700); err != nil {
 		return LaneResult{}, err
 	}
@@ -209,7 +248,7 @@ func runLane(ctx context.Context, lane string, artifact []byte, profile runtimec
 	var controller *semantic.StreamingSemanticPreDispatch
 	var admission *semantic.StreamingPrefixAdmission
 	var generated semantic.GeneratedSource
-	if lane == "optimized" {
+	if usesPreDispatch {
 		budget, budgetErr := semantic.NewPreDispatchBudget(4)
 		if budgetErr != nil {
 			return LaneResult{}, budgetErr
@@ -229,7 +268,7 @@ func runLane(ctx context.Context, lane string, artifact []byte, profile runtimec
 	recorder.start = time.Now()
 	start := recorder.start
 	var sourceComplete int64
-	if lane == "optimized" {
+	if usesPreDispatch {
 		analyzerConfig := runtimeconfig.DefaultRunConfig()
 		analyzerConfig.ExecutionProfile = &profile
 		analyzerConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
@@ -241,38 +280,55 @@ func runLane(ctx context.Context, lane string, artifact []byte, profile runtimec
 			ArtifactSHA256: digestBytes(artifact), ExecutionProfileSHA256: profileBinding,
 			ImportClosureSHA256: digestBytes([]byte("checkout-readiness-imports-v1")), CapabilityPlanSHA256: plan.Identity(),
 		}
+		analyze := func(analyzeContext context.Context, source string, prefixBindings semantic.Bindings, prefixPlan *capability.Plan) (semantic.VerifiedAnalysis, error) {
+			analyzer, createErr := wazeroengine.New(analyzeContext, artifact, analyzerConfig)
+			if createErr != nil {
+				return semantic.VerifiedAnalysis{}, createErr
+			}
+			defer analyzer.Close(context.Background())
+			request, requestErr := semantic.NewRequest(source, prefixBindings, prefixPlan)
+			if requestErr != nil {
+				return semantic.VerifiedAnalysis{}, requestErr
+			}
+			return semantic.AnalyzeVerified(analyzeContext, analyzer, request)
+		}
 		chunks := make(chan string, 32)
-		complete := make(chan int64, 1)
-		go feedRecordedSource(ctx, start, workload, scheduleScale, chunks, complete)
-		eligible := make(map[uint32]struct{}, len(workload.ToolCalls))
-		for _, call := range workload.ToolCalls {
-			eligible[uint32(call.Statement)] = struct{}{}
+		var complete chan int64
+		var shouldAnalyze func(uint32, string) bool
+		if lane == "optimized" {
+			complete = make(chan int64, 1)
+			go feedRecordedSource(ctx, start, workload, scheduleScale, chunks, complete)
+			eligible := make(map[uint32]struct{}, len(workload.ToolCalls))
+			for _, call := range workload.ToolCalls {
+				eligible[uint32(call.Statement)] = struct{}{}
+			}
+			shouldAnalyze = func(prefixIndex uint32, _ string) bool { _, ok := eligible[prefixIndex]; return ok }
+		} else {
+			sourceComplete, err = waitRecordedSource(ctx, start, workload, scheduleScale)
+			if err != nil {
+				return LaneResult{}, err
+			}
+			chunks <- workload.Source
+			close(chunks)
 		}
 		generated, err = semantic.GenerateVerifiedSourceWithPreDispatch(ctx, semantic.VerifiedSourceGenerationConfig{
 			Plan: plan, Bindings: bindings, Admission: admission, SourceChunks: chunks,
-			ShouldAnalyzePrefix: func(prefixIndex uint32, _ string) bool { _, ok := eligible[prefixIndex]; return ok },
-			Analyze: func(analyzeContext context.Context, source string, prefixBindings semantic.Bindings, prefixPlan *capability.Plan) (semantic.VerifiedAnalysis, error) {
-				analyzer, createErr := wazeroengine.New(analyzeContext, artifact, analyzerConfig)
-				if createErr != nil {
-					return semantic.VerifiedAnalysis{}, createErr
-				}
-				defer analyzer.Close(context.Background())
-				request, requestErr := semantic.NewRequest(source, prefixBindings, prefixPlan)
-				if requestErr != nil {
-					return semantic.VerifiedAnalysis{}, requestErr
-				}
-				return semantic.AnalyzeVerified(analyzeContext, analyzer, request)
-			},
+			ShouldAnalyzePrefix: shouldAnalyze, Analyze: analyze,
 		})
 		if err != nil {
 			return LaneResult{}, err
 		}
-		sourceComplete = <-complete
+		if lane == "optimized" {
+			sourceComplete = <-complete
+		}
 	} else {
 		sourceComplete, err = waitRecordedSource(ctx, start, workload, scheduleScale)
 		if err != nil {
 			return LaneResult{}, err
 		}
+	}
+	if usesPreDispatch {
+		defer func() { _ = controller.Finalize(false) }()
 	}
 	attempt, err := manager.ForkAttempt(base)
 	if err != nil {
@@ -285,14 +341,14 @@ func runLane(ctx context.Context, lane string, artifact []byte, profile runtimec
 		WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: "checkout-" + lane,
 		BrokerFactory: func(context.Context) (*capability.Broker, error) {
 			brokerConfig := capability.Config{RunIdentity: "checkout-" + lane, Plan: plan}
-			if lane == "optimized" {
+			if usesPreDispatch {
 				brokerConfig.StagedClaimer = controller
 				brokerConfig.SemanticPreDispatch = true
 			}
 			return capability.NewBroker(brokerConfig)
 		},
 	}
-	if lane == "optimized" {
+	if usesPreDispatch {
 		passes, passErr := passplugin.NewDefaultEnabledCatalog(passregistration.SemanticPreDispatch)
 		if passErr != nil {
 			_ = attempt.Discard()
@@ -313,7 +369,7 @@ func runLane(ctx context.Context, lane string, artifact []byte, profile runtimec
 	}
 	guestStart := time.Since(start).Nanoseconds()
 	var runResult streaming.RunResult
-	if lane == "optimized" {
+	if usesPreDispatch {
 		runResult, err = semantic.ExecuteGeneratedSource(ctx, runner, attempt, request, plan.StreamingPythonPrelude(), generated)
 	} else {
 		runResult, err = streaming.Execute(ctx, runner, attempt, request, plan.StreamingPythonPrelude())
@@ -330,20 +386,20 @@ func runLane(ctx context.Context, lane string, artifact []byte, profile runtimec
 	if err != nil {
 		return LaneResult{}, err
 	}
-	physical, early := recorder.counts(sourceComplete)
+	physical, early, maxConcurrent := recorder.metrics(sourceComplete)
 	laneResult := LaneResult{
 		Lane: lane, ElapsedNS: guestEnd, SourceCompleteNS: sourceComplete, GuestStartNS: guestStart, GuestEndNS: guestEnd,
-		PhysicalRequests: physical, EarlyPhysicalRequests: early, ResultSHA256: resultDigest,
+		PhysicalRequests: physical, EarlyPhysicalRequests: early, MaxConcurrentRequests: maxConcurrent, ResultSHA256: resultDigest,
 		WorkspaceSHA256: workspaceInfo.WorkspaceSHA256, SourceSHA256: workload.SourceSHA256,
 	}
-	if lane == "optimized" {
+	if usesPreDispatch {
 		controllerSnapshot := controller.Snapshot()
 		admissionSnapshot := admission.Snapshot()
 		laneResult.LogicalClaims = controllerSnapshot.LogicalClaims
 		laneResult.Consumed = controllerSnapshot.Consumed
 		laneResult.QualifiedCalls = admissionSnapshot.QualifiedCallCount
 		if !controllerSnapshot.SourceSealed || !admissionSnapshot.Complete || controllerSnapshot.FinalSourceSHA256 != workload.SourceSHA256 {
-			return LaneResult{}, errors.New("optimized source seal evidence mismatch")
+			return LaneResult{}, fmt.Errorf("%s source seal evidence mismatch", lane)
 		}
 	}
 	return laneResult, nil
@@ -413,33 +469,43 @@ func executionProfile(artifact []byte) (runtimeconfig.ExecutionProfile, error) {
 	})
 }
 
-func summarizePairs(pairs []PairResult) CampaignSummary {
-	baseline := make([]int64, len(pairs))
-	optimized := make([]int64, len(pairs))
-	savings := make([]int64, len(pairs))
-	rates := make([]float64, len(pairs))
-	summary := CampaignSummary{}
-	for index, pair := range pairs {
-		baseline[index] = pair.Baseline.ElapsedNS
-		optimized[index] = pair.Optimized.ElapsedNS
-		savings[index] = pair.SavingNS
-		rates[index] = pair.SavingRate
+func summarizeGroups(groups []GroupResult) CampaignSummary {
+	baseline := make([]int64, len(groups))
+	parallel := make([]int64, len(groups))
+	optimized := make([]int64, len(groups))
+	for index, group := range groups {
+		baseline[index] = group.Baseline.ElapsedNS
+		parallel[index] = group.PostSourceParallel.ElapsedNS
+		optimized[index] = group.Optimized.ElapsedNS
+	}
+	return CampaignSummary{
+		BaselineMedianNS: medianInt64(baseline), PostSourceParallelMedianNS: medianInt64(parallel), OptimizedMedianNS: medianInt64(optimized),
+		BaselineVsParallel:  summarizeComparison("baseline", "post_source_parallel", baseline, parallel, 20260825),
+		ParallelVsOptimized: summarizeComparison("post_source_parallel", "optimized", parallel, optimized, 20260826),
+		BaselineVsOptimized: summarizeComparison("baseline", "optimized", baseline, optimized, 20260827),
+	}
+}
+
+func summarizeComparison(leftLane, rightLane string, left, right []int64, seed int64) ComparisonSummary {
+	savings := make([]int64, len(left))
+	rates := make([]float64, len(left))
+	summary := ComparisonSummary{LeftLane: leftLane, RightLane: rightLane, LeftMedianNS: medianInt64(left), RightMedianNS: medianInt64(right)}
+	for index := range left {
+		savings[index] = left[index] - right[index]
+		rates[index] = float64(savings[index]) / float64(left[index])
 		switch {
-		case pair.SavingNS > 0:
-			summary.ImprovedPairs++
-		case pair.SavingNS < 0:
-			summary.RegressedPairs++
+		case savings[index] > 0:
+			summary.ImprovedGroups++
+		case savings[index] < 0:
+			summary.RegressedGroups++
 		default:
-			summary.TiedPairs++
+			summary.TiedGroups++
 		}
 	}
-	summary.BaselineMedianNS = medianInt64(baseline)
-	summary.OptimizedMedianNS = medianInt64(optimized)
-	summary.ScheduleMedianDiffNS = summary.BaselineMedianNS - summary.OptimizedMedianNS
 	summary.MedianPairedSavingNS = medianInt64(savings)
 	summary.MedianPairedSavingRate = medianFloat64(rates)
-	summary.BootstrapLowNS, summary.BootstrapHighNS = bootstrapMedianInterval(savings, 10_000, 20260825)
-	summary.SignTestP = twoSidedSignTest(summary.ImprovedPairs, summary.RegressedPairs)
+	summary.BootstrapLowNS, summary.BootstrapHighNS = bootstrapMedianInterval(savings, 10_000, seed)
+	summary.SignTestP = twoSidedSignTest(summary.ImprovedGroups, summary.RegressedGroups)
 	return summary
 }
 
@@ -491,13 +557,6 @@ func twoSidedSignTest(positive, negative int) float64 {
 		probability += math.Gamma(float64(n+1)) / (math.Gamma(float64(index+1)) * math.Gamma(float64(n-index+1))) * math.Pow(0.5, float64(n))
 	}
 	return math.Min(1, 2*probability)
-}
-
-func opposite(lane string) string {
-	if lane == "baseline" {
-		return "optimized"
-	}
-	return "baseline"
 }
 
 type campaignLauncher struct{}

@@ -17,7 +17,7 @@ func main() {
 	workload := flag.String("workload", "research/releasereadiness/testdata/recorded-run-1.json", "recorded workload projection")
 	workspaceRoot := flag.String("workspace-root", "", "absolute private workspace root")
 	output := flag.String("output", "", "absolute JSON output path")
-	pairs := flag.Int("pairs", 3, "number of alternating matched pairs")
+	groups := flag.Int("groups", 3, "number of balanced three-lane groups")
 	scheduleScale := flag.Float64("schedule-scale", 1, "recorded source schedule multiplier")
 	providerScale := flag.Float64("provider-scale", 1, "recorded provider latency multiplier")
 	timeout := flag.Duration("lane-timeout", 90*time.Second, "timeout for each lane")
@@ -33,7 +33,7 @@ func main() {
 	}
 	result, err := releasereadiness.RunCampaign(context.Background(), releasereadiness.CampaignConfig{
 		ArtifactPath: *artifact, WorkloadPath: absoluteWorkload, WorkspaceRoot: *workspaceRoot,
-		Pairs: *pairs, ScheduleScale: *scheduleScale, ProviderScale: *providerScale, Timeout: *timeout,
+		Groups: *groups, ScheduleScale: *scheduleScale, ProviderScale: *providerScale, Timeout: *timeout,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -54,6 +54,7 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf("evidence=%s\n", *output)
-	fmt.Printf("pairs=%d baseline_median_ns=%d optimized_median_ns=%d paired_saving_ns=%d reportable=%t\n",
-		len(result.Pairs), result.Summary.BaselineMedianNS, result.Summary.OptimizedMedianNS, result.Summary.MedianPairedSavingNS, result.Reportable)
+	fmt.Printf("groups=%d baseline_median_ns=%d post_source_parallel_median_ns=%d optimized_median_ns=%d parallel_vs_optimized_saving_ns=%d reportable=%t\n",
+		len(result.Groups), result.Summary.BaselineMedianNS, result.Summary.PostSourceParallelMedianNS, result.Summary.OptimizedMedianNS,
+		result.Summary.ParallelVsOptimized.MedianPairedSavingNS, result.Reportable)
 }

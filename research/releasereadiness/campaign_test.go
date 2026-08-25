@@ -65,7 +65,7 @@ func TestMatchedGroupUsesFreshFinalGuestsAndPostSourceParallelReads(t *testing.T
 		WorkspaceRoot: filepath.Join(t.TempDir(), "workspaces"),
 		Groups:        1,
 		ScheduleScale: 0.5,
-		ProviderScale: 0.01,
+		ProviderScale: 0.5,
 		Timeout:       45 * time.Second,
 	})
 	if err != nil {

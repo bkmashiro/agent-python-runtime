@@ -294,22 +294,20 @@ func runLane(ctx context.Context, lane string, artifact []byte, profile runtimec
 		}
 		chunks := make(chan string, 32)
 		var complete chan int64
-		var shouldAnalyze func(uint32, string) bool
+		eligible := make(map[uint32]struct{}, len(workload.ToolCalls))
+		for _, call := range workload.ToolCalls {
+			eligible[uint32(call.Statement)] = struct{}{}
+		}
+		shouldAnalyze := func(prefixIndex uint32, _ string) bool { _, ok := eligible[prefixIndex]; return ok }
 		if lane == "optimized" {
 			complete = make(chan int64, 1)
 			go feedRecordedSource(ctx, start, workload, scheduleScale, chunks, complete)
-			eligible := make(map[uint32]struct{}, len(workload.ToolCalls))
-			for _, call := range workload.ToolCalls {
-				eligible[uint32(call.Statement)] = struct{}{}
-			}
-			shouldAnalyze = func(prefixIndex uint32, _ string) bool { _, ok := eligible[prefixIndex]; return ok }
 		} else {
 			sourceComplete, err = waitRecordedSource(ctx, start, workload, scheduleScale)
 			if err != nil {
 				return LaneResult{}, err
 			}
-			chunks <- workload.Source
-			close(chunks)
+			go feedAvailableSource(ctx, workload, chunks)
 		}
 		generated, err = semantic.GenerateVerifiedSourceWithPreDispatch(ctx, semantic.VerifiedSourceGenerationConfig{
 			Plan: plan, Bindings: bindings, Admission: admission, SourceChunks: chunks,
@@ -403,6 +401,17 @@ func runLane(ctx context.Context, lane string, artifact []byte, profile runtimec
 		}
 	}
 	return laneResult, nil
+}
+
+func feedAvailableSource(ctx context.Context, workload RecordedWorkload, chunks chan<- string) {
+	defer close(chunks)
+	for _, statement := range workload.Statements {
+		select {
+		case chunks <- statement.Source + "\n":
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 func feedRecordedSource(ctx context.Context, start time.Time, workload RecordedWorkload, scale float64, chunks chan<- string, complete chan<- int64) {

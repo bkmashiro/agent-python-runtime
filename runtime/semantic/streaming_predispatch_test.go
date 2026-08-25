@@ -333,6 +333,19 @@ func TestCanPreissueStreamingPrefixCrossesOnlySafeFunctionDeclarations(t *testin
 	if _, ok := CanPreissueStreamingPrefix(unsafe, plan, site.ID, legalityContext()).QualifiedCall(); ok {
 		t.Fatal("streaming prefix crossed an unsafe function declaration")
 	}
+	analysis, err = verified.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysis.CandidateRegions[0].RejectionReasons = []CandidateRejection{CandidateRejectDeclaration}
+	_, encoded, err = analysis.Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	genericDeclaration := VerifiedAnalysis{analysisJSON: encoded}
+	if _, ok := CanPreissueStreamingPrefix(genericDeclaration, plan, site.ID, legalityContext()).QualifiedCall(); ok {
+		t.Fatal("streaming prefix crossed a generic declaration such as an import")
+	}
 }
 
 func streamingLookaheadWithDeclaration(t *testing.T, plan *capability.Plan) (VerifiedAnalysis, CallSite) {
@@ -349,7 +362,7 @@ func streamingLookaheadWithDeclaration(t *testing.T, plan *capability.Plan) (Ver
 		Span: SourceSpan{StartLine: 1, StartColumn: 0, EndLine: 1, EndColumn: 24}, ControlRegionID: control,
 		ControlPredecessors: []string{}, DataDependencies: []RegionDataDependency{}, LiveIns: []string{}, LiveOuts: []string{},
 		LiveInsCanonical: true, LiveOutsCanonical: true, Effects: EffectSummary{}, CapabilityOccurrences: []string{},
-		Barriers: []BarrierCode{}, RejectionReasons: []CandidateRejection{CandidateRejectDeclaration},
+		Barriers: []BarrierCode{}, RejectionReasons: []CandidateRejection{CandidateRejectFunctionDeclaration},
 	}
 	for index := range analysis.CallSites {
 		analysis.CallSites[index].Span.StartLine++

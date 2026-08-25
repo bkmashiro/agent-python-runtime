@@ -167,12 +167,28 @@ class SemanticAnalysisTests(unittest.TestCase):
         )
         declaration, read = report["candidate_regions"]
         self.assertEqual("declaration", declaration["kind"])
-        self.assertEqual(["declaration"], declaration["rejection_reasons"])
+        self.assertEqual(["function_declaration"], declaration["rejection_reasons"])
         self.assertEqual([], declaration["barriers"])
         self.assertEqual({"may_publish": False, "may_observe_live": False, "may_suspend": False, "may_be_unknown": False}, declaration["effects"])
         self.assertFalse(report["call_sites"][0]["necessarily_reached"])
         self.assertEqual([declaration["id"]], read["control_predecessors"])
         self.assertEqual([], read["data_dependencies"])
+
+    def test_imports_and_async_functions_are_not_safe_function_declarations(self):
+        capabilities = [{**copy.deepcopy(CAPABILITIES[0]), "arguments": ["key"]}]
+        cases = (
+            ("import random\nremote = sources.read('profile')\n", "declaration"),
+            ("async def normalize(value, scale=2):\n    return value\nremote = sources.read('profile')\n", "declaration"),
+        )
+        for source, rejection in cases:
+            with self.subTest(source=source):
+                report = self.analyze(source, capabilities=capabilities)
+                declaration = report["candidate_regions"][0]
+                self.assertIn(rejection, declaration["rejection_reasons"])
+                self.assertNotIn("function_declaration", declaration["rejection_reasons"])
+                if source.startswith("async"):
+                    self.assertTrue(declaration["barriers"])
+                    self.assertTrue(report["module_effects"]["may_be_unknown"])
 
     def test_evaluated_function_definition_expressions_remain_fail_closed(self):
         capabilities = [{**copy.deepcopy(CAPABILITIES[0]), "arguments": ["key"]}]

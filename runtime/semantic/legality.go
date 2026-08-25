@@ -384,14 +384,14 @@ func safeStreamingPrefixRegion(region CandidateRegion) bool {
 		return onlyMayRaise(region.RejectionReasons)
 	case CandidateRegionDeclaration:
 		return region.Effects == (EffectSummary{}) && len(region.LiveIns) == 0 && len(region.LiveOuts) == 0 &&
-			len(region.CapabilityOccurrences) == 0 && onlyDeclaration(region.RejectionReasons)
+			len(region.CapabilityOccurrences) == 0 && onlyFunctionDeclaration(region.RejectionReasons)
 	default:
 		return false
 	}
 }
 
-func onlyDeclaration(reasons []CandidateRejection) bool {
-	return len(reasons) == 1 && reasons[0] == CandidateRejectDeclaration
+func onlyFunctionDeclaration(reasons []CandidateRejection) bool {
+	return len(reasons) == 1 && reasons[0] == CandidateRejectFunctionDeclaration
 }
 
 func hasModuleBarrier(barriers []Barrier) bool {

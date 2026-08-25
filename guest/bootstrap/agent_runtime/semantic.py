@@ -626,7 +626,7 @@ def _literal_default(node):
 
 
 def _safe_function_declaration(node):
-    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.decorator_list or node.returns is not None:
+    if not isinstance(node, ast.FunctionDef) or node.decorator_list or node.returns is not None:
         return False
     arguments = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
     if node.args.vararg is not None:
@@ -809,7 +809,10 @@ def _candidate_regions(tree, source_sha256, function_ids, capability_index, call
         if kind == "opaque_control":
             rejections.add("opaque_control")
         if kind == "declaration":
-            rejections.add("declaration")
+            if isinstance(statement, ast.FunctionDef) and _safe_function_declaration(statement):
+                rejections.add("function_declaration")
+            else:
+                rejections.add("declaration")
         if visitor.heap_mutation:
             rejections.add("heap_mutation")
         if _identity_alias(statement, scalar_names):

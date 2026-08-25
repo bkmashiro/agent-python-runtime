@@ -63,6 +63,7 @@ const (
 
 	CandidateRejectOpaqueControl         CandidateRejection = "opaque_control"
 	CandidateRejectDeclaration           CandidateRejection = "declaration"
+	CandidateRejectFunctionDeclaration   CandidateRejection = "function_declaration"
 	CandidateRejectHeapMutation          CandidateRejection = "heap_mutation"
 	CandidateRejectIdentityAlias         CandidateRejection = "identity_alias"
 	CandidateRejectReservedHelperBinding CandidateRejection = "reserved_helper_binding"
@@ -529,7 +530,7 @@ func validCandidateRejections(values []CandidateRejection) bool {
 
 func validCandidateRejection(value CandidateRejection) bool {
 	switch value {
-	case CandidateRejectOpaqueControl, CandidateRejectDeclaration, CandidateRejectHeapMutation, CandidateRejectIdentityAlias, CandidateRejectReservedHelperBinding, CandidateRejectMayRaise,
+	case CandidateRejectOpaqueControl, CandidateRejectDeclaration, CandidateRejectFunctionDeclaration, CandidateRejectHeapMutation, CandidateRejectIdentityAlias, CandidateRejectReservedHelperBinding, CandidateRejectMayRaise,
 		CandidateRejectUnknownEffect, CandidateRejectLiveInNotCanonical, CandidateRejectLiveOutNotCanonical:
 		return true
 	default:
@@ -563,7 +564,9 @@ func validCandidateRegionShape(region CandidateRegion) bool {
 			return false
 		}
 	case CandidateRegionDeclaration:
-		if !hasCandidateRejection(region, CandidateRejectDeclaration) {
+		generic := hasCandidateRejection(region, CandidateRejectDeclaration)
+		function := hasCandidateRejection(region, CandidateRejectFunctionDeclaration)
+		if generic == function {
 			return false
 		}
 	default:

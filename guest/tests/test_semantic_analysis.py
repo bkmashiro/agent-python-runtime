@@ -154,6 +154,39 @@ class SemanticAnalysisTests(unittest.TestCase):
         self.assertEqual([], call["data_dependencies"])
         self.assertIn("unknown_effect", call["rejection_reasons"])
 
+    def test_safe_function_declarations_do_not_block_a_later_module_read(self):
+        capabilities = [{**copy.deepcopy(CAPABILITIES[0]), "arguments": ["key"]}]
+        report = self.analyze(
+            "def normalize(value, scale=2):\n"
+            "    try:\n"
+            "        return int(value) * scale\n"
+            "    except Exception:\n"
+            "        return 0\n"
+            "remote = sources.read('profile')\n",
+            capabilities=capabilities,
+        )
+        declaration, read = report["candidate_regions"]
+        self.assertEqual("declaration", declaration["kind"])
+        self.assertEqual(["declaration"], declaration["rejection_reasons"])
+        self.assertEqual([], declaration["barriers"])
+        self.assertEqual({"may_publish": False, "may_observe_live": False, "may_suspend": False, "may_be_unknown": False}, declaration["effects"])
+        self.assertFalse(report["call_sites"][0]["necessarily_reached"])
+        self.assertEqual([declaration["id"]], read["control_predecessors"])
+        self.assertEqual([], read["data_dependencies"])
+
+    def test_evaluated_function_definition_expressions_remain_fail_closed(self):
+        capabilities = [{**copy.deepcopy(CAPABILITIES[0]), "arguments": ["key"]}]
+        for source in (
+            "@decorate\ndef normalize(value):\n    return value\nremote = sources.read('profile')\n",
+            "def normalize(value=load_default()):\n    return value\nremote = sources.read('profile')\n",
+            "def normalize(value: UnknownType):\n    return value\nremote = sources.read('profile')\n",
+        ):
+            with self.subTest(source=source):
+                report = self.analyze(source, capabilities=capabilities)
+                declaration = report["candidate_regions"][0]
+                self.assertIn("may_raise", declaration["rejection_reasons"])
+                self.assertTrue(declaration["barriers"] or declaration["effects"]["may_be_unknown"])
+
     def test_candidate_regions_accept_proven_scalar_arithmetic_before_unrelated_effect(self):
         capabilities = [{**copy.deepcopy(CAPABILITIES[0]), "arguments": ["key"]}, copy.deepcopy(CAPABILITIES[1])]
         report = self.analyze(

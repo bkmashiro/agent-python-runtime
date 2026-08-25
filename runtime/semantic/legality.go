@@ -324,7 +324,7 @@ func canPreissue(verified VerifiedAnalysis, plan *capability.Plan, callSiteID st
 }
 
 func streamingPrefixSpeculationAllowed(analysis Analysis, site CallSite, plan *capability.Plan) bool {
-	if plan == nil || analysis.ModuleEffects.MayPublish || analysis.ModuleEffects.MayBeUnknown || len(analysis.Barriers) != 0 ||
+	if plan == nil || analysis.ModuleEffects.MayPublish || analysis.ModuleEffects.MayBeUnknown || hasModuleBarrier(analysis.Barriers) ||
 		!site.ArgumentsCanonical || site.DynamicOccurrence != 1 {
 		return false
 	}
@@ -351,8 +351,7 @@ func streamingPrefixSpeculationAllowed(analysis Analysis, site CallSite, plan *c
 			continue
 		}
 		seen[region.ID] = struct{}{}
-		if region.Kind != CandidateRegionStraightLine || len(region.DataDependencies) != 0 || len(region.Barriers) != 0 ||
-			region.Effects.MayPublish || region.Effects.MayBeUnknown || !onlyMayRaise(region.RejectionReasons) {
+		if !safeStreamingPrefixRegion(region) {
 			return false
 		}
 		for _, occurrence := range region.CapabilityOccurrences {
@@ -374,6 +373,34 @@ func streamingPrefixSpeculationAllowed(analysis Analysis, site CallSite, plan *c
 		}
 	}
 	return true
+}
+
+func safeStreamingPrefixRegion(region CandidateRegion) bool {
+	if len(region.DataDependencies) != 0 || len(region.Barriers) != 0 || region.Effects.MayPublish || region.Effects.MayBeUnknown {
+		return false
+	}
+	switch region.Kind {
+	case CandidateRegionStraightLine:
+		return onlyMayRaise(region.RejectionReasons)
+	case CandidateRegionDeclaration:
+		return region.Effects == (EffectSummary{}) && len(region.LiveIns) == 0 && len(region.LiveOuts) == 0 &&
+			len(region.CapabilityOccurrences) == 0 && onlyDeclaration(region.RejectionReasons)
+	default:
+		return false
+	}
+}
+
+func onlyDeclaration(reasons []CandidateRejection) bool {
+	return len(reasons) == 1 && reasons[0] == CandidateRejectDeclaration
+}
+
+func hasModuleBarrier(barriers []Barrier) bool {
+	for _, barrier := range barriers {
+		if barrier.FunctionID == "" {
+			return true
+		}
+	}
+	return false
 }
 
 func onlyMayRaise(reasons []CandidateRejection) bool {
@@ -452,7 +479,7 @@ func RequiredBackend(verified VerifiedAnalysis) BackendDecision {
 }
 
 func exclusiveDynamicCallAnalysis(analysis Analysis) bool {
-	return len(analysis.CallSites) == 1 && len(analysis.Barriers) == 0 &&
+	return len(analysis.CallSites) == 1 && !hasModuleBarrier(analysis.Barriers) &&
 		!analysis.ModuleEffects.MayBeUnknown
 }
 

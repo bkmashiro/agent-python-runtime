@@ -246,13 +246,15 @@ class _ScopeAnalyzer(ast.NodeVisitor):
     visit_Yield = _visit_opaque_control
     visit_YieldFrom = _visit_opaque_control
 
-    def visit_FunctionDef(self, node):
+    def _visit_function_definition(self, node):
         self._track_definition_name(node)
-        self.barrier("unsupported_control_flow", node)
+        for expression in _function_definition_expressions(node):
+            self.visit(expression)
+        if self.function_id or not _safe_function_declaration(node):
+            self.barrier("unsupported_control_flow", node)
 
-    def visit_AsyncFunctionDef(self, node):
-        self._track_definition_name(node)
-        self.barrier("unsupported_control_flow", node)
+    visit_FunctionDef = _visit_function_definition
+    visit_AsyncFunctionDef = _visit_function_definition
 
     def visit_Lambda(self, node):
         self.barrier("dynamic_call", node)
@@ -598,7 +600,48 @@ def _identity_alias(statement, scalar_names):
     )
 
 
+def _function_definition_expressions(node):
+    expressions = list(node.decorator_list) + list(node.args.defaults)
+    expressions.extend(value for value in node.args.kw_defaults if value is not None)
+    arguments = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
+    if node.args.vararg is not None:
+        arguments.append(node.args.vararg)
+    if node.args.kwarg is not None:
+        arguments.append(node.args.kwarg)
+    expressions.extend(argument.annotation for argument in arguments if argument.annotation is not None)
+    if node.returns is not None:
+        expressions.append(node.returns)
+    return expressions
+
+
+def _literal_default(node):
+    if isinstance(node, ast.Constant):
+        return isinstance(node.value, (type(None), bool, int, float, str, bytes))
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        return all(_literal_default(value) for value in node.elts)
+    if isinstance(node, ast.Dict):
+        return all(key is not None and _literal_default(key) and _literal_default(value)
+                   for key, value in zip(node.keys, node.values))
+    return False
+
+
+def _safe_function_declaration(node):
+    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.decorator_list or node.returns is not None:
+        return False
+    arguments = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
+    if node.args.vararg is not None:
+        arguments.append(node.args.vararg)
+    if node.args.kwarg is not None:
+        arguments.append(node.args.kwarg)
+    if any(argument.annotation is not None for argument in arguments):
+        return False
+    defaults = [*node.args.defaults, *(value for value in node.args.kw_defaults if value is not None)]
+    return all(_literal_default(value) for value in defaults)
+
+
 def _may_raise(statement):
+    if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return not _safe_function_declaration(statement)
     risky = (
         ast.Assert, ast.Raise, ast.Call, ast.Await, ast.Yield, ast.YieldFrom,
         ast.Attribute, ast.Subscript, ast.BinOp, ast.UnaryOp, ast.BoolOp,

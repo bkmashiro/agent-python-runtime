@@ -1,0 +1,1939 @@
+{
+  "eligible_window_ns": 20819912584,
+  "model": "deepseek-v4-flash",
+  "response_id": "330da2f6-7fa5-4006-abd4-6725d4db1054",
+  "run_index": 1,
+  "schema_version": "pysolate.release-readiness-recorded-workload.v1",
+  "source": "def bucket_timestamp(ts, bucket_seconds=300):\n    # Bucket a unix timestamp to the start of its time bucket.\n    return (int(ts) // bucket_seconds) * bucket_seconds\n\n\ndef safe_float(value, default=0.0):\n    # Convert to float safely, returning default if conversion fails.\n    try:\n        return float(value)\n    except (TypeError, ValueError):\n        return default\n\n\ndef safe_int(value, default=0):\n    # Convert to int safely, returning default if conversion fails.\n    try:\n        return int(value)\n    except (TypeError, ValueError):\n        return default\n\n\ndef parse_time(value):\n    # Parse timestamp; if not possible, treat as None.\n    if isinstance(value, (int, float)):\n        return float(value)\n    if isinstance(value, str):\n        try:\n            return float(value)\n        except ValueError:\n            return None\n    return None\n\n\n# ---- Input collection (exactly once each) ----\nmetrics = ops.query_metrics(service=\"checkout\", window=\"6h\")\nlogs = ops.query_logs(service=\"checkout\", severity=\"error\", window=\"6h\")\ndeployment = ops.latest_deployment(repository=\"shop/checkout\")\nconfig = ops.read_deployment(cluster=\"prod-eu\", namespace=\"checkout\")\n\n\n# ---- Normalize metrics ----\n# Expected metrics dictionary: {metric_name: [ {timestamp, value}, ... ] } or {metric_name: {values: [...]}}\nmetric_names = [\"error_rate\", \"p99_latency_ms\", \"cpu_usage_percent\", \"memory_usage_percent\"]\n\n# Make a safe copy of metrics if missing or not dict.\nif not isinstance(metrics, dict):\n    metrics = {}\n\nnormalized_metrics = {}\nfor name in metric_names:\n    raw_series = metrics.get(name, [])\n    series = []\n    if isinstance(raw_series, list):\n        for item in raw_series:\n            if isinstance(item, dict):\n                ts = parse_time(item.get(\"timestamp\"))\n                val = safe_float(item.get(\"value\"))\n                if ts is not None:\n                    series.append((ts, val))\n            elif isinstance(item, (list, tuple)) and len(item) >= 2:\n                ts = parse_time(item[0])\n                val = safe_float(item[1])\n                if ts is not None:\n                    series.append((ts, val))\n    elif isinstance(raw_series, dict):\n        # Assume keys are timestamps and values are numbers.\n        for k, v in raw_series.items():\n            ts = parse_time(k)\n            val = safe_float(v)\n            if ts is not None:\n                series.append((ts, val))\n    normalized_metrics[name] = series\n\n\n# ---- Normalize logs ----\n# Expected logs: list of dicts with fields: timestamp, message, error_type, pod, trace_id\nif not isinstance(logs, list):\n    logs = []\n\nnormalized_logs = []\nfor entry in logs:\n    if not isinstance(entry, dict):\n        continue\n    ts = parse_time(entry.get(\"timestamp\"))\n    if ts is None:\n        continue\n    message = entry.get(\"message\", \"\") or \"\"\n    error_type = entry.get(\"error_type\", \"unknown\") or \"unknown\"\n    pod = entry.get(\"pod\", \"\") or \"unknown\"\n    trace_id = entry.get(\"trace_id\", \"\") or \"\"\n    normalized_logs.append({\n        \"timestamp\": ts,\n        \"message\": str(message),\n        \"error_type\": str(error_type),\n        \"pod\": str(pod),\n        \"trace_id\": str(trace_id)\n    })\n\n\n# ---- Normalize deployment ----\nif not isinstance(deployment, dict):\n    deployment = {}\ndeployment_info = {\n    \"commit\": deployment.get(\"commit\"),\n    \"version\": deployment.get(\"version\"),\n    \"deployed_at\": parse_time(deployment.get(\"deployed_at\")),\n    \"status\": deployment.get(\"status\", \"unknown\"),\n    \"author\": deployment.get(\"author\", \"unknown\")\n}\n\n\n# ---- Normalize config ----\nif not isinstance(config, dict):\n    config = {}\nconfig_actual = {\n    \"feature_flag\": config.get(\"feature_flags\", {}).get(\"new_checkout\") if isinstance(config.get(\"feature_flags\"), dict) else None,\n    \"log_level\": config.get(\"log_level\"),\n    \"replicas\": config.get(\"replicas\")\n}\n\n\n# ---- Time-bucket aggregation for metrics ----\nbucket_size = 300  # 5 minutes\nbucketed_metrics = {}\nfor name, series in normalized_metrics.items():\n    buckets = {}\n    counts = {}\n    for ts, val in series:\n        b = bucket_timestamp(ts, bucket_size)\n        if b not in buckets:\n            buckets[b] = 0.0\n            counts[b] = 0\n        buckets[b] += val\n        counts[b] += 1\n    # Compute average per bucket\n    aggregated = {}\n    for b in sorted(buckets.keys()):\n        if counts[b] > 0:\n            avg = buckets[b] / counts[b]\n            aggregated[b] = avg\n        else:\n            aggregated[b] = 0.0\n    bucketed_metrics[name] = aggregated\n\n\n# ---- Count errors per bucket and group by error type ----\nerror_buckets = {}\nerror_types = {}\nfor log in normalized_logs:\n    b = bucket_timestamp(log[\"timestamp\"], bucket_size)\n    if b not in error_buckets:\n        error_buckets[b] = 0\n    error_buckets[b] += 1\n    et = log[\"error_type\"]\n    if et not in error_types:\n        error_types[et] = 0\n    error_types[et] += 1\n\n# Identify top error types\nsorted_error_types = sorted(error_types.items(), key=lambda x: x[1], reverse=True)\ntop_error_types = sorted_error_types[:5]  # top 5\n\n# ---- Deployment correlation ----\nrelevant_buckets = []\ndeploy_time = deployment_info.get(\"deployed_at\")\nif deploy_time is not None:\n    deploy_bucket = bucket_timestamp(deploy_time, bucket_size)\n    # Get metrics in window around deployment: -1h to +2h\n    window_start = deploy_bucket - 12 * 300  # -1h\n    window_end = deploy_bucket + 24 * 300   # +2h\n    # Collect buckets in that range\n    all_bucket_times = set(bucketed_metrics.get(\"error_rate\", {}).keys())\n    all_bucket_times.update(error_buckets.keys())\n    for b in sorted(all_bucket_times):\n        if window_start <= b <= window_end:\n            relevant_buckets.append(b)\n\n# Pre-deployment vs post-deployment metrics\npre_metrics = []\npost_metrics = []\nif deploy_time is not None:\n    pre_start = deploy_time - 7200  # 2h before\n    pre_end = deploy_time - 300     # just before deploy (minus 5min)\n    post_start = deploy_time + 300  # 5min after\n    post_end = deploy_time + 7200   # 2h after\n    for b, val in bucketed_metrics.get(\"error_rate\", {}).items():\n        if pre_start <= b < deploy_time:\n            pre_metrics.append(val)\n        if post_start <= b <= post_end:\n            post_metrics.append(val)\n\npre_avg_error = sum(pre_metrics) / len(pre_metrics) if pre_metrics else None\npost_avg_error = sum(post_metrics) / len(post_metrics) if post_metrics else None\n\n\n# ---- Configuration-drift check ----\nconfig_drift = False\ndrift_reasons = []\nif config_actual[\"feature_flag\"] is None:\n    drift_reasons.append(\"feature_flag missing\")\n    config_drift = True\nelse:\n    expected_flag = True  # expected from deployment info\n    if config_actual[\"feature_flag\"] != expected_flag:\n        drift_reasons.append(\"feature_flag mismatch\")\n        config_drift = True\nif \"log_level\" not in config_actual or config_actual[\"log_level\"] is None:\n    drift_reasons.append(\"log_level missing\")\n    config_drift = True\nelse:\n    acceptable_levels = [\"info\", \"debug\", \"warn\", \"error\"]\n    if config_actual[\"log_level\"] not in acceptable_levels:\n        drift_reasons.append(\"log_level unexpected\")\n        config_drift = True\nif config_actual[\"replicas\"] is None:\n    drift_reasons.append(\"replicas missing\")\n    config_drift = True\nelse:\n    replicas = safe_int(config_actual[\"replicas\"])\n    if replicas < 3 or replicas > 10:\n        drift_reasons.append(\"replicas out of range\")\n        config_drift = True\n\n\n# ---- Threshold evaluation ----\n# Define thresholds\nthresholds = {\n    \"error_rate\": 0.05,       # 5% errors\n    \"p99_latency_ms\": 500.0,  # 500 ms\n    \"cpu_usage_percent\": 90.0,\n    \"memory_usage_percent\": 85.0\n}\n\nthreshold_violations = []\nfor name, series in bucketed_metrics.items():\n    if name in thresholds:\n        threshold = thresholds[name]\n        for b, val in series.items():\n            if val > threshold:\n                threshold_violations.append({\"metric\": name, \"bucket\": b, \"value\": val, \"threshold\": threshold})\n\n# Count buckets with any violation\ntotal_buckets = set()\nfor v in threshold_violations:\n    total_buckets.add(v[\"bucket\"])\n\n# ---- Evidence-table construction ----\nevidence_table = []\n# Add metric evidence\nevidence_table.append({\"type\": \"metric\", \"source\": \"metrics\", \"detail\": \"error_rate\"})\n# Add top error types\nevidence_table.append({\"type\": \"log\", \"source\": \"logs\", \"detail\": \"top_error_types\"})\n# Add deployment info\nevidence_table.append({\"type\": \"deployment\", \"source\": \"deployment\", \"detail\": \"deployment\"})\n# Add config drift evidence\nevidence_table.append({\"type\": \"config\", \"source\": \"config\", \"detail\": \"config_drift\"})\n# Add specifics for top error types\nfor et, count in top_error_types:\n    evidence_table.append({\"type\": \"error\", \"error_type\": et, \"count\": count})\n\n\n# ---- Confidence scoring ----\nconfidence = 0.0\n# Start with 50 baseline confidence\nconfidence += 50.0\n# Add up to 20 for data coverage: have metrics and logs\nif normalized_metrics.get(\"error_rate\"):\n    confidence += 10.0\nelse:\n    confidence -= 10.0\nif normalized_logs:\n    confidence += 5.0\nelse:\n    confidence -= 5.0\n# Add up to 15 if deployment info present\nif deployment_info.get(\"deployed_at\") is not None:\n    confidence += 10.0\nelse:\n    confidence += 0.0\n# Add up to 15 if config present\nif config_actual.get(\"feature_flag\") is not None:\n    confidence += 5.0\nelse:\n    confidence += 0.0\n# Penalize if many threshold violations\nif total_buckets:\n    # Each violating bucket subtracts 2, max 10\n    penalty = min(10.0, len(total_buckets) * 2.0)\n    confidence -= penalty\n# Penalize config drift\nif config_drift:\n    confidence -= 10.0\n# Clamp between 0 and 100\nconfidence = max(0.0, min(100.0, confidence))\n\n\n# ---- Release-gate decisions ----\nrelease_ready = True\ngates = []\n\n# Gate 1: No critical threshold violations in last hour?\nnow = max([ts for series in normalized_metrics.values() for ts, _ in series] + [log[\"timestamp\"] for log in normalized_logs] + [0])\nlast_hour_start = now - 3600\nrecent_violations = [v for v in threshold_violations if v[\"bucket\"] >= last_hour_start]\nif recent_violations:\n    release_ready = False\n    gates.append({\"name\": \"recent_metric_violations\", \"pass\": False, \"details\": \"Violations in last hour\"})\nelse:\n    gates.append({\"name\": \"recent_metric_violations\", \"pass\": True})\n\n# Gate 2: Error rate trend not increasing?\nif deploy_time is not None and pre_avg_error is not None and post_avg_error is not None:\n    if post_avg_error > pre_avg_error * 2 and post_avg_error > thresholds[\"error_rate\"]:\n        release_ready = False\n        gates.append({\"name\": \"post_deploy_error_spike\", \"pass\": False})\n    else:\n        gates.append({\"name\": \"post_deploy_error_spike\", \"pass\": True})\nelse:\n    gates.append({\"name\": \"post_deploy_error_spike\", \"pass\": True, \"details\": \"Insufficient data\"})\n\n# Gate 3: No severe error types?\nsevere_types = [\"database_connection\", \"payment_timeout\", \"null_pointer\"]\nsevere_found = False\nfor et, _ in top_error_types:\n    if et in severe_types:\n        severe_found = True\n        break\nif severe_found:\n    release_ready = False\n    gates.append({\"name\": \"severe_error_types\", \"pass\": False, \"details\": \"Found severe error types\"})\nelse:\n    gates.append({\"name\": \"severe_error_types\", \"pass\": True})\n\n# Gate 4: No config drift\nif config_drift:\n    release_ready = False\n    gates.append({\"name\": \"config_drift\", \"pass\": False, \"details\": \" \".join(drift_reasons)})\nelse:\n    gates.append({\"name\": \"config_drift\", \"pass\": True})\n\n# Gate 5: Deployment status is successful\nif deployment_info.get(\"status\") not in [\"success\", \"live\", \"healthy\"]:\n    release_ready = False\n    gates.append({\"name\": \"deployment_status\", \"pass\": False})\nelse:\n    gates.append({\"name\": \"deployment_status\", \"pass\": True})\n\n# ---- Structured report ----\nreport = {\n    \"summary\": \"Release readiness analysis for checkout service\",\n    \"deployment\": deployment_info,\n    \"config_drift\": {\n        \"drift\": config_drift,\n        \"reasons\": drift_reasons\n    },\n    \"metrics_summary\": {\n        \"error_rate\": {\n            \"buckets\": len(bucketed_metrics.get(\"error_rate\", {})),\n            \"max\": max(bucketed_metrics.get(\"error_rate\", {}).values()) if bucketed_metrics.get(\"error_rate\") else None,\n            \"avg\": sum(bucketed_metrics.get(\"error_rate\", {}).values()) / len(bucketed_metrics.get(\"error_rate\", {})) if bucketed_metrics.get(\"error_rate\") else None\n        },\n        \"p99_latency_ms\": {\n            \"buckets\": len(bucketed_metrics.get(\"p99_latency_ms\", {})),\n            \"max\": max(bucketed_metrics.get(\"p99_latency_ms\", {}).values()) if bucketed_metrics.get(\"p99_latency_ms\") else None\n        }\n    },\n    \"error_logs\": {\n        \"count\": len(normalized_logs),\n        \"top_types\": top_error_types\n    },\n    \"threshold_violations\": threshold_violations[:10],  # Limit to avoid huge output\n    \"evidence\": evidence_table,\n    \"confidence\": round(confidence, 2),\n    \"gates\": gates,\n    \"release_ready\": release_ready\n}\n\n# Ensure final result is the data structure\nresult = report\n",
+  "source_complete_ns": 23405477625,
+  "source_evidence_schema": "pysolate.release-readiness-live-sample.v1",
+  "source_evidence_trace_sha256": "sha256:f0cef711704b0834518ae324d90b5e6d94198724128fce6187dd1e7edb66ae4a",
+  "source_sha256": "sha256:e2c66fe01cb1ffc98476972a38b82ecf36cfc9636ef91d6f002c3d56acf4f2a1",
+  "statements": [
+    {
+      "closed_ns": 1053542750,
+      "index": 1,
+      "source": "def bucket_timestamp(ts, bucket_seconds=300):"
+    },
+    {
+      "closed_ns": 1216375875,
+      "index": 2,
+      "source": "    # Bucket a unix timestamp to the start of its time bucket."
+    },
+    {
+      "closed_ns": 1334951875,
+      "index": 3,
+      "source": "    return (int(ts) // bucket_seconds) * bucket_seconds"
+    },
+    {
+      "closed_ns": 1334961833,
+      "index": 4,
+      "source": ""
+    },
+    {
+      "closed_ns": 1334973208,
+      "index": 5,
+      "source": ""
+    },
+    {
+      "closed_ns": 1451283250,
+      "index": 6,
+      "source": "def safe_float(value, default=0.0):"
+    },
+    {
+      "closed_ns": 1592773541,
+      "index": 7,
+      "source": "    # Convert to float safely, returning default if conversion fails."
+    },
+    {
+      "closed_ns": 1592801833,
+      "index": 8,
+      "source": "    try:"
+    },
+    {
+      "closed_ns": 1615954750,
+      "index": 9,
+      "source": "        return float(value)"
+    },
+    {
+      "closed_ns": 1663456375,
+      "index": 10,
+      "source": "    except (TypeError, ValueError):"
+    },
+    {
+      "closed_ns": 1689378583,
+      "index": 11,
+      "source": "        return default"
+    },
+    {
+      "closed_ns": 1689383791,
+      "index": 12,
+      "source": ""
+    },
+    {
+      "closed_ns": 1689392541,
+      "index": 13,
+      "source": ""
+    },
+    {
+      "closed_ns": 1732368125,
+      "index": 14,
+      "source": "def safe_int(value, default=0):"
+    },
+    {
+      "closed_ns": 1802056666,
+      "index": 15,
+      "source": "    # Convert to int safely, returning default if conversion fails."
+    },
+    {
+      "closed_ns": 1802104333,
+      "index": 16,
+      "source": "    try:"
+    },
+    {
+      "closed_ns": 1826627791,
+      "index": 17,
+      "source": "        return int(value)"
+    },
+    {
+      "closed_ns": 1872955166,
+      "index": 18,
+      "source": "    except (TypeError, ValueError):"
+    },
+    {
+      "closed_ns": 1895665458,
+      "index": 19,
+      "source": "        return default"
+    },
+    {
+      "closed_ns": 1895677375,
+      "index": 20,
+      "source": ""
+    },
+    {
+      "closed_ns": 1895685375,
+      "index": 21,
+      "source": ""
+    },
+    {
+      "closed_ns": 1941154458,
+      "index": 22,
+      "source": "def parse_time(value):"
+    },
+    {
+      "closed_ns": 2123537541,
+      "index": 23,
+      "source": "    # Parse timestamp; if not possible, treat as None."
+    },
+    {
+      "closed_ns": 2172423458,
+      "index": 24,
+      "source": "    if isinstance(value, (int, float)):"
+    },
+    {
+      "closed_ns": 2195002916,
+      "index": 25,
+      "source": "        return float(value)"
+    },
+    {
+      "closed_ns": 2243458875,
+      "index": 26,
+      "source": "    if isinstance(value, str):"
+    },
+    {
+      "closed_ns": 2286263875,
+      "index": 27,
+      "source": "        try:"
+    },
+    {
+      "closed_ns": 2309310791,
+      "index": 28,
+      "source": "            return float(value)"
+    },
+    {
+      "closed_ns": 2333356791,
+      "index": 29,
+      "source": "        except ValueError:"
+    },
+    {
+      "closed_ns": 2333381750,
+      "index": 30,
+      "source": "            return None"
+    },
+    {
+      "closed_ns": 2356689666,
+      "index": 31,
+      "source": "    return None"
+    },
+    {
+      "closed_ns": 2356700541,
+      "index": 32,
+      "source": ""
+    },
+    {
+      "closed_ns": 2401741666,
+      "index": 33,
+      "source": ""
+    },
+    {
+      "closed_ns": 2494083208,
+      "index": 34,
+      "source": "# ---- Input collection (exactly once each) ----"
+    },
+    {
+      "closed_ns": 2585565041,
+      "index": 35,
+      "source": "metrics = ops.query_metrics(service=\"checkout\", window=\"6h\")"
+    },
+    {
+      "closed_ns": 2676767208,
+      "index": 36,
+      "source": "logs = ops.query_logs(service=\"checkout\", severity=\"error\", window=\"6h\")"
+    },
+    {
+      "closed_ns": 2747165875,
+      "index": 37,
+      "source": "deployment = ops.latest_deployment(repository=\"shop/checkout\")"
+    },
+    {
+      "closed_ns": 2839384083,
+      "index": 38,
+      "source": "config = ops.read_deployment(cluster=\"prod-eu\", namespace=\"checkout\")"
+    },
+    {
+      "closed_ns": 2839394875,
+      "index": 39,
+      "source": ""
+    },
+    {
+      "closed_ns": 2839405750,
+      "index": 40,
+      "source": ""
+    },
+    {
+      "closed_ns": 2902966875,
+      "index": 41,
+      "source": "# ---- Normalize metrics ----"
+    },
+    {
+      "closed_ns": 3191190791,
+      "index": 42,
+      "source": "# Expected metrics dictionary: {metric_name: [ {timestamp, value}, ... ] } or {metric_name: {values: [...]}}"
+    },
+    {
+      "closed_ns": 3444087791,
+      "index": 43,
+      "source": "metric_names = [\"error_rate\", \"p99_latency_ms\", \"cpu_usage_percent\", \"memory_usage_percent\"]"
+    },
+    {
+      "closed_ns": 3482622791,
+      "index": 44,
+      "source": ""
+    },
+    {
+      "closed_ns": 3681642791,
+      "index": 45,
+      "source": "# Make a safe copy of metrics if missing or not dict."
+    },
+    {
+      "closed_ns": 3730861750,
+      "index": 46,
+      "source": "if not isinstance(metrics, dict):"
+    },
+    {
+      "closed_ns": 3752736208,
+      "index": 47,
+      "source": "    metrics = {}"
+    },
+    {
+      "closed_ns": 3752746041,
+      "index": 48,
+      "source": ""
+    },
+    {
+      "closed_ns": 3804435791,
+      "index": 49,
+      "source": "normalized_metrics = {}"
+    },
+    {
+      "closed_ns": 3845304666,
+      "index": 50,
+      "source": "for name in metric_names:"
+    },
+    {
+      "closed_ns": 3915019416,
+      "index": 51,
+      "source": "    raw_series = metrics.get(name, [])"
+    },
+    {
+      "closed_ns": 3938447625,
+      "index": 52,
+      "source": "    series = []"
+    },
+    {
+      "closed_ns": 3983624166,
+      "index": 53,
+      "source": "    if isinstance(raw_series, list):"
+    },
+    {
+      "closed_ns": 4006591583,
+      "index": 54,
+      "source": "        for item in raw_series:"
+    },
+    {
+      "closed_ns": 4052569583,
+      "index": 55,
+      "source": "            if isinstance(item, dict):"
+    },
+    {
+      "closed_ns": 4119043916,
+      "index": 56,
+      "source": "                ts = parse_time(item.get(\"timestamp\"))"
+    },
+    {
+      "closed_ns": 4167474750,
+      "index": 57,
+      "source": "                val = safe_float(item.get(\"value\"))"
+    },
+    {
+      "closed_ns": 4190788625,
+      "index": 58,
+      "source": "                if ts is not None:"
+    },
+    {
+      "closed_ns": 4236780750,
+      "index": 59,
+      "source": "                    series.append((ts, val))"
+    },
+    {
+      "closed_ns": 4376134916,
+      "index": 60,
+      "source": "            elif isinstance(item, (list, tuple)) and len(item) >= 2:"
+    },
+    {
+      "closed_ns": 4396303666,
+      "index": 61,
+      "source": "                ts = parse_time(item[0])"
+    },
+    {
+      "closed_ns": 4442578166,
+      "index": 62,
+      "source": "                val = safe_float(item[1])"
+    },
+    {
+      "closed_ns": 4465860083,
+      "index": 63,
+      "source": "                if ts is not None:"
+    },
+    {
+      "closed_ns": 4514706791,
+      "index": 64,
+      "source": "                    series.append((ts, val))"
+    },
+    {
+      "closed_ns": 4562829916,
+      "index": 65,
+      "source": "    elif isinstance(raw_series, dict):"
+    },
+    {
+      "closed_ns": 4677474125,
+      "index": 66,
+      "source": "        # Assume keys are timestamps and values are numbers."
+    },
+    {
+      "closed_ns": 4747392416,
+      "index": 67,
+      "source": "        for k, v in raw_series.items():"
+    },
+    {
+      "closed_ns": 4770350333,
+      "index": 68,
+      "source": "            ts = parse_time(k)"
+    },
+    {
+      "closed_ns": 4811530666,
+      "index": 69,
+      "source": "            val = safe_float(v)"
+    },
+    {
+      "closed_ns": 4840185500,
+      "index": 70,
+      "source": "            if ts is not None:"
+    },
+    {
+      "closed_ns": 4863082625,
+      "index": 71,
+      "source": "                series.append((ts, val))"
+    },
+    {
+      "closed_ns": 4908717958,
+      "index": 72,
+      "source": "    normalized_metrics[name] = series"
+    },
+    {
+      "closed_ns": 4908723833,
+      "index": 73,
+      "source": ""
+    },
+    {
+      "closed_ns": 4908729416,
+      "index": 74,
+      "source": ""
+    },
+    {
+      "closed_ns": 4976449250,
+      "index": 75,
+      "source": "# ---- Normalize logs ----"
+    },
+    {
+      "closed_ns": 5189670958,
+      "index": 76,
+      "source": "# Expected logs: list of dicts with fields: timestamp, message, error_type, pod, trace_id"
+    },
+    {
+      "closed_ns": 5238897958,
+      "index": 77,
+      "source": "if not isinstance(logs, list):"
+    },
+    {
+      "closed_ns": 5262015208,
+      "index": 78,
+      "source": "    logs = []"
+    },
+    {
+      "closed_ns": 5262034041,
+      "index": 79,
+      "source": ""
+    },
+    {
+      "closed_ns": 5308438250,
+      "index": 80,
+      "source": "normalized_logs = []"
+    },
+    {
+      "closed_ns": 5356985208,
+      "index": 81,
+      "source": "for entry in logs:"
+    },
+    {
+      "closed_ns": 5403710208,
+      "index": 82,
+      "source": "    if not isinstance(entry, dict):"
+    },
+    {
+      "closed_ns": 5403768875,
+      "index": 83,
+      "source": "        continue"
+    },
+    {
+      "closed_ns": 5478580291,
+      "index": 84,
+      "source": "    ts = parse_time(entry.get(\"timestamp\"))"
+    },
+    {
+      "closed_ns": 5493918708,
+      "index": 85,
+      "source": "    if ts is None:"
+    },
+    {
+      "closed_ns": 5517602041,
+      "index": 86,
+      "source": "        continue"
+    },
+    {
+      "closed_ns": 5607638083,
+      "index": 87,
+      "source": "    message = entry.get(\"message\", \"\") or \"\""
+    },
+    {
+      "closed_ns": 5678798000,
+      "index": 88,
+      "source": "    error_type = entry.get(\"error_type\", \"unknown\") or \"unknown\""
+    },
+    {
+      "closed_ns": 5745082250,
+      "index": 89,
+      "source": "    pod = entry.get(\"pod\", \"\") or \"unknown\""
+    },
+    {
+      "closed_ns": 5837795458,
+      "index": 90,
+      "source": "    trace_id = entry.get(\"trace_id\", \"\") or \"\""
+    },
+    {
+      "closed_ns": 5860609291,
+      "index": 91,
+      "source": "    normalized_logs.append({"
+    },
+    {
+      "closed_ns": 5883397041,
+      "index": 92,
+      "source": "        \"timestamp\": ts,"
+    },
+    {
+      "closed_ns": 5954615916,
+      "index": 93,
+      "source": "        \"message\": str(message),"
+    },
+    {
+      "closed_ns": 5977512833,
+      "index": 94,
+      "source": "        \"error_type\": str(error_type),"
+    },
+    {
+      "closed_ns": 6031092291,
+      "index": 95,
+      "source": "        \"pod\": str(pod),"
+    },
+    {
+      "closed_ns": 6078940125,
+      "index": 96,
+      "source": "        \"trace_id\": str(trace_id)"
+    },
+    {
+      "closed_ns": 6078960833,
+      "index": 97,
+      "source": "    })"
+    },
+    {
+      "closed_ns": 6101233416,
+      "index": 98,
+      "source": ""
+    },
+    {
+      "closed_ns": 6101237791,
+      "index": 99,
+      "source": ""
+    },
+    {
+      "closed_ns": 6148442291,
+      "index": 100,
+      "source": "# ---- Normalize deployment ----"
+    },
+    {
+      "closed_ns": 6169712250,
+      "index": 101,
+      "source": "if not isinstance(deployment, dict):"
+    },
+    {
+      "closed_ns": 6215469166,
+      "index": 102,
+      "source": "    deployment = {}"
+    },
+    {
+      "closed_ns": 6261855291,
+      "index": 103,
+      "source": "deployment_info = {"
+    },
+    {
+      "closed_ns": 6352812208,
+      "index": 104,
+      "source": "    \"commit\": deployment.get(\"commit\"),"
+    },
+    {
+      "closed_ns": 6425192041,
+      "index": 105,
+      "source": "    \"version\": deployment.get(\"version\"),"
+    },
+    {
+      "closed_ns": 6530081750,
+      "index": 106,
+      "source": "    \"deployed_at\": parse_time(deployment.get(\"deployed_at\")),"
+    },
+    {
+      "closed_ns": 6606382958,
+      "index": 107,
+      "source": "    \"status\": deployment.get(\"status\", \"unknown\"),"
+    },
+    {
+      "closed_ns": 6675659625,
+      "index": 108,
+      "source": "    \"author\": deployment.get(\"author\", \"unknown\")"
+    },
+    {
+      "closed_ns": 6675665666,
+      "index": 109,
+      "source": "}"
+    },
+    {
+      "closed_ns": 6675668500,
+      "index": 110,
+      "source": ""
+    },
+    {
+      "closed_ns": 6696581166,
+      "index": 111,
+      "source": ""
+    },
+    {
+      "closed_ns": 6721036333,
+      "index": 112,
+      "source": "# ---- Normalize config ----"
+    },
+    {
+      "closed_ns": 6765780416,
+      "index": 113,
+      "source": "if not isinstance(config, dict):"
+    },
+    {
+      "closed_ns": 6788886750,
+      "index": 114,
+      "source": "    config = {}"
+    },
+    {
+      "closed_ns": 6859311916,
+      "index": 115,
+      "source": "config_actual = {"
+    },
+    {
+      "closed_ns": 7140164000,
+      "index": 116,
+      "source": "    \"feature_flag\": config.get(\"feature_flags\", {}).get(\"new_checkout\") if isinstance(config.get(\"feature_flags\"), dict) else None,"
+    },
+    {
+      "closed_ns": 7231661375,
+      "index": 117,
+      "source": "    \"log_level\": config.get(\"log_level\"),"
+    },
+    {
+      "closed_ns": 7301257333,
+      "index": 118,
+      "source": "    \"replicas\": config.get(\"replicas\")"
+    },
+    {
+      "closed_ns": 7325812666,
+      "index": 119,
+      "source": "}"
+    },
+    {
+      "closed_ns": 7325816458,
+      "index": 120,
+      "source": ""
+    },
+    {
+      "closed_ns": 7325819958,
+      "index": 121,
+      "source": ""
+    },
+    {
+      "closed_ns": 7396313458,
+      "index": 122,
+      "source": "# ---- Time-bucket aggregation for metrics ----"
+    },
+    {
+      "closed_ns": 7466460833,
+      "index": 123,
+      "source": "bucket_size = 300  # 5 minutes"
+    },
+    {
+      "closed_ns": 7559410958,
+      "index": 124,
+      "source": "bucketed_metrics = {}"
+    },
+    {
+      "closed_ns": 7630406291,
+      "index": 125,
+      "source": "for name, series in normalized_metrics.items():"
+    },
+    {
+      "closed_ns": 7679797458,
+      "index": 126,
+      "source": "    buckets = {}"
+    },
+    {
+      "closed_ns": 7723506791,
+      "index": 127,
+      "source": "    counts = {}"
+    },
+    {
+      "closed_ns": 7749433916,
+      "index": 128,
+      "source": "    for ts, val in series:"
+    },
+    {
+      "closed_ns": 7814666958,
+      "index": 129,
+      "source": "        b = bucket_timestamp(ts, bucket_size)"
+    },
+    {
+      "closed_ns": 7838834625,
+      "index": 130,
+      "source": "        if b not in buckets:"
+    },
+    {
+      "closed_ns": 7883223916,
+      "index": 131,
+      "source": "            buckets[b] = 0.0"
+    },
+    {
+      "closed_ns": 7905393375,
+      "index": 132,
+      "source": "            counts[b] = 0"
+    },
+    {
+      "closed_ns": 7950953875,
+      "index": 133,
+      "source": "        buckets[b] += val"
+    },
+    {
+      "closed_ns": 7974698083,
+      "index": 134,
+      "source": "        counts[b] += 1"
+    },
+    {
+      "closed_ns": 8043336416,
+      "index": 135,
+      "source": "    # Compute average per bucket"
+    },
+    {
+      "closed_ns": 8068015208,
+      "index": 136,
+      "source": "    aggregated = {}"
+    },
+    {
+      "closed_ns": 8137247541,
+      "index": 137,
+      "source": "    for b in sorted(buckets.keys()):"
+    },
+    {
+      "closed_ns": 8206707791,
+      "index": 138,
+      "source": "        if counts[b] > 0:"
+    },
+    {
+      "closed_ns": 8255816958,
+      "index": 139,
+      "source": "            avg = buckets[b] / counts[b]"
+    },
+    {
+      "closed_ns": 8276652000,
+      "index": 140,
+      "source": "            aggregated[b] = avg"
+    },
+    {
+      "closed_ns": 8299753708,
+      "index": 141,
+      "source": "        else:"
+    },
+    {
+      "closed_ns": 8324781416,
+      "index": 142,
+      "source": "            aggregated[b] = 0.0"
+    },
+    {
+      "closed_ns": 8370013416,
+      "index": 143,
+      "source": "    bucketed_metrics[name] = aggregated"
+    },
+    {
+      "closed_ns": 8370017625,
+      "index": 144,
+      "source": ""
+    },
+    {
+      "closed_ns": 8370022000,
+      "index": 145,
+      "source": ""
+    },
+    {
+      "closed_ns": 8490378458,
+      "index": 146,
+      "source": "# ---- Count errors per bucket and group by error type ----"
+    },
+    {
+      "closed_ns": 8557682500,
+      "index": 147,
+      "source": "error_buckets = {}"
+    },
+    {
+      "closed_ns": 8604081708,
+      "index": 148,
+      "source": "error_types = {}"
+    },
+    {
+      "closed_ns": 8650792541,
+      "index": 149,
+      "source": "for log in normalized_logs:"
+    },
+    {
+      "closed_ns": 8724434041,
+      "index": 150,
+      "source": "    b = bucket_timestamp(log[\"timestamp\"], bucket_size)"
+    },
+    {
+      "closed_ns": 8769011791,
+      "index": 151,
+      "source": "    if b not in error_buckets:"
+    },
+    {
+      "closed_ns": 8817003500,
+      "index": 152,
+      "source": "        error_buckets[b] = 0"
+    },
+    {
+      "closed_ns": 8863799458,
+      "index": 153,
+      "source": "    error_buckets[b] += 1"
+    },
+    {
+      "closed_ns": 8910815708,
+      "index": 154,
+      "source": "    et = log[\"error_type\"]"
+    },
+    {
+      "closed_ns": 8933070500,
+      "index": 155,
+      "source": "    if et not in error_types:"
+    },
+    {
+      "closed_ns": 8979221791,
+      "index": 156,
+      "source": "        error_types[et] = 0"
+    },
+    {
+      "closed_ns": 9025358166,
+      "index": 157,
+      "source": "    error_types[et] += 1"
+    },
+    {
+      "closed_ns": 9025362333,
+      "index": 158,
+      "source": ""
+    },
+    {
+      "closed_ns": 9048495458,
+      "index": 159,
+      "source": "# Identify top error types"
+    },
+    {
+      "closed_ns": 9187590208,
+      "index": 160,
+      "source": "sorted_error_types = sorted(error_types.items(), key=lambda x: x[1], reverse=True)"
+    },
+    {
+      "closed_ns": 9280365208,
+      "index": 161,
+      "source": "top_error_types = sorted_error_types[:5]  # top 5"
+    },
+    {
+      "closed_ns": 9280369666,
+      "index": 162,
+      "source": ""
+    },
+    {
+      "closed_ns": 9328335791,
+      "index": 163,
+      "source": "# ---- Deployment correlation ----"
+    },
+    {
+      "closed_ns": 9396989416,
+      "index": 164,
+      "source": "relevant_buckets = []"
+    },
+    {
+      "closed_ns": 9510708333,
+      "index": 165,
+      "source": "deploy_time = deployment_info.get(\"deployed_at\")"
+    },
+    {
+      "closed_ns": 9534937791,
+      "index": 166,
+      "source": "if deploy_time is not None:"
+    },
+    {
+      "closed_ns": 9603215375,
+      "index": 167,
+      "source": "    deploy_bucket = bucket_timestamp(deploy_time, bucket_size)"
+    },
+    {
+      "closed_ns": 9811345333,
+      "index": 168,
+      "source": "    # Get metrics in window around deployment: -1h to +2h"
+    },
+    {
+      "closed_ns": 9924410833,
+      "index": 169,
+      "source": "    window_start = deploy_bucket - 12 * 300  # -1h"
+    },
+    {
+      "closed_ns": 10014652708,
+      "index": 170,
+      "source": "    window_end = deploy_bucket + 24 * 300   # +2h"
+    },
+    {
+      "closed_ns": 10082895083,
+      "index": 171,
+      "source": "    # Collect buckets in that range"
+    },
+    {
+      "closed_ns": 10271932833,
+      "index": 172,
+      "source": "    all_bucket_times = set(bucketed_metrics.get(\"error_rate\", {}).keys())"
+    },
+    {
+      "closed_ns": 10335831458,
+      "index": 173,
+      "source": "    all_bucket_times.update(error_buckets.keys())"
+    },
+    {
+      "closed_ns": 10405812000,
+      "index": 174,
+      "source": "    for b in sorted(all_bucket_times):"
+    },
+    {
+      "closed_ns": 10452438916,
+      "index": 175,
+      "source": "        if window_start <= b <= window_end:"
+    },
+    {
+      "closed_ns": 10499422458,
+      "index": 176,
+      "source": "            relevant_buckets.append(b)"
+    },
+    {
+      "closed_ns": 10499432083,
+      "index": 177,
+      "source": ""
+    },
+    {
+      "closed_ns": 10612848333,
+      "index": 178,
+      "source": "# Pre-deployment vs post-deployment metrics"
+    },
+    {
+      "closed_ns": 10661778666,
+      "index": 179,
+      "source": "pre_metrics = []"
+    },
+    {
+      "closed_ns": 10708986250,
+      "index": 180,
+      "source": "post_metrics = []"
+    },
+    {
+      "closed_ns": 10732625708,
+      "index": 181,
+      "source": "if deploy_time is not None:"
+    },
+    {
+      "closed_ns": 10866129583,
+      "index": 182,
+      "source": "    pre_start = deploy_time - 7200  # 2h before"
+    },
+    {
+      "closed_ns": 11053032916,
+      "index": 183,
+      "source": "    pre_end = deploy_time - 300     # just before deploy (minus 5min)"
+    },
+    {
+      "closed_ns": 11141751833,
+      "index": 184,
+      "source": "    post_start = deploy_time + 300  # 5min after"
+    },
+    {
+      "closed_ns": 11237516666,
+      "index": 185,
+      "source": "    post_end = deploy_time + 7200   # 2h after"
+    },
+    {
+      "closed_ns": 11375221916,
+      "index": 186,
+      "source": "    for b, val in bucketed_metrics.get(\"error_rate\", {}).items():"
+    },
+    {
+      "closed_ns": 11423267708,
+      "index": 187,
+      "source": "        if pre_start <= b < deploy_time:"
+    },
+    {
+      "closed_ns": 11447609125,
+      "index": 188,
+      "source": "            pre_metrics.append(val)"
+    },
+    {
+      "closed_ns": 11540014875,
+      "index": 189,
+      "source": "        if post_start <= b <= post_end:"
+    },
+    {
+      "closed_ns": 11565671500,
+      "index": 190,
+      "source": "            post_metrics.append(val)"
+    },
+    {
+      "closed_ns": 11565680708,
+      "index": 191,
+      "source": ""
+    },
+    {
+      "closed_ns": 11701475375,
+      "index": 192,
+      "source": "pre_avg_error = sum(pre_metrics) / len(pre_metrics) if pre_metrics else None"
+    },
+    {
+      "closed_ns": 11794035625,
+      "index": 193,
+      "source": "post_avg_error = sum(post_metrics) / len(post_metrics) if post_metrics else None"
+    },
+    {
+      "closed_ns": 11794076125,
+      "index": 194,
+      "source": ""
+    },
+    {
+      "closed_ns": 11816921250,
+      "index": 195,
+      "source": ""
+    },
+    {
+      "closed_ns": 11863390375,
+      "index": 196,
+      "source": "# ---- Configuration-drift check ----"
+    },
+    {
+      "closed_ns": 11907690916,
+      "index": 197,
+      "source": "config_drift = False"
+    },
+    {
+      "closed_ns": 11954236833,
+      "index": 198,
+      "source": "drift_reasons = []"
+    },
+    {
+      "closed_ns": 12070623458,
+      "index": 199,
+      "source": "if config_actual[\"feature_flag\"] is None:"
+    },
+    {
+      "closed_ns": 12160399333,
+      "index": 200,
+      "source": "    drift_reasons.append(\"feature_flag missing\")"
+    },
+    {
+      "closed_ns": 12187995583,
+      "index": 201,
+      "source": "    config_drift = True"
+    },
+    {
+      "closed_ns": 12230696041,
+      "index": 202,
+      "source": "else:"
+    },
+    {
+      "closed_ns": 12350235250,
+      "index": 203,
+      "source": "    expected_flag = True  # expected from deployment info"
+    },
+    {
+      "closed_ns": 12419626583,
+      "index": 204,
+      "source": "    if config_actual[\"feature_flag\"] != expected_flag:"
+    },
+    {
+      "closed_ns": 12491457875,
+      "index": 205,
+      "source": "        drift_reasons.append(\"feature_flag mismatch\")"
+    },
+    {
+      "closed_ns": 12512346958,
+      "index": 206,
+      "source": "        config_drift = True"
+    },
+    {
+      "closed_ns": 12604444958,
+      "index": 207,
+      "source": "if \"log_level\" not in config_actual or config_actual[\"log_level\"] is None:"
+    },
+    {
+      "closed_ns": 12673987125,
+      "index": 208,
+      "source": "    drift_reasons.append(\"log_level missing\")"
+    },
+    {
+      "closed_ns": 12698278875,
+      "index": 209,
+      "source": "    config_drift = True"
+    },
+    {
+      "closed_ns": 12720661708,
+      "index": 210,
+      "source": "else:"
+    },
+    {
+      "closed_ns": 12836741416,
+      "index": 211,
+      "source": "    acceptable_levels = [\"info\", \"debug\", \"warn\", \"error\"]"
+    },
+    {
+      "closed_ns": 12907081875,
+      "index": 212,
+      "source": "    if config_actual[\"log_level\"] not in acceptable_levels:"
+    },
+    {
+      "closed_ns": 12979429458,
+      "index": 213,
+      "source": "        drift_reasons.append(\"log_level unexpected\")"
+    },
+    {
+      "closed_ns": 13003436333,
+      "index": 214,
+      "source": "        config_drift = True"
+    },
+    {
+      "closed_ns": 13050364416,
+      "index": 215,
+      "source": "if config_actual[\"replicas\"] is None:"
+    },
+    {
+      "closed_ns": 13114499875,
+      "index": 216,
+      "source": "    drift_reasons.append(\"replicas missing\")"
+    },
+    {
+      "closed_ns": 13139041916,
+      "index": 217,
+      "source": "    config_drift = True"
+    },
+    {
+      "closed_ns": 13139061083,
+      "index": 218,
+      "source": "else:"
+    },
+    {
+      "closed_ns": 13229331458,
+      "index": 219,
+      "source": "    replicas = safe_int(config_actual[\"replicas\"])"
+    },
+    {
+      "closed_ns": 13300789791,
+      "index": 220,
+      "source": "    if replicas < 3 or replicas > 10:"
+    },
+    {
+      "closed_ns": 13365512208,
+      "index": 221,
+      "source": "        drift_reasons.append(\"replicas out of range\")"
+    },
+    {
+      "closed_ns": 13388778708,
+      "index": 222,
+      "source": "        config_drift = True"
+    },
+    {
+      "closed_ns": 13388790708,
+      "index": 223,
+      "source": ""
+    },
+    {
+      "closed_ns": 13388800875,
+      "index": 224,
+      "source": ""
+    },
+    {
+      "closed_ns": 13434361666,
+      "index": 225,
+      "source": "# ---- Threshold evaluation ----"
+    },
+    {
+      "closed_ns": 13503177791,
+      "index": 226,
+      "source": "# Define thresholds"
+    },
+    {
+      "closed_ns": 13550314750,
+      "index": 227,
+      "source": "thresholds = {"
+    },
+    {
+      "closed_ns": 13642458583,
+      "index": 228,
+      "source": "    \"error_rate\": 0.05,       # 5% errors"
+    },
+    {
+      "closed_ns": 13757428041,
+      "index": 229,
+      "source": "    \"p99_latency_ms\": 500.0,  # 500 ms"
+    },
+    {
+      "closed_ns": 13843447625,
+      "index": 230,
+      "source": "    \"cpu_usage_percent\": 90.0,"
+    },
+    {
+      "closed_ns": 13896904083,
+      "index": 231,
+      "source": "    \"memory_usage_percent\": 85.0"
+    },
+    {
+      "closed_ns": 13896912583,
+      "index": 232,
+      "source": "}"
+    },
+    {
+      "closed_ns": 13896915791,
+      "index": 233,
+      "source": ""
+    },
+    {
+      "closed_ns": 13946587541,
+      "index": 234,
+      "source": "threshold_violations = []"
+    },
+    {
+      "closed_ns": 14035925208,
+      "index": 235,
+      "source": "for name, series in bucketed_metrics.items():"
+    },
+    {
+      "closed_ns": 14079635333,
+      "index": 236,
+      "source": "    if name in thresholds:"
+    },
+    {
+      "closed_ns": 14104547833,
+      "index": 237,
+      "source": "        threshold = thresholds[name]"
+    },
+    {
+      "closed_ns": 14152797750,
+      "index": 238,
+      "source": "        for b, val in series.items():"
+    },
+    {
+      "closed_ns": 14199205041,
+      "index": 239,
+      "source": "            if val > threshold:"
+    },
+    {
+      "closed_ns": 14337600791,
+      "index": 240,
+      "source": "                threshold_violations.append({\"metric\": name, \"bucket\": b, \"value\": val, \"threshold\": threshold})"
+    },
+    {
+      "closed_ns": 14337605666,
+      "index": 241,
+      "source": ""
+    },
+    {
+      "closed_ns": 14406184375,
+      "index": 242,
+      "source": "# Count buckets with any violation"
+    },
+    {
+      "closed_ns": 14521217541,
+      "index": 243,
+      "source": "total_buckets = set()"
+    },
+    {
+      "closed_ns": 14566898458,
+      "index": 244,
+      "source": "for v in threshold_violations:"
+    },
+    {
+      "closed_ns": 14635400541,
+      "index": 245,
+      "source": "    total_buckets.add(v[\"bucket\"])"
+    },
+    {
+      "closed_ns": 14635405458,
+      "index": 246,
+      "source": ""
+    },
+    {
+      "closed_ns": 14681396000,
+      "index": 247,
+      "source": "# ---- Evidence-table construction ----"
+    },
+    {
+      "closed_ns": 14727637875,
+      "index": 248,
+      "source": "evidence_table = []"
+    },
+    {
+      "closed_ns": 14773558375,
+      "index": 249,
+      "source": "# Add metric evidence"
+    },
+    {
+      "closed_ns": 15009166958,
+      "index": 250,
+      "source": "evidence_table.append({\"type\": \"metric\", \"source\": \"metrics\", \"detail\": \"error_rate\"})"
+    },
+    {
+      "closed_ns": 15077041541,
+      "index": 251,
+      "source": "# Add top error types"
+    },
+    {
+      "closed_ns": 15217913958,
+      "index": 252,
+      "source": "evidence_table.append({\"type\": \"log\", \"source\": \"logs\", \"detail\": \"top_error_types\"})"
+    },
+    {
+      "closed_ns": 15268197333,
+      "index": 253,
+      "source": "# Add deployment info"
+    },
+    {
+      "closed_ns": 15407427458,
+      "index": 254,
+      "source": "evidence_table.append({\"type\": \"deployment\", \"source\": \"deployment\", \"detail\": \"deployment\"})"
+    },
+    {
+      "closed_ns": 15454563000,
+      "index": 255,
+      "source": "# Add config drift evidence"
+    },
+    {
+      "closed_ns": 15711299458,
+      "index": 256,
+      "source": "evidence_table.append({\"type\": \"config\", \"source\": \"config\", \"detail\": \"config_drift\"})"
+    },
+    {
+      "closed_ns": 15711897958,
+      "index": 257,
+      "source": "# Add specifics for top error types"
+    },
+    {
+      "closed_ns": 15875328125,
+      "index": 258,
+      "source": "for et, count in top_error_types:"
+    },
+    {
+      "closed_ns": 16037982875,
+      "index": 259,
+      "source": "    evidence_table.append({\"type\": \"error\", \"error_type\": et, \"count\": count})"
+    },
+    {
+      "closed_ns": 16037987916,
+      "index": 260,
+      "source": ""
+    },
+    {
+      "closed_ns": 16037993166,
+      "index": 261,
+      "source": ""
+    },
+    {
+      "closed_ns": 16038021541,
+      "index": 262,
+      "source": "# ---- Confidence scoring ----"
+    },
+    {
+      "closed_ns": 16038713791,
+      "index": 263,
+      "source": "confidence = 0.0"
+    },
+    {
+      "closed_ns": 16040550041,
+      "index": 264,
+      "source": "# Start with 50 baseline confidence"
+    },
+    {
+      "closed_ns": 16085548916,
+      "index": 265,
+      "source": "confidence += 50.0"
+    },
+    {
+      "closed_ns": 16268426541,
+      "index": 266,
+      "source": "# Add up to 20 for data coverage: have metrics and logs"
+    },
+    {
+      "closed_ns": 16340431291,
+      "index": 267,
+      "source": "if normalized_metrics.get(\"error_rate\"):"
+    },
+    {
+      "closed_ns": 16386939666,
+      "index": 268,
+      "source": "    confidence += 10.0"
+    },
+    {
+      "closed_ns": 16410423291,
+      "index": 269,
+      "source": "else:"
+    },
+    {
+      "closed_ns": 16434295208,
+      "index": 270,
+      "source": "    confidence -= 10.0"
+    },
+    {
+      "closed_ns": 16457377250,
+      "index": 271,
+      "source": "if normalized_logs:"
+    },
+    {
+      "closed_ns": 16506837916,
+      "index": 272,
+      "source": "    confidence += 5.0"
+    },
+    {
+      "closed_ns": 16506872291,
+      "index": 273,
+      "source": "else:"
+    },
+    {
+      "closed_ns": 16549712541,
+      "index": 274,
+      "source": "    confidence -= 5.0"
+    },
+    {
+      "closed_ns": 16638856458,
+      "index": 275,
+      "source": "# Add up to 15 if deployment info present"
+    },
+    {
+      "closed_ns": 16710676208,
+      "index": 276,
+      "source": "if deployment_info.get(\"deployed_at\") is not None:"
+    },
+    {
+      "closed_ns": 16733436625,
+      "index": 277,
+      "source": "    confidence += 10.0"
+    },
+    {
+      "closed_ns": 16754507541,
+      "index": 278,
+      "source": "else:"
+    },
+    {
+      "closed_ns": 16803340375,
+      "index": 279,
+      "source": "    confidence += 0.0"
+    },
+    {
+      "closed_ns": 16848556541,
+      "index": 280,
+      "source": "# Add up to 15 if config present"
+    },
+    {
+      "closed_ns": 16944406375,
+      "index": 281,
+      "source": "if config_actual.get(\"feature_flag\") is not None:"
+    },
+    {
+      "closed_ns": 16991134416,
+      "index": 282,
+      "source": "    confidence += 5.0"
+    },
+    {
+      "closed_ns": 16991167291,
+      "index": 283,
+      "source": "else:"
+    },
+    {
+      "closed_ns": 17037950416,
+      "index": 284,
+      "source": "    confidence += 0.0"
+    },
+    {
+      "closed_ns": 17125516000,
+      "index": 285,
+      "source": "# Penalize if many threshold violations"
+    },
+    {
+      "closed_ns": 17172866833,
+      "index": 286,
+      "source": "if total_buckets:"
+    },
+    {
+      "closed_ns": 17307430208,
+      "index": 287,
+      "source": "    # Each violating bucket subtracts 2, max 10"
+    },
+    {
+      "closed_ns": 17451404125,
+      "index": 288,
+      "source": "    penalty = min(10.0, len(total_buckets) * 2.0)"
+    },
+    {
+      "closed_ns": 17473055375,
+      "index": 289,
+      "source": "    confidence -= penalty"
+    },
+    {
+      "closed_ns": 17541295666,
+      "index": 290,
+      "source": "# Penalize config drift"
+    },
+    {
+      "closed_ns": 17565120375,
+      "index": 291,
+      "source": "if config_drift:"
+    },
+    {
+      "closed_ns": 17587220000,
+      "index": 292,
+      "source": "    confidence -= 10.0"
+    },
+    {
+      "closed_ns": 17633675958,
+      "index": 293,
+      "source": "# Clamp between 0 and 100"
+    },
+    {
+      "closed_ns": 17703862083,
+      "index": 294,
+      "source": "confidence = max(0.0, min(100.0, confidence))"
+    },
+    {
+      "closed_ns": 17727733833,
+      "index": 295,
+      "source": ""
+    },
+    {
+      "closed_ns": 17727742000,
+      "index": 296,
+      "source": ""
+    },
+    {
+      "closed_ns": 17775920500,
+      "index": 297,
+      "source": "# ---- Release-gate decisions ----"
+    },
+    {
+      "closed_ns": 17818410833,
+      "index": 298,
+      "source": "release_ready = True"
+    },
+    {
+      "closed_ns": 17911018500,
+      "index": 299,
+      "source": "gates = []"
+    },
+    {
+      "closed_ns": 17911030750,
+      "index": 300,
+      "source": ""
+    },
+    {
+      "closed_ns": 18050163125,
+      "index": 301,
+      "source": "# Gate 1: No critical threshold violations in last hour?"
+    },
+    {
+      "closed_ns": 18370151625,
+      "index": 302,
+      "source": "now = max([ts for series in normalized_metrics.values() for ts, _ in series] + [log[\"timestamp\"] for log in normalized_logs] + [0])"
+    },
+    {
+      "closed_ns": 18439910083,
+      "index": 303,
+      "source": "last_hour_start = now - 3600"
+    },
+    {
+      "closed_ns": 18576363833,
+      "index": 304,
+      "source": "recent_violations = [v for v in threshold_violations if v[\"bucket\"] >= last_hour_start]"
+    },
+    {
+      "closed_ns": 18598355500,
+      "index": 305,
+      "source": "if recent_violations:"
+    },
+    {
+      "closed_ns": 18622122208,
+      "index": 306,
+      "source": "    release_ready = False"
+    },
+    {
+      "closed_ns": 18871896791,
+      "index": 307,
+      "source": "    gates.append({\"name\": \"recent_metric_violations\", \"pass\": False, \"details\": \"Violations in last hour\"})"
+    },
+    {
+      "closed_ns": 18871933000,
+      "index": 308,
+      "source": "else:"
+    },
+    {
+      "closed_ns": 18966147625,
+      "index": 309,
+      "source": "    gates.append({\"name\": \"recent_metric_violations\", \"pass\": True})"
+    },
+    {
+      "closed_ns": 18987285791,
+      "index": 310,
+      "source": ""
+    },
+    {
+      "closed_ns": 19080875833,
+      "index": 311,
+      "source": "# Gate 2: Error rate trend not increasing?"
+    },
+    {
+      "closed_ns": 19218644958,
+      "index": 312,
+      "source": "if deploy_time is not None and pre_avg_error is not None and post_avg_error is not None:"
+    },
+    {
+      "closed_ns": 19379505500,
+      "index": 313,
+      "source": "    if post_avg_error > pre_avg_error * 2 and post_avg_error > thresholds[\"error_rate\"]:"
+    },
+    {
+      "closed_ns": 19405582666,
+      "index": 314,
+      "source": "        release_ready = False"
+    },
+    {
+      "closed_ns": 19542811291,
+      "index": 315,
+      "source": "        gates.append({\"name\": \"post_deploy_error_spike\", \"pass\": False})"
+    },
+    {
+      "closed_ns": 19567621125,
+      "index": 316,
+      "source": "    else:"
+    },
+    {
+      "closed_ns": 19663309125,
+      "index": 317,
+      "source": "        gates.append({\"name\": \"post_deploy_error_spike\", \"pass\": True})"
+    },
+    {
+      "closed_ns": 19663343083,
+      "index": 318,
+      "source": "else:"
+    },
+    {
+      "closed_ns": 19819085000,
+      "index": 319,
+      "source": "    gates.append({\"name\": \"post_deploy_error_spike\", \"pass\": True, \"details\": \"Insufficient data\"})"
+    },
+    {
+      "closed_ns": 19819098375,
+      "index": 320,
+      "source": ""
+    },
+    {
+      "closed_ns": 19910736416,
+      "index": 321,
+      "source": "# Gate 3: No severe error types?"
+    },
+    {
+      "closed_ns": 20115525166,
+      "index": 322,
+      "source": "severe_types = [\"database_connection\", \"payment_timeout\", \"null_pointer\"]"
+    },
+    {
+      "closed_ns": 20160516833,
+      "index": 323,
+      "source": "severe_found = False"
+    },
+    {
+      "closed_ns": 20252773208,
+      "index": 324,
+      "source": "for et, _ in top_error_types:"
+    },
+    {
+      "closed_ns": 20276274666,
+      "index": 325,
+      "source": "    if et in severe_types:"
+    },
+    {
+      "closed_ns": 20298690500,
+      "index": 326,
+      "source": "        severe_found = True"
+    },
+    {
+      "closed_ns": 20322888041,
+      "index": 327,
+      "source": "        break"
+    },
+    {
+      "closed_ns": 20343924125,
+      "index": 328,
+      "source": "if severe_found:"
+    },
+    {
+      "closed_ns": 20400098958,
+      "index": 329,
+      "source": "    release_ready = False"
+    },
+    {
+      "closed_ns": 20529949541,
+      "index": 330,
+      "source": "    gates.append({\"name\": \"severe_error_types\", \"pass\": False, \"details\": \"Found severe error types\"})"
+    },
+    {
+      "closed_ns": 20529989958,
+      "index": 331,
+      "source": "else:"
+    },
+    {
+      "closed_ns": 20598714583,
+      "index": 332,
+      "source": "    gates.append({\"name\": \"severe_error_types\", \"pass\": True})"
+    },
+    {
+      "closed_ns": 20644337708,
+      "index": 333,
+      "source": ""
+    },
+    {
+      "closed_ns": 20666183083,
+      "index": 334,
+      "source": "# Gate 4: No config drift"
+    },
+    {
+      "closed_ns": 20688380250,
+      "index": 335,
+      "source": "if config_drift:"
+    },
+    {
+      "closed_ns": 20713154875,
+      "index": 336,
+      "source": "    release_ready = False"
+    },
+    {
+      "closed_ns": 20850718916,
+      "index": 337,
+      "source": "    gates.append({\"name\": \"config_drift\", \"pass\": False, \"details\": \" \".join(drift_reasons)})"
+    },
+    {
+      "closed_ns": 20850753291,
+      "index": 338,
+      "source": "else:"
+    },
+    {
+      "closed_ns": 20918389666,
+      "index": 339,
+      "source": "    gates.append({\"name\": \"config_drift\", \"pass\": True})"
+    },
+    {
+      "closed_ns": 20918401583,
+      "index": 340,
+      "source": ""
+    },
+    {
+      "closed_ns": 21012043458,
+      "index": 341,
+      "source": "# Gate 5: Deployment status is successful"
+    },
+    {
+      "closed_ns": 21171579875,
+      "index": 342,
+      "source": "if deployment_info.get(\"status\") not in [\"success\", \"live\", \"healthy\"]:"
+    },
+    {
+      "closed_ns": 21196433500,
+      "index": 343,
+      "source": "    release_ready = False"
+    },
+    {
+      "closed_ns": 21264297833,
+      "index": 344,
+      "source": "    gates.append({\"name\": \"deployment_status\", \"pass\": False})"
+    },
+    {
+      "closed_ns": 21286810083,
+      "index": 345,
+      "source": "else:"
+    },
+    {
+      "closed_ns": 21356969416,
+      "index": 346,
+      "source": "    gates.append({\"name\": \"deployment_status\", \"pass\": True})"
+    },
+    {
+      "closed_ns": 21356979541,
+      "index": 347,
+      "source": ""
+    },
+    {
+      "closed_ns": 21401561833,
+      "index": 348,
+      "source": "# ---- Structured report ----"
+    },
+    {
+      "closed_ns": 21433574708,
+      "index": 349,
+      "source": "report = {"
+    },
+    {
+      "closed_ns": 21515928125,
+      "index": 350,
+      "source": "    \"summary\": \"Release readiness analysis for checkout service\","
+    },
+    {
+      "closed_ns": 21560993291,
+      "index": 351,
+      "source": "    \"deployment\": deployment_info,"
+    },
+    {
+      "closed_ns": 21607185333,
+      "index": 352,
+      "source": "    \"config_drift\": {"
+    },
+    {
+      "closed_ns": 21684725958,
+      "index": 353,
+      "source": "        \"drift\": config_drift,"
+    },
+    {
+      "closed_ns": 21728547750,
+      "index": 354,
+      "source": "        \"reasons\": drift_reasons"
+    },
+    {
+      "closed_ns": 21728574750,
+      "index": 355,
+      "source": "    },"
+    },
+    {
+      "closed_ns": 21773794250,
+      "index": 356,
+      "source": "    \"metrics_summary\": {"
+    },
+    {
+      "closed_ns": 21818400291,
+      "index": 357,
+      "source": "        \"error_rate\": {"
+    },
+    {
+      "closed_ns": 21955883041,
+      "index": 358,
+      "source": "            \"buckets\": len(bucketed_metrics.get(\"error_rate\", {})),"
+    },
+    {
+      "closed_ns": 22140718875,
+      "index": 359,
+      "source": "            \"max\": max(bucketed_metrics.get(\"error_rate\", {}).values()) if bucketed_metrics.get(\"error_rate\") else None,"
+    },
+    {
+      "closed_ns": 22352006458,
+      "index": 360,
+      "source": "            \"avg\": sum(bucketed_metrics.get(\"error_rate\", {}).values()) / len(bucketed_metrics.get(\"error_rate\", {})) if bucketed_metrics.get(\"error_rate\") else None"
+    },
+    {
+      "closed_ns": 22352055125,
+      "index": 361,
+      "source": "        },"
+    },
+    {
+      "closed_ns": 22390847958,
+      "index": 362,
+      "source": "        \"p99_latency_ms\": {"
+    },
+    {
+      "closed_ns": 22508989541,
+      "index": 363,
+      "source": "            \"buckets\": len(bucketed_metrics.get(\"p99_latency_ms\", {})),"
+    },
+    {
+      "closed_ns": 22668002333,
+      "index": 364,
+      "source": "            \"max\": max(bucketed_metrics.get(\"p99_latency_ms\", {}).values()) if bucketed_metrics.get(\"p99_latency_ms\") else None"
+    },
+    {
+      "closed_ns": 22690733000,
+      "index": 365,
+      "source": "        }"
+    },
+    {
+      "closed_ns": 22716196500,
+      "index": 366,
+      "source": "    },"
+    },
+    {
+      "closed_ns": 22759035541,
+      "index": 367,
+      "source": "    \"error_logs\": {"
+    },
+    {
+      "closed_ns": 22806904125,
+      "index": 368,
+      "source": "        \"count\": len(normalized_logs),"
+    },
+    {
+      "closed_ns": 22856702041,
+      "index": 369,
+      "source": "        \"top_types\": top_error_types"
+    },
+    {
+      "closed_ns": 22878264250,
+      "index": 370,
+      "source": "    },"
+    },
+    {
+      "closed_ns": 23014646916,
+      "index": 371,
+      "source": "    \"threshold_violations\": threshold_violations[:10],  # Limit to avoid huge output"
+    },
+    {
+      "closed_ns": 23061841708,
+      "index": 372,
+      "source": "    \"evidence\": evidence_table,"
+    },
+    {
+      "closed_ns": 23133637333,
+      "index": 373,
+      "source": "    \"confidence\": round(confidence, 2),"
+    },
+    {
+      "closed_ns": 23219805250,
+      "index": 374,
+      "source": "    \"gates\": gates,"
+    },
+    {
+      "closed_ns": 23224409666,
+      "index": 375,
+      "source": "    \"release_ready\": release_ready"
+    },
+    {
+      "closed_ns": 23244386458,
+      "index": 376,
+      "source": "}"
+    },
+    {
+      "closed_ns": 23244394958,
+      "index": 377,
+      "source": ""
+    },
+    {
+      "closed_ns": 23358843958,
+      "index": 378,
+      "source": "# Ensure final result is the data structure"
+    },
+    {
+      "closed_ns": 23405477625,
+      "index": 379,
+      "source": "result = report"
+    }
+  ],
+  "tool_calls": [
+    {
+      "capability": "observability.query_metrics",
+      "eligible_ns": 2585565041,
+      "latency_ns": 2200000000,
+      "ready_ns": 4785565041,
+      "statement": 35
+    },
+    {
+      "capability": "observability.query_logs",
+      "eligible_ns": 2676767208,
+      "latency_ns": 3100000000,
+      "ready_ns": 5776767208,
+      "statement": 36
+    },
+    {
+      "capability": "github.latest_deployment",
+      "eligible_ns": 2747165875,
+      "latency_ns": 1000000000,
+      "ready_ns": 3747165875,
+      "statement": 37
+    },
+    {
+      "capability": "kubernetes.read_deployment",
+      "eligible_ns": 2839384083,
+      "latency_ns": 1400000000,
+      "ready_ns": 4239384083,
+      "statement": 38
+    }
+  ]
+}

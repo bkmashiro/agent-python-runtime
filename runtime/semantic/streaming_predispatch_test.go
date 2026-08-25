@@ -309,6 +309,69 @@ func TestCanPreissueStreamingPrefixAllowsOnlyStraightLineIndependentReadLookahea
 	}
 }
 
+func TestCanPreissueStreamingPrefixCrossesOnlySafeFunctionDeclarations(t *testing.T) {
+	plan := legalityTestPlan(t, true)
+	verified, site := streamingLookaheadWithDeclaration(t, plan)
+	if _, ok := CanPreissueStreamingPrefix(verified, plan, site.ID, legalityContext()).QualifiedCall(); !ok {
+		t.Fatal("streaming prefix rejected a safe non-executing function declaration")
+	}
+	analysis, err := verified.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysis.CandidateRegions[0].Barriers = []BarrierCode{BarrierUnsupportedControl}
+	analysis.CandidateRegions[0].Effects.MayBeUnknown = true
+	analysis.CandidateRegions[0].RejectionReasons = append(analysis.CandidateRegions[0].RejectionReasons, CandidateRejectUnknownEffect)
+	sort.Slice(analysis.CandidateRegions[0].RejectionReasons, func(i, j int) bool {
+		return analysis.CandidateRegions[0].RejectionReasons[i] < analysis.CandidateRegions[0].RejectionReasons[j]
+	})
+	_, encoded, err := analysis.Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	unsafe := VerifiedAnalysis{analysisJSON: encoded}
+	if _, ok := CanPreissueStreamingPrefix(unsafe, plan, site.ID, legalityContext()).QualifiedCall(); ok {
+		t.Fatal("streaming prefix crossed an unsafe function declaration")
+	}
+}
+
+func streamingLookaheadWithDeclaration(t *testing.T, plan *capability.Plan) (VerifiedAnalysis, CallSite) {
+	t.Helper()
+	verified, site := streamingLookaheadAnalysis(t, plan, false)
+	analysis, err := verified.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	control := analysis.CandidateRegions[0].ControlRegionID
+	declarationID := legalityDigest("safe-declaration")
+	declaration := CandidateRegion{
+		ID: declarationID, Kind: CandidateRegionDeclaration,
+		Span: SourceSpan{StartLine: 1, StartColumn: 0, EndLine: 1, EndColumn: 24}, ControlRegionID: control,
+		ControlPredecessors: []string{}, DataDependencies: []RegionDataDependency{}, LiveIns: []string{}, LiveOuts: []string{},
+		LiveInsCanonical: true, LiveOutsCanonical: true, Effects: EffectSummary{}, CapabilityOccurrences: []string{},
+		Barriers: []BarrierCode{}, RejectionReasons: []CandidateRejection{CandidateRejectDeclaration},
+	}
+	for index := range analysis.CallSites {
+		analysis.CallSites[index].Span.StartLine++
+		analysis.CallSites[index].Span.EndLine++
+	}
+	for index := range analysis.CandidateRegions {
+		analysis.CandidateRegions[index].Span.StartLine++
+		analysis.CandidateRegions[index].Span.EndLine++
+	}
+	analysis.CandidateRegions[0].ControlPredecessors = []string{declarationID}
+	analysis.CandidateRegions = append([]CandidateRegion{declaration}, analysis.CandidateRegions...)
+	analysis.CandidateRegionCount = len(analysis.CandidateRegions)
+	analysis.ModuleSpan = SourceSpan{StartLine: 1, StartColumn: 0, EndLine: 3, EndColumn: 30}
+	site.Span.StartLine++
+	site.Span.EndLine++
+	_, encoded, err := analysis.Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return VerifiedAnalysis{analysisJSON: encoded}, site
+}
+
 func streamingLookaheadAnalysis(t *testing.T, plan *capability.Plan, opaqueControl bool) (VerifiedAnalysis, CallSite) {
 	t.Helper()
 	verified, first := legalityVerifiedAnalysis(t, plan, true)

@@ -203,6 +203,21 @@ class SemanticAnalysisTests(unittest.TestCase):
                 self.assertIn("may_raise", declaration["rejection_reasons"])
                 self.assertTrue(declaration["barriers"] or declaration["effects"]["may_be_unknown"])
 
+    def test_unhashable_literal_defaults_remain_fail_closed(self):
+        capabilities = [{**copy.deepcopy(CAPABILITIES[0]), "arguments": ["key"]}]
+        for default in ("{[]}", "{[]: 1}", "{({1},)}"):
+            with self.subTest(default=default):
+                report = self.analyze(
+                    f"def normalize(value={default}):\n"
+                    "    return value\n"
+                    "remote = sources.read('profile')\n",
+                    capabilities=capabilities,
+                )
+                declaration = report["candidate_regions"][0]
+                self.assertNotIn("function_declaration", declaration["rejection_reasons"])
+                self.assertIn("may_raise", declaration["rejection_reasons"])
+                self.assertTrue(declaration["barriers"] or declaration["effects"]["may_be_unknown"])
+
     def test_candidate_regions_accept_proven_scalar_arithmetic_before_unrelated_effect(self):
         capabilities = [{**copy.deepcopy(CAPABILITIES[0]), "arguments": ["key"]}, copy.deepcopy(CAPABILITIES[1])]
         report = self.analyze(

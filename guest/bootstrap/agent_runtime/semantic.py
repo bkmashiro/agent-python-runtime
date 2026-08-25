@@ -614,13 +614,23 @@ def _function_definition_expressions(node):
     return expressions
 
 
+def _literal_hashable(node):
+    if isinstance(node, ast.Constant):
+        return isinstance(node.value, (type(None), bool, int, float, str, bytes))
+    if isinstance(node, ast.Tuple):
+        return all(_literal_hashable(value) for value in node.elts)
+    return False
+
+
 def _literal_default(node):
     if isinstance(node, ast.Constant):
         return isinstance(node.value, (type(None), bool, int, float, str, bytes))
-    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+    if isinstance(node, (ast.Tuple, ast.List)):
         return all(_literal_default(value) for value in node.elts)
+    if isinstance(node, ast.Set):
+        return all(_literal_hashable(value) for value in node.elts)
     if isinstance(node, ast.Dict):
-        return all(key is not None and _literal_default(key) and _literal_default(value)
+        return all(key is not None and _literal_hashable(key) and _literal_default(value)
                    for key, value in zip(node.keys, node.values))
     return False
 

@@ -1,6 +1,8 @@
 # Semantic Speculation Optimizer Autonomous Mega-Goal
 
-> **For Hermes:** This is the active long-running `/goal` handoff for the semantic-speculation research lane. Read it fully, inspect live Git state, and continue through successive verified slices. Do not stop after a test, commit, phase, or negative micro-result. Stop only at a named architecture/evidence gate that genuinely requires Yuzhe's decision, an unavailable resource/permission, an unsafe broad rewrite, or complete closeout.
+> **Status update (2026-08-27): execution paused at an owner architecture decision.** Do not resume the current pointer or unchecked phases. The proposed successor is [Unified Split-Phase Execution Roadmap](2026-08-27-unified-split-phase-execution-roadmap.md), which retires retained-prefix Guest execution and Python Future proxies in favour of one source-time/runtime split-phase model. Preserve this file as the implementation and negative-evidence record for the explored semantic-speculation paths.
+
+> **For Hermes:** This is a historical long-running `/goal` handoff and evidence log. Read it for mechanism and experiment context, but do not resume its execution pointer or unchecked phases. Follow the successor roadmap named above for any newly approved work.
 
 **Goal:** Determine and implement the largest evidence-backed set of safe generation-time optimisations that Pysolate's source-bound semantic layer can support beyond syntax-level EAGER gating, while preserving target-CPython authority, Host-owned effect policy, explicit physical/logical evidence, and fail-closed fallback.
 
@@ -638,10 +640,10 @@ For every executable slice:
 
 Do not leave an intentionally failing RED test across unrelated work. If a context limit approaches, finish or revert the slice and leave a clean signed checkpoint, then continue from live roadmap state in the next execution window. Context/window exhaustion is not a project blocker.
 
-## Roadmap tracking rules
+## Historical tracking rules
 
-- This file is the active execution source of truth for this lane.
-- Add a `Current execution pointer` immediately below this section when execution begins and update it after each slice.
+- This file is a historical execution and evidence record. Do not resume or update its queue.
+- The proposed successor roadmap owns the only current execution pointer for newly approved work.
 - Change `[ ]` to `[x]` only with real gate evidence.
 - Record negative gates as `[blocked]` or `[rejected]` with exact evidence; do not erase them.
 - Append completion entries with date, phase/slice, RED/GREEN/global gates and commit.
@@ -649,7 +651,7 @@ Do not leave an intentionally failing RED test across unrelated work. If a conte
 - Do not overwrite historical preregistration/evidence files; create versioned successors.
 - A successful phase is not permission to stop while the next phase is still admitted.
 
-### Current execution pointer
+### Historical execution pointer at pause
 
 `Phase 4: run the frozen 360-trial cold and equivalently-preprovisioned campaign, then independently validate P4-M/P4-E aggregates.`
 

@@ -97,20 +97,14 @@ func (table *SplitPhaseTable) PlanIdentity() string {
 	return table.plan.Identity()
 }
 
-// Submit validates and starts one physical Future when Python reaches the tool
-// call, without entering the Broker logical call ledger until materialization.
-func (table *SplitPhaseTable) Submit(ctx context.Context, slotID string, raw []byte) error {
-	return table.issue(ctx, slotID, raw, false, false)
-}
-
 // IssueOrReuse is the V1 split-phase entry point. It admits only operations
 // with a positive PreDispatch contract and reuses one exact Run-private
 // attempt when source-time analysis already populated the dynamic slot.
 func (table *SplitPhaseTable) IssueOrReuse(ctx context.Context, slotID string, raw []byte) error {
-	return table.issue(ctx, slotID, raw, true, true)
+	return table.issue(ctx, slotID, raw)
 }
 
-func (table *SplitPhaseTable) issue(ctx context.Context, slotID string, raw []byte, admittedOnly, reuse bool) error {
+func (table *SplitPhaseTable) issue(ctx context.Context, slotID string, raw []byte) error {
 	if table == nil || ctx == nil || !validIdentity(slotID) {
 		return ErrSplitPhaseUnavailable
 	}
@@ -118,12 +112,7 @@ func (table *SplitPhaseTable) issue(ctx context.Context, slotID string, raw []by
 	if err != nil {
 		return err
 	}
-	var prepared *PreparedPreDispatch
-	if admittedOnly {
-		prepared, err = table.plan.PreparePreDispatch(call.Capability, call.Arguments)
-	} else {
-		prepared, err = table.plan.PrepareFuture(call.Capability, call.Arguments)
-	}
+	prepared, err := table.plan.PreparePreDispatch(call.Capability, call.Arguments)
 	if err != nil {
 		return ErrSplitPhaseUnavailable
 	}
@@ -147,10 +136,6 @@ func (table *SplitPhaseTable) issue(ctx context.Context, slotID string, raw []by
 		return ErrSplitPhaseUnavailable
 	}
 	if existing, exists := table.entriesBySlot[slotID]; exists {
-		if !reuse {
-			table.mu.Unlock()
-			return ErrSplitPhaseDuplicate
-		}
 		if existing.materializing || existing.consumed || existing.discarded {
 			table.mu.Unlock()
 			return ErrSplitPhaseConsumed
@@ -166,10 +151,7 @@ func (table *SplitPhaseTable) issue(ctx context.Context, slotID string, raw []by
 	}
 	if _, exists := table.entriesByCall[call.CallID]; exists {
 		table.mu.Unlock()
-		if reuse {
-			return ErrSplitPhaseMismatch
-		}
-		return ErrSplitPhaseDuplicate
+		return ErrSplitPhaseMismatch
 	}
 	if uint32(len(table.entriesBySlot)) >= table.limits.MaxCalls ||
 		table.reservedCostUnits+uint64(costUnits) > table.limits.MaxCostUnits ||

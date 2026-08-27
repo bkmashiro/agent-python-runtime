@@ -8,42 +8,7 @@ import (
 	"testing"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 )
-
-func TestFutureProjectionIsAnAnalyzerFreePlanPass(t *testing.T) {
-	registry := capability.NewRegistry()
-	if err := registry.Register(testSpec(), basicGrant(t), noopHandler); err != nil {
-		t.Fatal(err)
-	}
-	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
-	if err != nil {
-		t.Fatal(err)
-	}
-	pass, err := capability.NewFutureProjectionPass()
-	if err != nil {
-		t.Fatal(err)
-	}
-	registration := pass.Registration()
-	if registration.Stage() != passregistration.StagePlanProjection || registration.AnalyzerSHA256() != "" {
-		t.Fatalf("registration=%+v", registration)
-	}
-	projected, err := pass.Project(plan)
-	if err != nil || projected != plan.FuturePythonPrelude() {
-		t.Fatalf("projection changed direct prelude: err=%v", err)
-	}
-}
-
-func TestFutureProjectionRejectsUnsealedPlan(t *testing.T) {
-	pass, err := capability.NewFutureProjectionPass()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var plan capability.Plan
-	if projected, err := pass.Project(&plan); err != capability.ErrInvalidFutureProjectionPass || projected != "" {
-		t.Fatalf("projected=%q err=%v", projected, err)
-	}
-}
 
 func TestCapabilitySpecCanonicalizationAndPlanIdentity(t *testing.T) {
 	first := capability.NewRegistry()
@@ -336,72 +301,6 @@ func TestStreamingPythonPreludeExcludesWriteCapabilities(t *testing.T) {
 	}
 	if !strings.Contains(plan.PythonPrelude(), "fixture.write") {
 		t.Fatal("final plan lost write capability")
-	}
-}
-
-func TestFuturePythonPreludeSubmitsEveryProjectedCapability(t *testing.T) {
-	registry := capability.NewRegistry()
-	read := testSpec()
-	read.Name = "fixture.read"
-	read.Version = "fixture.read.v1"
-	read.Description = "read"
-	read.EffectClass = capability.EffectExternalRead
-	read.Python = &capability.PythonProjection{Module: "fixture", Method: "read", Arguments: []string{"path"}, ResultField: "body"}
-	write := read
-	write.Name = "fixture.write"
-	write.Version = "fixture.write.v1"
-	write.Description = "write"
-	write.EffectClass = capability.EffectWorkspaceWrite
-	write.Python = &capability.PythonProjection{Module: "fixture", Method: "write", Arguments: []string{"path"}, ResultField: "written"}
-	for _, spec := range []capability.Spec{read, write} {
-		if err := registry.Register(spec, basicGrant(t), noopHandler); err != nil {
-			t.Fatal(err)
-		}
-	}
-	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
-	if err != nil {
-		t.Fatal(err)
-	}
-	prelude := plan.FuturePythonPrelude()
-	for _, required := range []string{"fixture.read", "fixture.write", "submit_call", "materialize_call", "_resolve_capability_futures"} {
-		if !strings.Contains(prelude, required) {
-			t.Fatalf("future prelude is missing %q: %s", required, prelude)
-		}
-	}
-	if strings.Contains(prelude, "_host_bridge.call(") {
-		t.Fatalf("future prelude retained synchronous capability call: %s", prelude)
-	}
-}
-
-func TestFuturePythonPreludeKeepsApprovalSynchronousWithDistinctCallIDs(t *testing.T) {
-	registry := capability.NewRegistry()
-	future := testSpec()
-	future.Name = "fixture.read"
-	future.Version = "fixture.read.v1"
-	future.Description = "read"
-	future.EffectClass = capability.EffectExternalRead
-	future.Python = &capability.PythonProjection{Module: "fixture", Method: "read", Arguments: []string{"path"}}
-	approval := testSpec()
-	approval.Name = "fixture.delete"
-	approval.Version = "fixture.delete.v1"
-	approval.Description = "delete"
-	approval.EffectClass = capability.EffectWorkspaceWrite
-	approval.Python = &capability.PythonProjection{Module: "fixture", Method: "delete", Arguments: []string{"path"}}
-	approval.Approval = &capability.ApprovalRequirement{Mode: capability.ApprovalLease, LeaseMilliseconds: 15}
-	for _, spec := range []capability.Spec{future, approval} {
-		if err := registry.Register(spec, basicGrant(t), noopHandler); err != nil {
-			t.Fatal(err)
-		}
-	}
-	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
-	if err != nil {
-		t.Fatal(err)
-	}
-	prelude := plan.FuturePythonPrelude()
-	for _, required := range []string{"future-capability-", `"call_id": "capability-"`, "_host_bridge.submit_call", "_host_bridge.call", "fixture.read", "fixture.delete"} {
-		if !strings.Contains(prelude, required) {
-			t.Fatalf("hybrid Future prelude is missing %q: %s", required, prelude)
-		}
 	}
 }
 

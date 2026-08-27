@@ -173,10 +173,6 @@ func NewUnifiedCatalog(config UnifiedCatalogConfig) (*Registry, error) {
 	if err != nil {
 		return nil, err
 	}
-	future, err := capability.NewFutureProjectionPass()
-	if err != nil {
-		return nil, err
-	}
 	preparedValue, err := valueslot.NewPreparedValuePass()
 	if err != nil {
 		return nil, err
@@ -189,10 +185,6 @@ func NewUnifiedCatalog(config UnifiedCatalogConfig) (*Registry, error) {
 	if err != nil {
 		return nil, err
 	}
-	splitRead, err := sourcepatch.NewSplitPhaseSourcesRead(passregistration.SemanticAnalyzerSHA256)
-	if err != nil {
-		return nil, err
-	}
 	splitCapabilities, err := sourcepatch.NewSplitPhaseCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
 	if err != nil {
 		return nil, err
@@ -202,8 +194,8 @@ func NewUnifiedCatalog(config UnifiedCatalogConfig) (*Registry, error) {
 		return nil, err
 	}
 	plugins := []Plugin{
-		semanticAdapter, preparedPureAdapter, preparedNumpyAdapter, future, preparedValue,
-		cse, fold, splitRead, splitCapabilities, dataLocal,
+		semanticAdapter, preparedPureAdapter, preparedNumpyAdapter, preparedValue,
+		cse, fold, splitCapabilities, dataLocal,
 	}
 	for _, definition := range passregistration.RuntimeOptimizationDefinitions() {
 		registration, registerErr := definition.Register("", runtimeOptimizationConfigSHA256(definition))
@@ -343,11 +335,9 @@ func unifiedRequirements() map[passregistration.Name]runtimeconfig.MechanismSet 
 		passregistration.SemanticPreDispatch:          {SemanticAnalysis: true, StagedObservation: true, SemanticPreDispatch: true},
 		passregistration.PreparedPureRegion:           {SemanticAnalysis: true},
 		passregistration.PreparedNumpyLoad:            {SemanticAnalysis: true, PreparedRuntime: true},
-		passregistration.CapabilityFutureProjection:   {SplitPhaseCalls: true},
 		passregistration.PreparedValueBinding:         {ValueSlots: true},
 		sourcepatch.PureScalarCSEName:                 {SemanticAnalysis: true},
 		sourcepatch.PureScalarFoldName:                {SemanticAnalysis: true},
-		sourcepatch.SplitPhaseSourcesReadName:         {SplitPhaseCalls: true},
 		sourcepatch.SplitPhaseCapabilityCallsName:     {SplitPhaseCalls: true},
 		sourcepatch.DataLocalNumpySumName:             {ValueSlots: true},
 		passregistration.SourceStreamingExecution:     {Streaming: true, PrivateWorkspace: true},

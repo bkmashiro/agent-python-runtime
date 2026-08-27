@@ -62,10 +62,6 @@ func TestCurrentPassesRouteThroughTypedStagesWithoutChangingRegistrationIdentity
 }
 
 func TestAnalyzerFreePassStagesRecordWithoutInventingSourceAnalysis(t *testing.T) {
-	future, err := passregistration.CapabilityFutureProjectionDefinition().Register("", digest('b'))
-	if err != nil {
-		t.Fatal(err)
-	}
 	prepared, err := passregistration.PreparedValueBindingDefinition().Register("", digest('c'))
 	if err != nil {
 		t.Fatal(err)
@@ -75,29 +71,17 @@ func TestAnalyzerFreePassStagesRecordWithoutInventingSourceAnalysis(t *testing.T
 		t.Fatal(err)
 	}
 	pipeline, err := passpipeline.New([]passpipeline.Entry{
-		{Registration: future, Stage: passpipeline.StagePlanProjection, Enabled: true},
 		{Registration: prepared, Stage: passpipeline.StageRunBinding, Enabled: true},
 		{Registration: runtimePass, Stage: passpipeline.StageRuntimeLowering, Enabled: true},
 	}, passpipeline.DefaultLimits())
 	if err != nil {
 		t.Fatal(err)
 	}
-	projection, err := pipeline.RecordPlanProjection(passpipeline.RecordInput{
-		PassName: future.Name(), Outcome: passpipeline.OutcomeApplied,
-		Bindings: map[passregistration.Binding]string{
-			passregistration.CapabilityPlanSHA256: digest('d'),
-			passregistration.PassConfigSHA256:     future.ConfigSHA256(),
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	binding, err := pipeline.RecordRunBinding(passpipeline.RecordInput{
 		PassName: prepared.Name(), Outcome: passpipeline.OutcomeApplied,
 		Bindings: map[passregistration.Binding]string{
-			passregistration.RegionID:          digest('e'),
-			passregistration.RunIdentitySHA256: digest('f'),
-			passregistration.PassConfigSHA256:  prepared.ConfigSHA256(),
+			passregistration.RegionID: digest('e'), passregistration.RunIdentitySHA256: digest('f'),
+			passregistration.PassConfigSHA256: prepared.ConfigSHA256(),
 		},
 	})
 	if err != nil {
@@ -106,24 +90,21 @@ func TestAnalyzerFreePassStagesRecordWithoutInventingSourceAnalysis(t *testing.T
 	lowering, err := pipeline.RecordRuntimeLowering(passpipeline.RecordInput{
 		PassName: runtimePass.Name(), Outcome: passpipeline.OutcomeApplied,
 		Bindings: map[passregistration.Binding]string{
-			passregistration.RuntimeConfigSHA256: digest('b'),
-			passregistration.PassConfigSHA256:    runtimePass.ConfigSHA256(),
+			passregistration.RuntimeConfigSHA256: digest('b'), passregistration.PassConfigSHA256: runtimePass.ConfigSHA256(),
 		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if projection.Stage != passpipeline.StagePlanProjection || binding.Stage != passpipeline.StageRunBinding ||
-		lowering.Stage != passpipeline.StageRuntimeLowering || projection.OriginalSourceSHA256 != "" ||
+	if binding.Stage != passpipeline.StageRunBinding || lowering.Stage != passpipeline.StageRuntimeLowering ||
 		binding.OriginalASTSHA256 != "" || lowering.OriginalSourceSHA256 != "" {
-		t.Fatalf("projection=%+v binding=%+v lowering=%+v", projection, binding, lowering)
+		t.Fatalf("binding=%+v lowering=%+v", binding, lowering)
 	}
 	secondRun := passpipeline.RecordInput{
 		PassName: prepared.Name(), Outcome: passpipeline.OutcomeApplied,
 		Bindings: map[passregistration.Binding]string{
-			passregistration.RegionID:          digest('e'),
-			passregistration.RunIdentitySHA256: digest('a'),
-			passregistration.PassConfigSHA256:  prepared.ConfigSHA256(),
+			passregistration.RegionID: digest('e'), passregistration.RunIdentitySHA256: digest('a'),
+			passregistration.PassConfigSHA256: prepared.ConfigSHA256(),
 		},
 	}
 	if _, err := pipeline.RecordRunBinding(secondRun); err != nil {

@@ -58,28 +58,6 @@ func (plan *Plan) PreparePreDispatch(name string, raw json.RawMessage) (*Prepare
 	}, nil
 }
 
-// PrepareFuture validates any live capability for direct Future execution.
-// Unlike speculative pre-dispatch, the Future is created only when Python
-// reaches the call, so writes are allowed. Approval-gated and playback calls
-// stay on the synchronous Broker path.
-func (plan *Plan) PrepareFuture(name string, raw json.RawMessage) (*PreparedPreDispatch, error) {
-	registered, ok := plan.lookup(name)
-	if !ok || registered.spec.Playback != PlaybackLiveOnly || registered.spec.Approval != nil || len(raw) == 0 {
-		return nil, ErrPreDispatchUnavailable
-	}
-	arguments, err := canonicalForSchema(registered.inputSchema, raw)
-	if err != nil {
-		return nil, ErrPreDispatchUnavailable
-	}
-	maxResultBytes := uint64(maxCallBytes)
-	if qualification, qualified := preDispatchQualification(registered.spec); qualified && qualification.Eligible() {
-		maxResultBytes = qualification.Contract().MaxResultBytes
-	}
-	return &PreparedPreDispatch{
-		registered: registered, arguments: append(json.RawMessage(nil), arguments...), maxResultBytes: maxResultBytes,
-	}, nil
-}
-
 func (prepared *PreparedPreDispatch) Arguments() json.RawMessage {
 	if prepared == nil {
 		return nil

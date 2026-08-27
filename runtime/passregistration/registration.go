@@ -21,7 +21,6 @@ const (
 	SemanticPreDispatch          Name = "semantic_pre_dispatch"
 	PreparedPureRegion           Name = "prepared_pure_region"
 	PreparedNumpyLoad            Name = "prepared_numpy_load"
-	CapabilityFutureProjection   Name = "capability_future_projection"
 	PreparedValueBinding         Name = "prepared_value_binding"
 	SourceStreamingExecution     Name = "source_streaming_execution"
 	StreamedChildFanout          Name = "streamed_child_fanout"
@@ -36,7 +35,6 @@ const (
 	SemanticPreDispatchVersion          = "pysolate.semantic-pre-dispatch-pass.v0"
 	PreparedPureRegionVersion           = "pysolate.prepared-pure-region-pass.v1"
 	PreparedNumpyLoadVersion            = "pysolate.prepared-numpy-load-pass.v1"
-	CapabilityFutureProjectionVersion   = "pysolate.capability-future-projection-pass.v1"
 	PreparedValueBindingVersion         = "pysolate.prepared-value-binding-pass.v1"
 	SourceStreamingExecutionVersion     = "pysolate.source-streaming-execution-pass.v1"
 	StreamedChildFanoutVersion          = "pysolate.streamed-child-fanout-pass.v1"
@@ -140,11 +138,6 @@ func PreparedPureRegionDefinition() Definition {
 
 func PreparedNumpyLoadDefinition() Definition {
 	value, _ := Define(PreparedNumpyLoad, PreparedNumpyLoadVersion, StageHybridPreparePatch, ExecutionPatch, PatchBindings())
-	return value
-}
-
-func CapabilityFutureProjectionDefinition() Definition {
-	value, _ := Define(CapabilityFutureProjection, CapabilityFutureProjectionVersion, StagePlanProjection, PlanProjection, ProjectionBindings())
 	return value
 }
 
@@ -286,8 +279,6 @@ func New(name Name, version, analyzerSHA256, configSHA256 string, consumer Consu
 		definition = PreparedPureRegionDefinition()
 	case name == PreparedNumpyLoad && version == PreparedNumpyLoadVersion:
 		definition = PreparedNumpyLoadDefinition()
-	case name == CapabilityFutureProjection && version == CapabilityFutureProjectionVersion:
-		definition = CapabilityFutureProjectionDefinition()
 	case name == PreparedValueBinding && version == PreparedValueBindingVersion:
 		definition = PreparedValueBindingDefinition()
 	default:

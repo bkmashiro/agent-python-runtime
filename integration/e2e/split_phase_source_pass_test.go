@@ -18,7 +18,6 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
 )
@@ -155,315 +154,7 @@ func TestRealGuestUnifiedSplitPhasePreissueThenRuntimeIssue(t *testing.T) {
 	}
 }
 
-func TestRealGuestCapabilityFuturesOverlapWithoutAnalyzer(t *testing.T) {
-	artifact, err := os.ReadFile(guestArtifact(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	source := "first = sources.read(\"alpha\")\nsecond = sources.read(\"beta\")\nresult = [first, second]\n"
-	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
-		RunID: "future-overlap-e2e", Code: source, Inputs: json.RawMessage(`{}`),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var active atomic.Int32
-	var maxActive atomic.Int32
-	handler := capability.HandlerFunc(func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
-		var arguments struct {
-			Path string `json:"path"`
-		}
-		if json.Unmarshal(raw, &arguments) != nil {
-			return nil, capability.ErrInvalidTool
-		}
-		current := active.Add(1)
-		for observed := maxActive.Load(); current > observed && !maxActive.CompareAndSwap(observed, current); observed = maxActive.Load() {
-		}
-		select {
-		case <-ctx.Done():
-			active.Add(-1)
-			return nil, ctx.Err()
-		case <-time.After(150 * time.Millisecond):
-		}
-		active.Add(-1)
-		return json.Marshal(map[string]string{"body": arguments.Path + "-body"})
-	})
-	plan := splitPhaseE2EPlan(t, 2, handler)
-	baselinePrelude := plan.PythonPrelude()
-	futurePass := futurePassSelection(t, plan)
-	config := runtimeconfig.DefaultRunConfig()
-	config.Timeout = 90 * time.Second
-	runner, err := (wazeroengine.Factory{Passes: futurePass.registry, BrokerFactory: func(context.Context) (*capability.Broker, error) {
-		return capability.NewBroker(capability.Config{RunIdentity: "future-overlap-e2e", Plan: plan})
-	}}).New(context.Background(), artifact, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer runner.Close(context.Background())
-
-	baselineStarted := time.Now()
-	baseline, err := runner.Run(context.Background(), request, baselinePrelude)
-	baselineDuration := time.Since(baselineStarted)
-	if err != nil {
-		t.Fatal(err)
-	}
-	baselineResult, err := decodeSuccessfulGuestResult(baseline)
-	if err != nil || string(baselineResult) != `["alpha-body","beta-body"]` || maxActive.Load() != 1 {
-		t.Fatalf("baseline result=%s max_active=%d err=%v payload=%s", baselineResult, maxActive.Load(), err, baseline)
-	}
-
-	maxActive.Store(0)
-	treatmentStarted := time.Now()
-	treatment, err := runner.Run(context.Background(), request, futurePass.prelude)
-	treatmentDuration := time.Since(treatmentStarted)
-	if err != nil {
-		t.Fatal(err)
-	}
-	treatmentResult, err := decodeSuccessfulGuestResult(treatment)
-	if err != nil || string(treatmentResult) != string(baselineResult) || maxActive.Load() != 2 {
-		t.Fatalf("treatment result=%s max_active=%d err=%v payload=%s", treatmentResult, maxActive.Load(), err, treatment)
-	}
-	if evidence := trustedSemanticRunner(t, runner).SplitPhaseEvidence(); evidence.Submitted != 2 || evidence.Consumed != 2 || evidence.Discarded != 0 {
-		t.Fatalf("future evidence=%+v", evidence)
-	}
-	if treatmentDuration >= baselineDuration {
-		t.Fatalf("Future path did not reduce latency: baseline=%s treatment=%s", baselineDuration, treatmentDuration)
-	}
-	t.Logf("direct Future evidence: baseline=%s treatment=%s saved=%s ratio=%.4f analyzers=0", baselineDuration, treatmentDuration, baselineDuration-treatmentDuration, float64(treatmentDuration)/float64(baselineDuration))
-}
-
-func TestRealGuestCapabilityFutureDrainsUnobservedWrite(t *testing.T) {
-	artifact, err := os.ReadFile(guestArtifact(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	registry := capability.NewRegistry()
-	grant, err := capability.NewGrant(json.RawMessage(`{"scope":"future-write-e2e"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var writes atomic.Uint32
-	spec := capability.Spec{
-		Name: "fixture.write", Version: "fixture.write.future-e2e.v1", Description: "Write one fixture.",
-		EffectClass: capability.EffectWorkspaceWrite, Playback: capability.PlaybackLiveOnly, HandlerIdentity: "fixture-write-future-e2e.v1",
-		InputSchema:  json.RawMessage(`{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}`),
-		OutputSchema: json.RawMessage(`{"type":"object","properties":{"written":{"type":"boolean"}},"required":["written"],"additionalProperties":false}`),
-		Python:       &capability.PythonProjection{Module: "fixture", Method: "write", Arguments: []string{"value"}, ResultField: "written"},
-	}
-	if err := registry.Register(spec, grant, capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
-		writes.Add(1)
-		return json.RawMessage(`{"written":true}`), nil
-	})); err != nil {
-		t.Fatal(err)
-	}
-	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
-	futurePass := futurePassSelection(t, plan)
-	config := runtimeconfig.DefaultRunConfig()
-	config.Timeout = 90 * time.Second
-	runner, err := (wazeroengine.Factory{Passes: futurePass.registry, BrokerFactory: func(context.Context) (*capability.Broker, error) {
-		return capability.NewBroker(capability.Config{RunIdentity: "future-write-e2e", Plan: plan})
-	}}).New(context.Background(), artifact, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer runner.Close(context.Background())
-	request, _ := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
-		RunID: "future-write-e2e", Code: "fixture.write(\"value\")\nresult = \"done\"\n", Inputs: json.RawMessage(`{}`),
-	})
-	payload, err := runner.Run(context.Background(), request, futurePass.prelude)
-	result, decodeErr := decodeSuccessfulGuestResult(payload)
-	if err != nil || decodeErr != nil || string(result) != `"done"` || writes.Load() != 1 {
-		t.Fatalf("result=%s writes=%d decode_err=%v err=%v payload=%s", result, writes.Load(), decodeErr, err, payload)
-	}
-	if evidence := trustedSemanticRunner(t, runner).SplitPhaseEvidence(); evidence.Submitted != 1 || evidence.Consumed != 1 || evidence.Discarded != 0 {
-		t.Fatalf("write Future evidence=%+v", evidence)
-	}
-}
-
-func TestRealGuestCapabilityFutureDrainsAfterEarlierError(t *testing.T) {
-	artifact, err := os.ReadFile(guestArtifact(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	registry := capability.NewRegistry()
-	grant, err := capability.NewGrant(json.RawMessage(`{"scope":"future-drain-error-e2e"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var writes atomic.Uint32
-	spec := capability.Spec{
-		Name: "fixture.write", Version: "fixture.write.future-error-e2e.v1", Description: "Write one fixture.",
-		EffectClass: capability.EffectWorkspaceWrite, Playback: capability.PlaybackLiveOnly, HandlerIdentity: "fixture-write-future-error-e2e.v1",
-		InputSchema:  json.RawMessage(`{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}`),
-		OutputSchema: json.RawMessage(`{"type":"object","properties":{"written":{"type":"boolean"}},"required":["written"],"additionalProperties":false}`),
-		Python:       &capability.PythonProjection{Module: "fixture", Method: "write", Arguments: []string{"value"}, ResultField: "written"},
-	}
-	if err := registry.Register(spec, grant, capability.HandlerFunc(func(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
-		writes.Add(1)
-		var arguments struct {
-			Value string `json:"value"`
-		}
-		_ = json.Unmarshal(raw, &arguments)
-		if arguments.Value == "error" {
-			return nil, errors.New("first write failed")
-		}
-		return json.RawMessage(`{"written":true}`), nil
-	})); err != nil {
-		t.Fatal(err)
-	}
-	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
-	if err != nil {
-		t.Fatal(err)
-	}
-	futurePass := futurePassSelection(t, plan)
-	config := runtimeconfig.DefaultRunConfig()
-	config.Timeout = 90 * time.Second
-	runner, err := (wazeroengine.Factory{Passes: futurePass.registry, BrokerFactory: func(context.Context) (*capability.Broker, error) {
-		return capability.NewBroker(capability.Config{RunIdentity: "future-drain-error-e2e", Plan: plan})
-	}}).New(context.Background(), artifact, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer runner.Close(context.Background())
-	request, _ := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
-		RunID:  "future-drain-error-e2e",
-		Code:   "fixture.write(\"error\")\nfixture.write(\"ok\")\nresult = \"done\"\n",
-		Inputs: json.RawMessage(`{}`),
-	})
-	payload, runErr := runner.Run(context.Background(), request, futurePass.prelude)
-	var response struct {
-		Status string `json:"status"`
-		Error  *struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
-	decodeErr := json.Unmarshal(payload, &response)
-	if runErr != nil || decodeErr != nil || response.Status != "error" || response.Error == nil || response.Error.Code != "python_exception" || writes.Load() != 2 {
-		t.Fatalf("response=%+v writes=%d decode_err=%v run_err=%v payload=%s", response, writes.Load(), decodeErr, runErr, payload)
-	}
-	if evidence := trustedSemanticRunner(t, runner).SplitPhaseEvidence(); evidence.Submitted != 2 || evidence.Consumed != 2 || evidence.Discarded != 0 {
-		t.Fatalf("error drain evidence=%+v", evidence)
-	}
-}
-
-func TestRealGuestCapabilityFutureMaterializesAnyJSONResultShape(t *testing.T) {
-	artifact, err := os.ReadFile(guestArtifact(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	registry := capability.NewRegistry()
-	grant, err := capability.NewGrant(json.RawMessage(`{"scope":"future-json-shapes-e2e"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	spec := capability.Spec{
-		Name: "fixture.value", Version: "fixture.value.future-e2e.v1", Description: "Return one JSON shape.",
-		EffectClass: capability.EffectPure, Playback: capability.PlaybackLiveOnly, HandlerIdentity: "fixture-value-future-e2e.v1",
-		InputSchema:  json.RawMessage(`{"type":"object","properties":{"kind":{"type":"string"}},"required":["kind"],"additionalProperties":false}`),
-		OutputSchema: json.RawMessage(`{}`),
-		Python:       &capability.PythonProjection{Module: "fixture", Method: "value", Arguments: []string{"kind"}},
-	}
-	if err := registry.Register(spec, grant, capability.HandlerFunc(func(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
-		var arguments struct {
-			Kind string `json:"kind"`
-		}
-		_ = json.Unmarshal(raw, &arguments)
-		switch arguments.Kind {
-		case "scalar":
-			return json.RawMessage(`7`), nil
-		case "array":
-			return json.RawMessage(`[1,2]`), nil
-		case "null":
-			return json.RawMessage(`null`), nil
-		default:
-			return nil, errors.New("unknown shape")
-		}
-	})); err != nil {
-		t.Fatal(err)
-	}
-	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 3})
-	if err != nil {
-		t.Fatal(err)
-	}
-	futurePass := futurePassSelection(t, plan)
-	config := runtimeconfig.DefaultRunConfig()
-	config.Timeout = 90 * time.Second
-	runner, err := (wazeroengine.Factory{Passes: futurePass.registry, BrokerFactory: func(context.Context) (*capability.Broker, error) {
-		return capability.NewBroker(capability.Config{RunIdentity: "future-json-shapes-e2e", Plan: plan})
-	}}).New(context.Background(), artifact, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer runner.Close(context.Background())
-	request, _ := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
-		RunID:  "future-json-shapes-e2e",
-		Code:   "scalar = fixture.value(\"scalar\")\narray = fixture.value(\"array\")\nnone = fixture.value(\"null\")\nresult = [scalar, array, none]\n",
-		Inputs: json.RawMessage(`{}`),
-	})
-	payload, runErr := runner.Run(context.Background(), request, futurePass.prelude)
-	result, decodeErr := decodeSuccessfulGuestResult(payload)
-	if runErr != nil || decodeErr != nil || string(result) != `[7,[1,2],null]` {
-		t.Fatalf("result=%s decode_err=%v run_err=%v payload=%s", result, decodeErr, runErr, payload)
-	}
-}
-
-func TestRealGuestCapabilityFuturesUseWholePlanCallBudget(t *testing.T) {
-	artifact, err := os.ReadFile(guestArtifact(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	registry := capability.NewRegistry()
-	grant, err := capability.NewGrant(json.RawMessage(`{"scope":"future-plan-budget-e2e"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var calls atomic.Uint32
-	spec := capability.Spec{
-		Name: "fixture.read", Version: "fixture.read.future-budget-e2e.v1", Description: "Read one fixture.",
-		EffectClass: capability.EffectPure, Playback: capability.PlaybackLiveOnly, HandlerIdentity: "fixture-read-future-budget-e2e.v1",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false}`),
-		OutputSchema: json.RawMessage(`{"type":"integer"}`),
-		Python:       &capability.PythonProjection{Module: "fixture", Method: "read"},
-	}
-	if err := registry.Register(spec, grant, capability.HandlerFunc(func(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
-		return json.Marshal(calls.Add(1))
-	})); err != nil {
-		t.Fatal(err)
-	}
-	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 5})
-	if err != nil {
-		t.Fatal(err)
-	}
-	futurePass := futurePassSelection(t, plan)
-	config := runtimeconfig.DefaultRunConfig()
-	config.Timeout = 90 * time.Second
-	runner, err := (wazeroengine.Factory{Passes: futurePass.registry, BrokerFactory: func(context.Context) (*capability.Broker, error) {
-		return capability.NewBroker(capability.Config{RunIdentity: "future-plan-budget-e2e", Plan: plan})
-	}}).New(context.Background(), artifact, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer runner.Close(context.Background())
-	request, _ := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
-		RunID:  "future-plan-budget-e2e",
-		Code:   "a = fixture.read()\nb = fixture.read()\nc = fixture.read()\nd = fixture.read()\ne = fixture.read()\nresult = [a, b, c, d, e]\n",
-		Inputs: json.RawMessage(`{}`),
-	})
-	payload, runErr := runner.Run(context.Background(), request, futurePass.prelude)
-	_, decodeErr := decodeSuccessfulGuestResult(payload)
-	if runErr != nil || decodeErr != nil || calls.Load() != 5 {
-		t.Fatalf("calls=%d decode_err=%v run_err=%v payload=%s", calls.Load(), decodeErr, runErr, payload)
-	}
-	if evidence := trustedSemanticRunner(t, runner).SplitPhaseEvidence(); evidence.Submitted != 5 || evidence.Consumed != 5 || evidence.Discarded != 0 {
-		t.Fatalf("plan budget evidence=%+v", evidence)
-	}
-}
-
-func TestRealGuestSplitPhaseSourcesReadOverlapsPhysicalWorkAndKeepsLogicalReceipts(t *testing.T) {
+func TestRealGuestUnifiedSplitPhaseOverlapsIndependentCallsAndKeepsLogicalReceipts(t *testing.T) {
 	artifact, err := os.ReadFile(guestArtifact(t))
 	if err != nil {
 		t.Fatal(err)
@@ -500,9 +191,9 @@ func TestRealGuestSplitPhaseSourcesReadOverlapsPhysicalWorkAndKeepsLogicalReceip
 		return json.Marshal(map[string]string{"body": arguments.Path + "-body"})
 	})
 	plan := splitPhaseE2EPlan(t, 2, handler)
-	prelude := splitPhaseDirectPrelude(source)
+	prelude := plan.PythonPrelude()
 	plugins := unifiedPassCatalog(t)
-	plugins, err = plugins.Enable(sourcepatch.SplitPhaseSourcesReadName)
+	plugins, err = plugins.Enable(sourcepatch.SplitPhaseCapabilityCallsName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -542,8 +233,9 @@ func TestRealGuestSplitPhaseSourcesReadOverlapsPhysicalWorkAndKeepsLogicalReceip
 	treatmentStarted := time.Now()
 	session, closeAnalysis := splitPhaseAnalysisSession(t, artifact, 4)
 	defer closeAnalysis()
-	execution, err := plugins.ExecuteHostScheduled(
-		context.Background(), sourcepatch.SplitPhaseSourcesReadName, session, engine, request, prelude,
+	execution, err := plugins.ExecuteCapabilityHostScheduled(
+		context.Background(), sourcepatch.SplitPhaseCapabilityCallsName, session, engine, request, prelude,
+		passplugin.CapabilityProjections(plan),
 	)
 	treatmentDuration := time.Since(treatmentStarted)
 	if err != nil || !execution.Applied || execution.Patch.ReplacementCount != 2 {
@@ -562,12 +254,12 @@ func TestRealGuestSplitPhaseSourcesReadOverlapsPhysicalWorkAndKeepsLogicalReceip
 	}
 	for index, broker := range captured {
 		receipts := broker.SnapshotReceipts()
-		firstID, secondID := splitPhaseCallID(source, 1), splitPhaseCallID(source, 2)
-		if index == 1 {
-			firstID, secondID = firstID+"-1", secondID+"-1"
-		}
-		if broker.CallCount() != 2 || len(receipts) != 2 || receipts[0].CallID != firstID || receipts[1].CallID != secondID {
+		if broker.CallCount() != 2 || len(receipts) != 2 ||
+			receipts[0].Capability != "sources.read" || receipts[1].Capability != "sources.read" {
 			t.Fatalf("broker[%d] calls=%d receipts=%#v", index, broker.CallCount(), receipts)
+		}
+		if index == 1 && (receipts[0].CallID != "split-s1c8-e1c29-1" || receipts[1].CallID != "split-s2c9-e2c29-1") {
+			t.Fatalf("treatment receipts=%#v", receipts)
 		}
 	}
 	physicalEvidence := engine.SplitPhaseEvidence()
@@ -577,7 +269,7 @@ func TestRealGuestSplitPhaseSourcesReadOverlapsPhysicalWorkAndKeepsLogicalReceip
 	t.Logf("split-phase matched durations: baseline_ns=%d treatment_ns=%d", baselineDuration.Nanoseconds(), treatmentDuration.Nanoseconds())
 }
 
-func TestRealGuestSplitPhasePreservesDynamicActivation(t *testing.T) {
+func TestRealGuestUnifiedSplitPhasePreservesDynamicActivation(t *testing.T) {
 	artifact, err := os.ReadFile(guestArtifact(t))
 	if err != nil {
 		t.Fatal(err)
@@ -606,7 +298,7 @@ func TestRealGuestSplitPhasePreservesDynamicActivation(t *testing.T) {
 			})
 			plan := splitPhaseE2EPlan(t, 2, handler)
 			plugins := unifiedPassCatalog(t)
-			plugins, enableErr := plugins.Enable(sourcepatch.SplitPhaseSourcesReadName)
+			plugins, enableErr := plugins.Enable(sourcepatch.SplitPhaseCapabilityCallsName)
 			if enableErr != nil {
 				t.Fatal(enableErr)
 			}
@@ -628,7 +320,10 @@ func TestRealGuestSplitPhasePreservesDynamicActivation(t *testing.T) {
 			defer closeAnalysis()
 			request := runtimeconfig.RunRequest{RunID: "dynamic-" + strings.ReplaceAll(testCase.name, " ", "-"), Code: testCase.source, Inputs: json.RawMessage(testCase.inputs)}
 			raw, _ := runtimeconfig.EncodeRunRequest(request)
-			execution, runErr := plugins.ExecuteHostScheduled(context.Background(), sourcepatch.SplitPhaseSourcesReadName, session, engine, raw, "")
+			execution, runErr := plugins.ExecuteCapabilityHostScheduled(
+				context.Background(), sourcepatch.SplitPhaseCapabilityCallsName, session, engine, raw,
+				plan.PythonPrelude(), passplugin.CapabilityProjections(plan),
+			)
 			if runErr != nil {
 				t.Fatal(runErr)
 			}
@@ -647,7 +342,7 @@ func TestRealGuestSplitPhasePreservesDynamicActivation(t *testing.T) {
 	}
 }
 
-func TestRealGuestSplitPhaseFailureDiscardsLaterPhysicalReadWithoutLogicalReceipt(t *testing.T) {
+func TestRealGuestUnifiedSplitPhaseFailureDiscardsLaterPhysicalReadWithoutLogicalReceipt(t *testing.T) {
 	artifact, err := os.ReadFile(guestArtifact(t))
 	if err != nil {
 		t.Fatal(err)
@@ -684,7 +379,7 @@ func TestRealGuestSplitPhaseFailureDiscardsLaterPhysicalReadWithoutLogicalReceip
 	})
 	plan := splitPhaseE2EPlan(t, 2, handler)
 	plugins := unifiedPassCatalog(t)
-	plugins, err = plugins.Enable(sourcepatch.SplitPhaseSourcesReadName)
+	plugins, err = plugins.Enable(sourcepatch.SplitPhaseCapabilityCallsName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -704,8 +399,9 @@ func TestRealGuestSplitPhaseFailureDiscardsLaterPhysicalReadWithoutLogicalReceip
 	engine := trustedSemanticRunner(t, runner)
 	session, closeAnalysis := splitPhaseAnalysisSession(t, artifact, 2)
 	defer closeAnalysis()
-	execution, err := plugins.ExecuteHostScheduled(
-		context.Background(), sourcepatch.SplitPhaseSourcesReadName, session, engine, request, splitPhaseDirectPrelude(source),
+	execution, err := plugins.ExecuteCapabilityHostScheduled(
+		context.Background(), sourcepatch.SplitPhaseCapabilityCallsName, session, engine, request,
+		plan.PythonPrelude(), passplugin.CapabilityProjections(plan),
 	)
 	if err != nil || !execution.Applied || started.Load() != 2 {
 		t.Fatalf("execution=%+v started=%d err=%v", execution, started.Load(), err)
@@ -720,7 +416,7 @@ func TestRealGuestSplitPhaseFailureDiscardsLaterPhysicalReadWithoutLogicalReceip
 		t.Fatalf("response=%+v payload=%s", response, execution.Payload)
 	}
 	receipts := broker.SnapshotReceipts()
-	if broker.CallCount() != 1 || len(receipts) != 1 || receipts[0].CallID != splitPhaseCallID(source, 1)+"-1" || receipts[0].Outcome != "error" {
+	if broker.CallCount() != 1 || len(receipts) != 1 || receipts[0].CallID != "split-s1c8-e1c29-1" || receipts[0].Outcome != "error" {
 		t.Fatalf("calls=%d receipts=%#v", broker.CallCount(), receipts)
 	}
 	physicalEvidence := engine.SplitPhaseEvidence()
@@ -836,11 +532,6 @@ func splitPhaseE2EPlan(t *testing.T, maxCalls uint32, handler capability.Handler
 	return plan
 }
 
-type futurePassExecution struct {
-	registry *passplugin.Registry
-	prelude  string
-}
-
 func unifiedPassCatalog(t *testing.T) *passplugin.Registry {
 	t.Helper()
 	registry, err := passplugin.NewDefaultUnifiedCatalog()
@@ -848,44 +539,4 @@ func unifiedPassCatalog(t *testing.T) *passplugin.Registry {
 		t.Fatal(err)
 	}
 	return registry
-}
-
-func futurePassSelection(t *testing.T, plan *capability.Plan) futurePassExecution {
-	t.Helper()
-	registry := unifiedPassCatalog(t)
-	var err error
-	registry, err = registry.Enable(passregistration.CapabilityFutureProjection)
-	if err != nil {
-		t.Fatal(err)
-	}
-	prelude, err := registry.ProjectPlan(passregistration.CapabilityFutureProjection, plan)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return futurePassExecution{registry: registry, prelude: prelude}
-}
-
-func splitPhaseCallID(source string, index int) string {
-	digest := sha256.Sum256([]byte(source))
-	return fmt.Sprintf("split-%x-%d", digest[:8], index)
-}
-
-func splitPhaseDirectPrelude(source string) string {
-	return fmt.Sprintf(`
-import json as _pysolate_split_json
-import _agent_runtime_host as _pysolate_split_host
-class _PysolateSplitSources:
-    @staticmethod
-    def read(path):
-        call_ids = {"alpha": %q, "beta": %q}
-        request = _pysolate_split_json.dumps(
-            {"call_id": call_ids[path], "capability": "sources.read", "arguments": {"path": path}},
-            ensure_ascii=False, separators=(",", ":"), allow_nan=False,
-        )
-        response = _pysolate_split_json.loads(_pysolate_split_host.call(request))
-        if response["status"] != "ok":
-            raise RuntimeError(response["error"]["message"])
-        return response["result"]["body"]
-sources = _PysolateSplitSources()
-`, splitPhaseCallID(source, 1), splitPhaseCallID(source, 2))
 }

@@ -41,15 +41,14 @@ class BootstrapTests(unittest.TestCase):
         submitted = []
         self.native_stub.submit_call = lambda slot, request: submitted.append((slot, json.loads(request)))  # type: ignore[attr-defined]
         self.native_stub.materialize_call = lambda slot: json.dumps({"status": "ok", "result": {"body": slot}})  # type: ignore[attr-defined]
-        request = json.dumps({"call_id": "split-source-1", "capability": "sources.read", "arguments": {"path": "alpha"}}, sort_keys=True, separators=(",", ":"))
-        self.assertIsNone(self.runtime._submit_split_phase_call("slot-source-1", request))
-        self.assertIsNone(self.runtime._submit_split_phase_call("slot-source-1", request))
-        self.assertEqual(["slot-source-1-1", "slot-source-1-2"], [item[0] for item in submitted])
-        self.assertEqual(["split-source-1-1", "split-source-1-2"], [item[1]["call_id"] for item in submitted])
-        self.assertEqual("slot-source-1-1", self.runtime._materialize_split_phase_call("slot-source-1")["body"])
-        self.assertEqual("slot-source-1-2", self.runtime._materialize_split_phase_call("slot-source-1")["body"])
+        self.assertIsNone(self.runtime._issue_split_phase_capability("slot-s1c0-e1c20", "split-s1c0-e1c20", "sources.read", {"path": "alpha"}))
+        self.assertIsNone(self.runtime._issue_split_phase_capability("slot-s1c0-e1c20", "split-s1c0-e1c20", "sources.read", {"path": "alpha"}))
+        self.assertEqual(["slot-s1c0-e1c20-1", "slot-s1c0-e1c20-2"], [item[0] for item in submitted])
+        self.assertEqual(["split-s1c0-e1c20-1", "split-s1c0-e1c20-2"], [item[1]["call_id"] for item in submitted])
+        self.assertEqual("slot-s1c0-e1c20-1", self.runtime._collect_split_phase_capability("slot-s1c0-e1c20")["body"])
+        self.assertEqual("slot-s1c0-e1c20-2", self.runtime._collect_split_phase_capability("slot-s1c0-e1c20")["body"])
         with self.assertRaises(RuntimeError):
-            self.runtime._materialize_split_phase_call("slot-source-1")
+            self.runtime._collect_split_phase_capability("slot-s1c0-e1c20")
 
     def setUp(self):
         self._native_module = sys.modules.get("_agent_runtime_host")
@@ -359,7 +358,11 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(1, response["result"])
 
     def test_agent_source_cannot_name_split_phase_runtime_helpers(self):
-        for helper in ("_pysolate_call_submit", "_pysolate_call_materialize", "_pysolate_materialize_slot"):
+        for helper in (
+            "_pysolate_call_issue",
+            "_pysolate_call_collect",
+            "_pysolate_materialize_slot",
+        ):
             with self.subTest(helper=helper):
                 runtime = load_bootstrap()
                 runtime._initialize("{}")

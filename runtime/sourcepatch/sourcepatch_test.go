@@ -82,18 +82,6 @@ func TestPureScalarFoldIsAStaticWholeProgramPlugin(t *testing.T) {
 	}
 }
 
-func TestSplitPhaseSourcesReadIsAStaticHostScheduledPlugin(t *testing.T) {
-	pass, err := NewSplitPhaseSourcesRead(passregistration.SemanticAnalyzerSHA256)
-	if err != nil {
-		t.Fatal(err)
-	}
-	registration := pass.Registration()
-	if registration.Name() != SplitPhaseSourcesReadName || registration.Stage() != passregistration.StageWholeProgramPatch ||
-		registration.Consumer() != passregistration.ExecutionPatch || !pass.HostScheduled() {
-		t.Fatalf("registration=%+v", registration)
-	}
-}
-
 func TestSplitPhaseCapabilityCallsBindsHostProjectionManifest(t *testing.T) {
 	pass, err := NewSplitPhaseCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
 	if err != nil {

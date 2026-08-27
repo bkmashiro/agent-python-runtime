@@ -11,52 +11,6 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 )
 
-func TestSplitPhaseTableFuturesAnyLiveCapability(t *testing.T) {
-	registry := capability.NewRegistry()
-	spec := basicSpec("workspace.write_text", "future-write-v1")
-	spec.EffectClass = capability.EffectWorkspaceWrite
-	spec.InputSchema = json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"],"additionalProperties":false}`)
-	spec.OutputSchema = json.RawMessage(`{"type":"object","properties":{"written":{"type":"boolean"}},"required":["written"],"additionalProperties":false}`)
-	spec.Python = &capability.PythonProjection{Module: "workspace", Method: "write_text", Arguments: []string{"path", "content"}, ResultField: "written"}
-	var physical atomic.Uint32
-	if err := registry.Register(spec, basicGrant(t), capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
-		physical.Add(1)
-		return json.RawMessage(`{"written":true}`), nil
-	})); err != nil {
-		t.Fatal(err)
-	}
-	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
-	broker, err := capability.NewBroker(capability.Config{RunIdentity: "future-write", Plan: plan})
-	if err != nil {
-		t.Fatal(err)
-	}
-	table, err := capability.NewSplitPhaseTable(plan, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := broker.AttachStagedClaimer(table); err != nil {
-		t.Fatal(err)
-	}
-	request := []byte(`{"call_id":"future-write","capability":"workspace.write_text","arguments":{"path":"a.txt","content":"hello"}}`)
-	if err := table.Submit(context.Background(), "future-1", request); err != nil {
-		t.Fatalf("submit write Future: %v", err)
-	}
-	response, err := table.Materialize(context.Background(), "future-1", broker)
-	var decoded struct {
-		Status string `json:"status"`
-		Result struct {
-			Written bool `json:"written"`
-		} `json:"result"`
-	}
-	decodeErr := json.Unmarshal(response, &decoded)
-	if err != nil || decodeErr != nil || decoded.Status != "ok" || !decoded.Result.Written || physical.Load() != 1 || broker.Calls() != 1 {
-		t.Fatalf("response=%s physical=%d logical=%d decode_err=%v err=%v", response, physical.Load(), broker.Calls(), decodeErr, err)
-	}
-}
-
 func TestSplitPhaseTableKeepsPhysicalWorkSeparateUntilBrokerMaterialize(t *testing.T) {
 	started := make(chan struct{}, 1)
 	release := make(chan struct{})
@@ -83,7 +37,7 @@ func TestSplitPhaseTableKeepsPhysicalWorkSeparateUntilBrokerMaterialize(t *testi
 		t.Fatal(err)
 	}
 	request := []byte(`{"call_id":"split-one","capability":"workspace.read_text","arguments":{"path":"a.txt"}}`)
-	if err := table.Submit(context.Background(), "slot-one", request); err != nil {
+	if err := table.IssueOrReuse(context.Background(), "slot-one", request); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -150,10 +104,10 @@ func TestSplitPhaseTableOverlapsTwoReadsAndMaterializesInSourceOrder(t *testing.
 	}
 	first := []byte(`{"call_id":"split-first","capability":"workspace.read_text","arguments":{"path":"first"}}`)
 	second := []byte(`{"call_id":"split-second","capability":"workspace.read_text","arguments":{"path":"second"}}`)
-	if err := table.Submit(context.Background(), "slot-first", first); err != nil {
+	if err := table.IssueOrReuse(context.Background(), "slot-first", first); err != nil {
 		t.Fatal(err)
 	}
-	if err := table.Submit(context.Background(), "slot-second", second); err != nil {
+	if err := table.IssueOrReuse(context.Background(), "slot-second", second); err != nil {
 		t.Fatal(err)
 	}
 	seen := map[string]bool{}
@@ -216,10 +170,10 @@ func TestSplitPhaseTableDiscardsLaterPhysicalWorkWithoutLogicalReceipt(t *testin
 	}
 	first := []byte(`{"call_id":"split-fail-first","capability":"workspace.read_text","arguments":{"path":"fail"}}`)
 	second := []byte(`{"call_id":"split-fail-second","capability":"workspace.read_text","arguments":{"path":"later"}}`)
-	if err := table.Submit(context.Background(), "slot-fail", first); err != nil {
+	if err := table.IssueOrReuse(context.Background(), "slot-fail", first); err != nil {
 		t.Fatal(err)
 	}
-	if err := table.Submit(context.Background(), "slot-later", second); err != nil {
+	if err := table.IssueOrReuse(context.Background(), "slot-later", second); err != nil {
 		t.Fatal(err)
 	}
 	<-started
@@ -255,7 +209,7 @@ func TestSplitPhaseTableTargetMismatchNeverFallsBackToSecondPhysicalCall(t *test
 		t.Fatal(err)
 	}
 	target := []byte(`{"call_id":"split-target","capability":"workspace.read_text","arguments":{"path":"expected"}}`)
-	if err := table.Submit(context.Background(), "slot-target", target); err != nil {
+	if err := table.IssueOrReuse(context.Background(), "slot-target", target); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -269,23 +223,6 @@ func TestSplitPhaseTableTargetMismatchNeverFallsBackToSecondPhysicalCall(t *test
 		t.Fatalf("response=%s physical=%d err=%v", response, physical.Load(), err)
 	}
 	if err := broker.Finalize(false); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestSplitPhaseTableRejectsDuplicateSlots(t *testing.T) {
-	readPlan := splitPhasePlan(t, 2, func(context.Context, json.RawMessage) (json.RawMessage, error) {
-		return json.RawMessage(`{"text":"ready"}`), nil
-	})
-	readTable, _ := capability.NewSplitPhaseTable(readPlan, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
-	request := []byte(`{"call_id":"split-read","capability":"workspace.read_text","arguments":{"path":"a"}}`)
-	if err := readTable.Submit(context.Background(), "slot-read", request); err != nil {
-		t.Fatal(err)
-	}
-	if err := readTable.Submit(context.Background(), "slot-read", request); !errors.Is(err, capability.ErrSplitPhaseDuplicate) {
-		t.Fatalf("duplicate submit error=%v", err)
-	}
-	if err := readTable.Finalize(false); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -304,7 +241,7 @@ func TestSplitPhaseTableFinalizeCancelsAndJoinsUnclaimedWork(t *testing.T) {
 		t.Fatal(err)
 	}
 	request := []byte(`{"call_id":"split-cancel","capability":"workspace.read_text","arguments":{"path":"a"}}`)
-	if err := table.Submit(context.Background(), "slot-cancel", request); err != nil {
+	if err := table.IssueOrReuse(context.Background(), "slot-cancel", request); err != nil {
 		t.Fatal(err)
 	}
 	<-started

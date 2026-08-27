@@ -42,7 +42,7 @@ type VerifiedSourceGenerationEvent struct {
 type GeneratedSource struct {
 	source     string
 	sha256     string
-	controller *StreamingSemanticPreDispatch
+	controller streamingIssueSink
 	binding    *generatedSourceBinding
 }
 

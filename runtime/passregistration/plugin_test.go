@@ -47,7 +47,6 @@ func TestAnalyzerFreeStageDefinitionsRegisterWithoutAnalyzer(t *testing.T) {
 		stage      passregistration.Stage
 		consumer   passregistration.Consumer
 	}{
-		{passregistration.CapabilityFutureProjectionDefinition(), passregistration.StagePlanProjection, passregistration.PlanProjection},
 		{passregistration.PreparedValueBindingDefinition(), passregistration.StageRunBinding, passregistration.RunBinding},
 	}
 	for _, test := range tests {

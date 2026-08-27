@@ -14,7 +14,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
+	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
 	"github.com/bkmashiro/agent-python-runtime/runtime/valueslot"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
@@ -69,7 +69,7 @@ func TestFactoryRequiresBrokerForSplitPhaseCalls(t *testing.T) {
 
 func TestFactoryLowersEnabledPassesBeforeArtifactParsing(t *testing.T) {
 	catalog := unifiedCatalog(t)
-	enabled, err := catalog.Enable(passregistration.CapabilityFutureProjection)
+	enabled, err := catalog.Enable(sourcepatch.SplitPhaseCapabilityCallsName)
 	if err != nil {
 		t.Fatal(err)
 	}

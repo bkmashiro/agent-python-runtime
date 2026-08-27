@@ -1049,8 +1049,8 @@ func (engine *Engine) RunSourcePatchDerived(ctx context.Context, request []byte,
 	return engine.runWithPrepares(ctx, request, prepares, false, &derivedSelection{export: "runtime_select_source_pass_execution", payload: append(patchRaw, '\n')})
 }
 
-// RunHostScheduledSourcePatchDerived executes the single v1 split-phase read
-// adapter. Unlike the authority-free source-patch seam, this path requires a
+// RunHostScheduledSourcePatchDerived executes the plan-bound V1 capability-call
+// pass. Unlike the authority-free source-patch seam, this path requires a
 // Broker and the explicit default-off split-phase mechanism.
 func (engine *Engine) RunHostScheduledSourcePatchDerived(ctx context.Context, request []byte, patch sourcepatch.Patch, registration passregistration.Registration) ([]byte, error) {
 	if !engine.config.Mechanisms.SplitPhaseCalls || engine.brokerFactory == nil || engine.config.ProgramSurface != runtimeconfig.ProgramSurfaceDirect {
@@ -1060,7 +1060,7 @@ func (engine *Engine) RunHostScheduledSourcePatchDerived(ctx context.Context, re
 	if err != nil {
 		return nil, err
 	}
-	if registration.Name() != sourcepatch.SplitPhaseSourcesReadName || registration.Stage() != passregistration.StageWholeProgramPatch ||
+	if registration.Name() != sourcepatch.SplitPhaseCapabilityCallsName || registration.Stage() != passregistration.StageWholeProgramPatch ||
 		!patch.Applied() || patch.Validate(runRequest.Code, registration) != nil {
 		return nil, sourcepatch.ErrInvalidPatch
 	}

@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
-	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
 )
@@ -92,11 +91,10 @@ func TestUnifiedCatalogRegistersEveryOptimizationDefaultOff(t *testing.T) {
 		passregistration.SemanticPreDispatch:          passregistration.StagePrefixOverlay,
 		passregistration.PreparedPureRegion:           passregistration.StageWholeProgramPatch,
 		passregistration.PreparedNumpyLoad:            passregistration.StageHybridPreparePatch,
-		passregistration.CapabilityFutureProjection:   passregistration.StagePlanProjection,
 		passregistration.PreparedValueBinding:         passregistration.StageRunBinding,
 		sourcepatch.PureScalarCSEName:                 passregistration.StageWholeProgramPatch,
 		sourcepatch.PureScalarFoldName:                passregistration.StageWholeProgramPatch,
-		sourcepatch.SplitPhaseSourcesReadName:         passregistration.StageWholeProgramPatch,
+		sourcepatch.SplitPhaseCapabilityCallsName:     passregistration.StageWholeProgramPatch,
 		sourcepatch.DataLocalNumpySumName:             passregistration.StageWholeProgramPatch,
 		passregistration.SourceStreamingExecution:     passregistration.StageRuntimeLowering,
 		passregistration.StreamedChildFanout:          passregistration.StageRuntimeLowering,
@@ -114,23 +112,13 @@ func TestUnifiedCatalogRegistersEveryOptimizationDefaultOff(t *testing.T) {
 			t.Fatalf("name=%s stage=%s plugin=%v ok=%v", name, stage, plugin, ok)
 		}
 	}
-	if _, err := registry.ProjectPlan(passregistration.CapabilityFutureProjection, nil); err != ErrPluginDisabled {
-		t.Fatalf("default-off Future projection error=%v", err)
-	}
 	if _, err := registry.BindRunValue(passregistration.PreparedValueBinding, "slot-numpy-sum-v1"); err != ErrPluginDisabled {
 		t.Fatalf("default-off prepared value error=%v", err)
 	}
 
-	registry, err = registry.Enable(passregistration.CapabilityFutureProjection, passregistration.PreparedValueBinding)
+	registry, err = registry.Enable(passregistration.PreparedValueBinding)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if _, err := registry.ProjectPlan(passregistration.CapabilityFutureProjection, (*capability.Plan)(nil)); err == nil {
-		t.Fatal("nil Plan projected")
-	}
-	var unsealed capability.Plan
-	if projected, err := registry.ProjectPlan(passregistration.CapabilityFutureProjection, &unsealed); err != capability.ErrInvalidFutureProjectionPass || projected != "" {
-		t.Fatalf("unsealed Plan projection=%q err=%v", projected, err)
 	}
 	prelude, err := registry.BindRunValue(passregistration.PreparedValueBinding, "slot-numpy-sum-v1")
 	if err != nil || !strings.Contains(prelude, "prepared_value") || !strings.Contains(prelude, "materialize_slot") {
@@ -138,9 +126,6 @@ func TestUnifiedCatalogRegistersEveryOptimizationDefaultOff(t *testing.T) {
 	}
 	if _, err := registry.ProjectPlan(passregistration.PreparedValueBinding, nil); err != ErrUnsupportedStage {
 		t.Fatalf("run binding crossed into Plan stage: %v", err)
-	}
-	if _, err := registry.BindRunValue(passregistration.CapabilityFutureProjection, "slot-numpy-sum-v1"); err != ErrUnsupportedStage {
-		t.Fatalf("Plan projection crossed into Run stage: %v", err)
 	}
 }
 
@@ -188,7 +173,7 @@ func TestEnablePreservesPriorExplicitSelections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	registry, err = registry.Enable(passregistration.CapabilityFutureProjection)
+	registry, err = registry.Enable(sourcepatch.PureScalarCSEName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,12 +181,8 @@ func TestEnablePreservesPriorExplicitSelections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var unsealed capability.Plan
-	if _, err := registry.ProjectPlan(passregistration.CapabilityFutureProjection, &unsealed); err != capability.ErrInvalidFutureProjectionPass {
-		t.Fatalf("prior Plan pass selection was lost: %v", err)
-	}
-	if _, err := registry.BindRunValue(passregistration.PreparedValueBinding, "slot"); err != nil {
-		t.Fatalf("new Run pass selection missing: %v", err)
+	if !registry.enabled[sourcepatch.PureScalarCSEName] || !registry.enabled[passregistration.PreparedValueBinding] {
+		t.Fatalf("explicit selections were not preserved: %#v", registry.enabled)
 	}
 }
 
@@ -251,7 +232,7 @@ func TestUnifiedCatalogRejectsConflictingSchedulingPasses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = registry.Enable(passregistration.SemanticPreDispatch, passregistration.CapabilityFutureProjection); !errors.Is(err, ErrPassConflict) {
+	if _, err = registry.Enable(passregistration.SemanticPreDispatch, sourcepatch.SplitPhaseCapabilityCallsName); !errors.Is(err, ErrPassConflict) {
 		t.Fatalf("duplicate scheduling owners error=%v", err)
 	}
 }

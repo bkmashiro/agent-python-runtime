@@ -429,9 +429,6 @@ func TestPreparedPreDispatchEnforcesHostResultByteLimit(t *testing.T) {
 		"pre-dispatch": func() (*capability.PreparedPreDispatch, error) {
 			return plan.PreparePreDispatch(spec.Name, json.RawMessage(`{"path":"note.txt"}`))
 		},
-		"Future": func() (*capability.PreparedPreDispatch, error) {
-			return plan.PrepareFuture(spec.Name, json.RawMessage(`{"path":"note.txt"}`))
-		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			prepared, err := prepare()

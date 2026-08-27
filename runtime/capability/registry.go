@@ -173,13 +173,12 @@ type PlanConfig struct {
 }
 
 type Plan struct {
-	identity            string
-	maxCalls            uint32
-	specs               []Spec
-	grants              []GrantBinding
-	registrations       map[string]registration
-	pythonPrelude       string
-	futurePythonPrelude string
+	identity      string
+	maxCalls      uint32
+	specs         []Spec
+	grants        []GrantBinding
+	registrations map[string]registration
+	pythonPrelude string
 }
 
 type DelegationReason string
@@ -313,13 +312,12 @@ func (registry *Registry) Seal(config PlanConfig) (*Plan, error) {
 	}
 	digest := sha256.Sum256(encoded)
 	return &Plan{
-		identity:            "sha256:" + hex.EncodeToString(digest[:]),
-		maxCalls:            config.MaxCalls,
-		specs:               cloneSpecs(specs),
-		grants:              append([]GrantBinding(nil), grants...),
-		registrations:       registrations,
-		pythonPrelude:       generatePythonPrelude(specs),
-		futurePythonPrelude: generateFuturePythonPrelude(specs),
+		identity:      "sha256:" + hex.EncodeToString(digest[:]),
+		maxCalls:      config.MaxCalls,
+		specs:         cloneSpecs(specs),
+		grants:        append([]GrantBinding(nil), grants...),
+		registrations: registrations,
+		pythonPrelude: generatePythonPrelude(specs),
 	}, nil
 }
 
@@ -465,16 +463,6 @@ func (plan *Plan) PythonPrelude() string {
 		return ""
 	}
 	return plan.pythonPrelude
-}
-
-// FuturePythonPrelude projects every Python capability as an eager Host Future.
-// Calls submit when Python reaches them and materialize only when their value is
-// observed or when the final result is encoded. This path needs no analyzer.
-func (plan *Plan) FuturePythonPrelude() string {
-	if plan == nil {
-		return ""
-	}
-	return plan.futurePythonPrelude
 }
 
 // StreamingPythonPrelude projects only capabilities that are safe to invoke
@@ -702,189 +690,6 @@ func validateAgainst(schema *jsonschema.Schema, raw []byte) error {
 
 func generatePythonPrelude(specs []Spec) string {
 	return generatePythonPreludeForParent(specs, "")
-}
-
-func generateFuturePythonPrelude(specs []Spec) string {
-	futureSpecs := make([]Spec, 0, len(specs))
-	synchronousSpecs := make([]Spec, 0, len(specs))
-	modules := make(map[string]struct{})
-	for _, spec := range specs {
-		if spec.Python == nil {
-			continue
-		}
-		modules[spec.Python.Module] = struct{}{}
-		if spec.Playback == PlaybackLiveOnly && spec.Approval == nil {
-			futureSpecs = append(futureSpecs, spec)
-		} else {
-			synchronousSpecs = append(synchronousSpecs, spec)
-		}
-	}
-	if len(futureSpecs) == 0 {
-		return generatePythonPrelude(synchronousSpecs)
-	}
-	moduleNames := make([]string, 0, len(modules))
-	for module := range modules {
-		moduleNames = append(moduleNames, module)
-	}
-	sortStrings(moduleNames)
-	var builder strings.Builder
-	builder.WriteString(`
-import json as _host_json
-import _agent_runtime_host as _host_bridge
-_capability_future_sequence = 0
-_capability_futures = []
-
-class _CapabilityModule:
-    pass
-
-class _CapabilityFuture:
-    __slots__ = ("_slot", "_field", "_resolved", "_value")
-    def __init__(self, slot, field):
-        self._slot = slot
-        self._field = field
-        self._resolved = False
-        self._value = None
-    def result(self):
-        if not self._resolved:
-            response = _host_json.loads(_host_bridge.materialize_call(self._slot))
-            if response["status"] != "ok":
-                raise RuntimeError(response["error"]["message"])
-            value = response["result"]
-            if self._field is not None:
-                value = value[self._field]
-            self._value = value
-            self._resolved = True
-        return self._value
-    def __getattr__(self, name):
-        return getattr(self.result(), name)
-    def __getitem__(self, key):
-        return self.result()[key]
-    def __iter__(self):
-        return iter(self.result())
-    def __len__(self):
-        return len(self.result())
-    def __bool__(self):
-        return bool(self.result())
-    def __str__(self):
-        return str(self.result())
-    def __repr__(self):
-        return repr(self.result())
-    def __eq__(self, other):
-        if isinstance(other, _CapabilityFuture):
-            other = other.result()
-        return self.result() == other
-    def __add__(self, other):
-        if isinstance(other, _CapabilityFuture):
-            other = other.result()
-        return self.result() + other
-    def __radd__(self, other):
-        return other + self.result()
-
-def _capability_future(capability, arguments, field):
-    global _capability_future_sequence
-    _capability_future_sequence += 1
-    suffix = str(_capability_future_sequence)
-    slot = "future-" + suffix
-    request = {
-        "call_id": "future-capability-" + suffix,
-        "capability": capability,
-        "arguments": arguments,
-    }
-    _host_bridge.submit_call(slot, _host_json.dumps(request, separators=(",", ":")))
-    future = _CapabilityFuture(slot, field)
-    _capability_futures.append(future)
-    return future
-
-def _resolve_capability_value(value):
-    if isinstance(value, _CapabilityFuture):
-        return _resolve_capability_value(value.result())
-    if isinstance(value, list):
-        return [_resolve_capability_value(item) for item in value]
-    if isinstance(value, tuple):
-        return tuple(_resolve_capability_value(item) for item in value)
-    if isinstance(value, dict):
-        return {key: _resolve_capability_value(item) for key, item in value.items()}
-    return value
-
-def _resolve_capability_futures(value):
-    first_error = None
-    try:
-        resolved = _resolve_capability_value(value)
-    except BaseException as error:
-        resolved = None
-        first_error = error
-    for future in _capability_futures:
-        try:
-            future.result()
-        except BaseException as error:
-            if first_error is None:
-                first_error = error
-    if first_error is not None:
-        raise first_error
-    return resolved
-`)
-	if len(synchronousSpecs) != 0 {
-		builder.WriteString(`
-_capability_call_sequence = 0
-
-def _capability_call(capability, arguments):
-    global _capability_call_sequence
-    _capability_call_sequence += 1
-    request = {
-        "call_id": "capability-" + str(_capability_call_sequence),
-        "capability": capability,
-        "arguments": arguments,
-    }
-    response = _host_json.loads(_host_bridge.call(_host_json.dumps(request, separators=(",", ":"))))
-    if response["status"] != "ok":
-        raise RuntimeError(response["error"]["message"])
-    return response["result"]
-`)
-	}
-	for _, module := range moduleNames {
-		fmt.Fprintf(&builder, "\n%s = _CapabilityModule()\n", module)
-	}
-	for index, spec := range synchronousSpecs {
-		projection := spec.Python
-		proxy := fmt.Sprintf("_capability_sync_proxy_%d", index)
-		fmt.Fprintf(&builder, "\ndef %s(%s):\n    return _capability_call(%s, {", proxy, strings.Join(projection.Arguments, ", "), pythonString(spec.Name))
-		for argumentIndex, argument := range projection.Arguments {
-			if argumentIndex != 0 {
-				builder.WriteString(", ")
-			}
-			fmt.Fprintf(&builder, "%s: %s", pythonString(argument), argument)
-		}
-		builder.WriteString("})")
-		if projection.ResultField != "" {
-			fmt.Fprintf(&builder, "[%s]", pythonString(projection.ResultField))
-		}
-		builder.WriteByte('\n')
-		fmt.Fprintf(&builder, "%s.%s = %s\n", projection.Module, projection.Method, proxy)
-		if projection.GlobalAlias != "" {
-			fmt.Fprintf(&builder, "%s = %s.%s\n", projection.GlobalAlias, projection.Module, projection.Method)
-		}
-	}
-	for index, spec := range futureSpecs {
-		projection := spec.Python
-		proxy := fmt.Sprintf("_capability_future_proxy_%d", index)
-		fmt.Fprintf(&builder, "\ndef %s(%s):\n    return _capability_future(%s, {", proxy, strings.Join(projection.Arguments, ", "), pythonString(spec.Name))
-		for argumentIndex, argument := range projection.Arguments {
-			if argumentIndex != 0 {
-				builder.WriteString(", ")
-			}
-			fmt.Fprintf(&builder, "%s: %s", pythonString(argument), argument)
-		}
-		field := "None"
-		if projection.ResultField != "" {
-			field = pythonString(projection.ResultField)
-		}
-		fmt.Fprintf(&builder, "}, %s)\n", field)
-		fmt.Fprintf(&builder, "%s.%s = %s\n", projection.Module, projection.Method, proxy)
-		if projection.GlobalAlias != "" {
-			fmt.Fprintf(&builder, "%s = %s.%s\n", projection.GlobalAlias, projection.Module, projection.Method)
-		}
-	}
-	return builder.String()
 }
 
 func generateProgrammaticPythonPrelude(specs []Spec, parentCallID string) string {

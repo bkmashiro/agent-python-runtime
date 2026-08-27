@@ -226,6 +226,41 @@ func (controller *StreamingSemanticPreDispatch) Snapshot() StreamingPreDispatchS
 	return snapshot
 }
 
+func (controller *StreamingSemanticPreDispatch) PlanIdentity() string {
+	if controller == nil || controller.plan == nil {
+		return ""
+	}
+	return controller.plan.Identity()
+}
+
+func (controller *StreamingSemanticPreDispatch) SealFinalSource(finalSHA string) error {
+	if controller == nil || !digestPattern.MatchString(finalSHA) {
+		return ErrPreDispatchInvalid
+	}
+	controller.mu.Lock()
+	defer controller.mu.Unlock()
+	if controller.finalized || controller.sourceSealed {
+		return ErrPreDispatchInvalid
+	}
+	promoted := make([]QualifiedCall, len(controller.entries))
+	for index, entry := range controller.entries {
+		call, err := promoteStreamingCall(entry.call, finalSHA)
+		if err != nil {
+			return err
+		}
+		promoted[index] = call
+	}
+	for index, entry := range controller.entries {
+		if err := entry.controller.promoteFinalCall(promoted[index]); err != nil {
+			return err
+		}
+		entry.call = promoted[index]
+	}
+	controller.sourceSealed = true
+	controller.finalSourceSHA256 = finalSHA
+	return nil
+}
+
 func (call QualifiedCall) prefixOccurrenceIdentity() string {
 	if !call.valid() {
 		return ""
@@ -255,12 +290,20 @@ func streamingControllerEvent(kind string, call QualifiedCall, occurrence string
 	}
 }
 
+type streamingIssueSink interface {
+	PlanIdentity() string
+	Add(context.Context, QualifiedCall) (bool, error)
+	SealFinalSource(string) error
+	Finalize(bool) error
+	Snapshot() StreamingPreDispatchSnapshot
+}
+
 // StreamingPrefixAdmission joins analyses of monotonically growing,
-// actually-visible source prefixes to one Run-private controller.
+// actually-visible source prefixes to one Run-private issue sink.
 type StreamingPrefixAdmission struct {
 	mu                sync.Mutex
 	plan              *capability.Plan
-	controller        *StreamingSemanticPreDispatch
+	controller        streamingIssueSink
 	context           PreissueContext
 	lastSource        string
 	lastVisibleSource string
@@ -272,7 +315,7 @@ func NewStreamingPrefixAdmission(plan *capability.Plan, controller *StreamingSem
 	probe := baseContext
 	probe.BudgetReservationSHA256 = digestText("streaming-prefix-admission-probe")
 	probe.RemainingPhysicalReads = 1
-	if plan == nil || controller == nil || controller.plan != plan || !probe.valid() {
+	if plan == nil || controller == nil || controller.PlanIdentity() != plan.Identity() || !probe.valid() {
 		return nil, ErrPreDispatchInvalid
 	}
 	controller.mu.Lock()
@@ -282,9 +325,7 @@ func NewStreamingPrefixAdmission(plan *capability.Plan, controller *StreamingSem
 	}
 	controller.requireSourceSeal = true
 	controller.mu.Unlock()
-	baseContext.BudgetReservationSHA256 = ""
-	baseContext.RemainingPhysicalReads = 0
-	return &StreamingPrefixAdmission{plan: plan, controller: controller, context: baseContext, seen: make(map[string]struct{})}, nil
+	return newStreamingPrefixAdmission(plan, controller, baseContext)
 }
 
 func (admission *StreamingPrefixAdmission) AdmitVerifiedPrefix(ctx context.Context, source string, verified VerifiedAnalysis) (uint32, error) {
@@ -390,27 +431,9 @@ func (admission *StreamingPrefixAdmission) SealFinalSource(source string) error 
 		return ErrAnalysisBinding
 	}
 	finalSHA := digestText(source)
-	admission.controller.mu.Lock()
-	defer admission.controller.mu.Unlock()
-	if admission.controller.finalized || admission.controller.sourceSealed {
-		return ErrPreDispatchInvalid
+	if err := admission.controller.SealFinalSource(finalSHA); err != nil {
+		return err
 	}
-	promoted := make([]QualifiedCall, len(admission.controller.entries))
-	for index, entry := range admission.controller.entries {
-		call, err := promoteStreamingCall(entry.call, finalSHA)
-		if err != nil {
-			return err
-		}
-		promoted[index] = call
-	}
-	for index, entry := range admission.controller.entries {
-		if err := entry.controller.promoteFinalCall(promoted[index]); err != nil {
-			return err
-		}
-		entry.call = promoted[index]
-	}
-	admission.controller.sourceSealed = true
-	admission.controller.finalSourceSHA256 = finalSHA
 	admission.snapshot.LastSourceSHA256 = finalSHA
 	admission.snapshot.Complete = true
 	return nil

@@ -149,6 +149,8 @@ Lane H and Lane C may proceed in parallel only after Gate Contract freezes their
 
 **Outcome:** One small executable contract states what may move, what remains logical and what each failure means.
 
+Reference model: [`pysolate-issue-collect-formal-report.md`](../research/pysolate-issue-collect-formal-report.md) is a Proposed paper-level proof sketch, not a current implementation claim. Gate Contract consumes only its conservative V1 model; its listed proof obligations must close before any stronger manuscript claim.
+
 Tasks:
 
 - [ ] Freeze a bounded differential corpus covering:

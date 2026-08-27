@@ -14,12 +14,146 @@ import (
 	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
+	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
 )
+
+func TestRealGuestUnifiedSplitPhasePreissueThenRuntimeIssue(t *testing.T) {
+	artifact, err := os.ReadFile(guestArtifact(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifactDigest := sha256.Sum256(artifact)
+	artifactSHA := fmt.Sprintf("sha256:%x", artifactDigest[:])
+	profile, err := runtimeconfig.NewExecutionProfile("base", []string{"json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err = profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{
+		ProfileID: "base", ArtifactSHA256: artifactSHA, ManifestSHA256: semanticTestDigest('8'),
+		ImportRoots: []string{"json"}, QualifiedImportRoots: []string{"json"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var getCalls atomic.Uint32
+	var priceCalls atomic.Uint32
+	plan := unifiedSplitPhasePlan(t,
+		capability.HandlerFunc(func(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
+			getCalls.Add(1)
+			var arguments struct {
+				Key string `json:"key"`
+			}
+			if json.Unmarshal(raw, &arguments) != nil || arguments.Key != "alpha" {
+				return nil, capability.ErrInvalidTool
+			}
+			return json.RawMessage(`{"value":5}`), nil
+		}),
+		capability.HandlerFunc(func(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
+			priceCalls.Add(1)
+			var arguments struct {
+				Value int `json:"value"`
+			}
+			if json.Unmarshal(raw, &arguments) != nil {
+				return nil, capability.ErrInvalidTool
+			}
+			return json.Marshal(map[string]int{"quote": arguments.Value * 10})
+		}),
+	)
+	source := "a = tools.get(\"alpha\")\nx = a + 1\nindependent = 3 * 4\nb = tools.price(x)\nresult = [b, independent]\n"
+
+	analysisConfig := runtimeconfig.DefaultRunConfig()
+	analysisConfig.ExecutionProfile = &profile
+	analysisConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
+	analysisRunner, err := (wazeroengine.Factory{}).New(context.Background(), artifact, analysisConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bindings := semantic.Bindings{
+		ArtifactSHA256: artifactSHA, ExecutionProfileSHA256: analysisRunner.Properties().ExecutionProfileBindingSHA256,
+		ImportClosureSHA256: agentfunction.ImportClosureIdentity([]string{"json"}, []string{"json"}), CapabilityPlanSHA256: plan.Identity(),
+	}
+	analysisRequest, err := semantic.NewRequest(source, bindings, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified, err := semantic.AnalyzeVerified(context.Background(), trustedSemanticRunner(t, analysisRunner), analysisRequest)
+	if closeErr := analysisRunner.Close(context.Background()); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysis, err := verified.Analysis()
+	if err != nil || len(analysis.CallSites) != 1 || analysis.CallSites[0].Capability != "tools.get" {
+		t.Fatalf("analysis=%+v err=%v", analysis, err)
+	}
+	preissueContext := semantic.PreissueContext{
+		StreamEpoch: "unified-stream", WorkflowEpoch: "unified-workflow", FreshnessEpoch: "unified-plan", ExpiryEpoch: "unified-expiry",
+		PrivacyPartition: "unified-private", ParentLineageSHA256: semanticTestDigest('9'),
+		BudgetReservationSHA256: semanticTestDigest('a'), RemainingPhysicalReads: 1,
+	}
+	qualified, ok := semantic.CanPreissue(verified, plan, analysis.CallSites[0].ID, preissueContext).QualifiedCall()
+	if !ok {
+		t.Fatal("source-time call was not positively admitted")
+	}
+	table, err := capability.NewSplitPhaseTable(plan, capability.SplitPhaseLimits{MaxCalls: 2, MaxCostUnits: 2, MaxResultBytes: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := semantic.IssueQualifiedSplitPhase(context.Background(), table, qualified); err != nil {
+		t.Fatal(err)
+	}
+
+	plugins := unifiedPassCatalog(t)
+	plugins, err = plugins.Enable(sourcepatch.SplitPhaseCapabilityCallsName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var broker *capability.Broker
+	executionConfig := runtimeconfig.DefaultRunConfig()
+	executionConfig.Timeout = 90 * time.Second
+	executionConfig.ExecutionProfile = &profile
+	runner, err := (wazeroengine.Factory{Passes: plugins, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+		created, createErr := capability.NewBroker(capability.Config{RunIdentity: "unified-split-phase", Plan: plan})
+		if createErr == nil {
+			createErr = created.AttachStagedClaimer(table)
+		}
+		broker = created
+		return created, createErr
+	}}).New(context.Background(), artifact, executionConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	request, _ := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "unified-split-phase", Code: source, Inputs: json.RawMessage(`{}`)})
+	session, closeAnalysis := splitPhaseAnalysisSession(t, artifact, 2)
+	defer closeAnalysis()
+	execution, err := plugins.ExecuteCapabilityHostScheduled(
+		context.Background(), sourcepatch.SplitPhaseCapabilityCallsName, session, trustedSemanticRunner(t, runner), request,
+		plan.PythonPrelude(), passplugin.CapabilityProjections(plan),
+	)
+	if err != nil || !execution.Applied {
+		t.Fatalf("execution=%+v err=%v", execution, err)
+	}
+	result, err := decodeSuccessfulGuestResult(execution.Payload)
+	if err != nil || string(result) != `[60,12]` {
+		t.Fatalf("result=%s err=%v payload=%s derived=%s", result, err, execution.Payload, execution.Patch.DerivedSource)
+	}
+	if getCalls.Load() != 1 || priceCalls.Load() != 1 || broker.CallCount() != 2 {
+		t.Fatalf("get=%d price=%d logical=%d", getCalls.Load(), priceCalls.Load(), broker.CallCount())
+	}
+	evidence := trustedSemanticRunner(t, runner).SplitPhaseEvidence()
+	if evidence.Submitted != 2 || evidence.Reused != 1 || evidence.Consumed != 2 || evidence.Discarded != 0 {
+		t.Fatalf("evidence=%+v", evidence)
+	}
+}
 
 func TestRealGuestCapabilityFuturesOverlapWithoutAnalyzer(t *testing.T) {
 	artifact, err := os.ReadFile(guestArtifact(t))
@@ -620,6 +754,56 @@ func splitPhaseAnalysisSession(t *testing.T, artifact []byte, maxRequests uint32
 			t.Fatalf("close analysis runner: %v", closeErr)
 		}
 	}
+}
+
+func unifiedSplitPhasePlan(t *testing.T, getHandler, priceHandler capability.Handler) *capability.Plan {
+	t.Helper()
+	registry := capability.NewRegistry()
+	grant, err := capability.NewGrant(json.RawMessage(`{"scope":"unified-split-phase-e2e"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	specs := []struct {
+		spec    capability.Spec
+		handler capability.Handler
+	}{
+		{spec: capability.Spec{
+			Name: "tools.get", Version: "pysolate.tools.get.split-phase-e2e.v1", Description: "Get one immutable fixture value.",
+			EffectClass: capability.EffectExternalRead, Playback: capability.PlaybackLiveOnly, HandlerIdentity: "tools-get-split-phase-e2e.v1",
+			InputSchema:  json.RawMessage(`{"type":"object","properties":{"key":{"type":"string"}},"required":["key"],"additionalProperties":false}`),
+			OutputSchema: json.RawMessage(`{"type":"object","properties":{"value":{"type":"integer"}},"required":["value"],"additionalProperties":false}`),
+			Python:       &capability.PythonProjection{Module: "tools", Method: "get", Arguments: []string{"key"}, ResultField: "value"},
+			ReadOnly:     true, Idempotent: true,
+			PreDispatch: &capability.PreDispatchContract{
+				Resource: capability.ResourceReference{Namespace: "tools-get", Argument: "key"}, Freshness: capability.FreshnessPlanEpoch,
+				Unclaimed: capability.UnclaimedDiscardWithDisposition, Privacy: capability.PreDispatchPrivacyExactPartition,
+				Coalescing: capability.PreDispatchCoalescingForbidden, MaxResultBytes: 1024, CostUnits: 1,
+			},
+		}, handler: getHandler},
+		{spec: capability.Spec{
+			Name: "tools.price", Version: "pysolate.tools.price.split-phase-e2e.v1", Description: "Price one immutable fixture value.",
+			EffectClass: capability.EffectExternalRead, Playback: capability.PlaybackLiveOnly, HandlerIdentity: "tools-price-split-phase-e2e.v1",
+			InputSchema:  json.RawMessage(`{"type":"object","properties":{"value":{"type":"integer"}},"required":["value"],"additionalProperties":false}`),
+			OutputSchema: json.RawMessage(`{"type":"object","properties":{"quote":{"type":"integer"}},"required":["quote"],"additionalProperties":false}`),
+			Python:       &capability.PythonProjection{Module: "tools", Method: "price", Arguments: []string{"value"}, ResultField: "quote"},
+			ReadOnly:     true, Idempotent: true,
+			PreDispatch: &capability.PreDispatchContract{
+				Resource: capability.ResourceReference{Namespace: "tools-price", Argument: "value"}, Freshness: capability.FreshnessPlanEpoch,
+				Unclaimed: capability.UnclaimedDiscardWithDisposition, Privacy: capability.PreDispatchPrivacyExactPartition,
+				Coalescing: capability.PreDispatchCoalescingForbidden, MaxResultBytes: 1024, CostUnits: 1,
+			},
+		}, handler: priceHandler},
+	}
+	for _, item := range specs {
+		if err := registry.Register(item.spec, grant, item.handler); err != nil {
+			t.Fatal(err)
+		}
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return plan
 }
 
 func splitPhaseE2EPlan(t *testing.T, maxCalls uint32, handler capability.Handler) *capability.Plan {

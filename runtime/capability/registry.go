@@ -409,6 +409,17 @@ func (plan *Plan) Specs() []Spec {
 	return cloneSpecs(plan.specs)
 }
 
+// PreDispatchEligible reports positive Host-authored admission for one sealed
+// capability. Absence or an incomplete contract is always false.
+func (plan *Plan) PreDispatchEligible(name string) bool {
+	if plan == nil {
+		return false
+	}
+	registered, ok := plan.lookup(name)
+	qualification, qualified := preDispatchQualification(registered.spec)
+	return ok && qualified && qualification.Eligible()
+}
+
 func (plan *Plan) ToolSchemas() []ToolSchema {
 	if plan == nil {
 		return nil

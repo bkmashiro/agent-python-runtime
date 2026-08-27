@@ -1357,16 +1357,23 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 			}
 		}
 		if engine.config.Mechanisms.SplitPhaseCalls {
-			maxCalls := broker.CapabilityPlan().MaxCalls()
-			var tableErr error
-			splitPhaseTable, tableErr = capability.NewSplitPhaseTable(broker.CapabilityPlan(), capability.SplitPhaseLimits{
-				MaxCalls: maxCalls, MaxCostUnits: uint64(maxCalls) * 4, MaxResultBytes: uint64(engine.config.MaxResponseBytes) * uint64(maxCalls),
-			})
-			if tableErr != nil {
-				return nil, fmt.Errorf("create split-phase call table: %w", tableErr)
-			}
-			if tableErr = broker.AttachStagedClaimer(splitPhaseTable); tableErr != nil {
-				return nil, fmt.Errorf("attach split-phase call table: %w", tableErr)
+			splitPhaseTable = broker.AttachedSplitPhaseTable()
+			if splitPhaseTable != nil {
+				if splitPhaseTable.PlanIdentity() != broker.CapabilityPlanSHA256() {
+					return nil, errors.New("source-time split-phase table does not match capability Plan")
+				}
+			} else {
+				maxCalls := broker.CapabilityPlan().MaxCalls()
+				var tableErr error
+				splitPhaseTable, tableErr = capability.NewSplitPhaseTable(broker.CapabilityPlan(), capability.SplitPhaseLimits{
+					MaxCalls: maxCalls, MaxCostUnits: uint64(maxCalls) * 4, MaxResultBytes: uint64(engine.config.MaxResponseBytes) * uint64(maxCalls),
+				})
+				if tableErr != nil {
+					return nil, fmt.Errorf("create split-phase call table: %w", tableErr)
+				}
+				if tableErr = broker.AttachStagedClaimer(splitPhaseTable); tableErr != nil {
+					return nil, fmt.Errorf("attach split-phase call table: %w", tableErr)
+				}
 			}
 			runContext = context.WithValue(runContext, splitPhaseContextKey{}, splitPhaseTable)
 		}
@@ -1567,7 +1574,7 @@ func hostSubmitCall(ctx context.Context, module api.Module, slotPointer, slotLen
 	if !ok {
 		return -1
 	}
-	if err := table.Submit(ctx, string(append([]byte(nil), slotView...)), append([]byte(nil), requestView...)); err != nil {
+	if err := table.IssueOrReuse(ctx, string(append([]byte(nil), slotView...)), append([]byte(nil), requestView...)); err != nil {
 		return -1
 	}
 	return 0

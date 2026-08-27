@@ -12,6 +12,10 @@ type fakeTransformer struct {
 	request Request
 }
 
+type capabilityTransformer struct {
+	request Request
+}
+
 func (fake *fakeTransformer) TransformSourcePass(_ context.Context, raw []byte) ([]byte, error) {
 	if err := json.Unmarshal(raw, &fake.request); err != nil {
 		return nil, err
@@ -24,6 +28,22 @@ func (fake *fakeTransformer) TransformSourcePass(_ context.Context, raw []byte) 
 		OriginalSourceSHA256: digest([]byte(fake.request.Source)), OriginalASTSHA256: digest([]byte("original-ast")),
 		DerivedSource: derived, DerivedSourceSHA256: digest([]byte(derived)), DerivedASTSHA256: digest([]byte("derived-ast")),
 		ReplacementCount: 1,
+	}
+	return json.Marshal(patch)
+}
+
+func (fake *capabilityTransformer) TransformSourcePass(_ context.Context, raw []byte) ([]byte, error) {
+	if err := json.Unmarshal(raw, &fake.request); err != nil {
+		return nil, err
+	}
+	derived := "result = 1\n"
+	patch := Patch{
+		SchemaVersion: SchemaVersion, Status: "applied",
+		PassName: fake.request.PassName, PassVersion: fake.request.PassVersion,
+		RegistrationSHA256:   fake.request.RegistrationSHA256,
+		OriginalSourceSHA256: digest([]byte(fake.request.Source)), OriginalASTSHA256: digest([]byte("original-ast")),
+		DerivedSource: derived, DerivedSourceSHA256: digest([]byte(derived)), DerivedASTSHA256: digest([]byte("derived-ast")),
+		ReplacementCount: 1, CapabilityProjections: fake.request.CapabilityProjections,
 	}
 	return json.Marshal(patch)
 }
@@ -71,6 +91,28 @@ func TestSplitPhaseSourcesReadIsAStaticHostScheduledPlugin(t *testing.T) {
 	if registration.Name() != SplitPhaseSourcesReadName || registration.Stage() != passregistration.StageWholeProgramPatch ||
 		registration.Consumer() != passregistration.ExecutionPatch || !pass.HostScheduled() {
 		t.Fatalf("registration=%+v", registration)
+	}
+}
+
+func TestSplitPhaseCapabilityCallsBindsHostProjectionManifest(t *testing.T) {
+	pass, err := NewSplitPhaseCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registration := pass.Registration()
+	if registration.Name() != SplitPhaseCapabilityCallsName || registration.Stage() != passregistration.StageWholeProgramPatch ||
+		registration.Consumer() != passregistration.ExecutionPatch || !pass.HostScheduled() {
+		t.Fatalf("registration=%+v", registration)
+	}
+	projections := []CapabilityProjection{
+		{Capability: "tools.get", Module: "tools", Method: "get", Arguments: []string{"key"}, ResultField: "value"},
+		{Capability: "tools.price", Module: "tools", Method: "price", Arguments: []string{"value"}, ResultField: "quote"},
+	}
+	transformer := &capabilityTransformer{}
+	patch, err := pass.Transform(context.Background(), transformer, "value = tools.get('a')\nresult = value\n", projections)
+	if err != nil || patch.ReplacementCount != 1 || len(patch.CapabilityProjections) != 2 ||
+		len(transformer.request.CapabilityProjections) != 2 {
+		t.Fatalf("request=%+v patch=%+v err=%v", transformer.request, patch, err)
 	}
 }
 

@@ -36,6 +36,7 @@ type SplitPhaseEvent struct {
 
 type SplitPhaseSnapshot struct {
 	Submitted           uint32
+	Reused              uint32
 	PhysicalStarts      uint32
 	PhysicalFinishes    uint32
 	LogicalClaims       uint32
@@ -89,9 +90,27 @@ func NewSplitPhaseTable(plan *Plan, limits SplitPhaseLimits) (*SplitPhaseTable, 
 	}, nil
 }
 
+func (table *SplitPhaseTable) PlanIdentity() string {
+	if table == nil || table.plan == nil {
+		return ""
+	}
+	return table.plan.Identity()
+}
+
 // Submit validates and starts one physical Future when Python reaches the tool
 // call, without entering the Broker logical call ledger until materialization.
 func (table *SplitPhaseTable) Submit(ctx context.Context, slotID string, raw []byte) error {
+	return table.issue(ctx, slotID, raw, false, false)
+}
+
+// IssueOrReuse is the V1 split-phase entry point. It admits only operations
+// with a positive PreDispatch contract and reuses one exact Run-private
+// attempt when source-time analysis already populated the dynamic slot.
+func (table *SplitPhaseTable) IssueOrReuse(ctx context.Context, slotID string, raw []byte) error {
+	return table.issue(ctx, slotID, raw, true, true)
+}
+
+func (table *SplitPhaseTable) issue(ctx context.Context, slotID string, raw []byte, admittedOnly, reuse bool) error {
 	if table == nil || ctx == nil || !validIdentity(slotID) {
 		return ErrSplitPhaseUnavailable
 	}
@@ -99,7 +118,12 @@ func (table *SplitPhaseTable) Submit(ctx context.Context, slotID string, raw []b
 	if err != nil {
 		return err
 	}
-	prepared, err := table.plan.PrepareFuture(call.Capability, call.Arguments)
+	var prepared *PreparedPreDispatch
+	if admittedOnly {
+		prepared, err = table.plan.PreparePreDispatch(call.Capability, call.Arguments)
+	} else {
+		prepared, err = table.plan.PrepareFuture(call.Capability, call.Arguments)
+	}
 	if err != nil {
 		return ErrSplitPhaseUnavailable
 	}
@@ -122,12 +146,29 @@ func (table *SplitPhaseTable) Submit(ctx context.Context, slotID string, raw []b
 		table.mu.Unlock()
 		return ErrSplitPhaseUnavailable
 	}
-	if _, exists := table.entriesBySlot[slotID]; exists {
+	if existing, exists := table.entriesBySlot[slotID]; exists {
+		if !reuse {
+			table.mu.Unlock()
+			return ErrSplitPhaseDuplicate
+		}
+		if existing.materializing || existing.consumed || existing.discarded {
+			table.mu.Unlock()
+			return ErrSplitPhaseConsumed
+		}
+		if !bytes.Equal(existing.request, canonicalRequest) || table.entriesByCall[call.CallID] != existing {
+			table.mu.Unlock()
+			return ErrSplitPhaseMismatch
+		}
+		table.snapshot.Reused++
+		table.recordLocked(existing, "reused")
 		table.mu.Unlock()
-		return ErrSplitPhaseDuplicate
+		return nil
 	}
 	if _, exists := table.entriesByCall[call.CallID]; exists {
 		table.mu.Unlock()
+		if reuse {
+			return ErrSplitPhaseMismatch
+		}
 		return ErrSplitPhaseDuplicate
 	}
 	if uint32(len(table.entriesBySlot)) >= table.limits.MaxCalls ||

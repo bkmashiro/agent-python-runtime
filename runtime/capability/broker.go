@@ -205,6 +205,18 @@ func (broker *Broker) AttachStagedClaimer(claimer StagedObservationClaimer) erro
 	return nil
 }
 
+// AttachedSplitPhaseTable returns the Host-owned table supplied before the
+// first logical call, if source-time analysis already created one.
+func (broker *Broker) AttachedSplitPhaseTable() *SplitPhaseTable {
+	if broker == nil {
+		return nil
+	}
+	broker.mu.Lock()
+	defer broker.mu.Unlock()
+	table, _ := broker.config.StagedClaimer.(*SplitPhaseTable)
+	return table
+}
+
 func (broker *Broker) observeCallLifecycle(ctx context.Context, call request, operation uint32, phase CallLifecyclePhase) {
 	broker.mu.Lock()
 	observer := broker.lifecycleObserver

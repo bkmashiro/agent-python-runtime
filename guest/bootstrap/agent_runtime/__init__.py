@@ -48,6 +48,8 @@ _PREPARED_REGION_HELPER = "__pysolate_materialize_value__"
 _PREPARED_REGION_PAYLOAD_MAX = 256
 _SPLIT_PHASE_SUBMIT_HELPER = "_pysolate_call_submit"
 _SPLIT_PHASE_MATERIALIZE_HELPER = "_pysolate_call_materialize"
+_SPLIT_PHASE_ISSUE_HELPER = "_pysolate_call_issue"
+_SPLIT_PHASE_COLLECT_HELPER = "_pysolate_call_collect"
 _VALUE_SLOT_HELPER = "_pysolate_materialize_slot"
 _split_phase_occurrence_counts: dict[str, int] = {}
 _split_phase_pending_slots: dict[str, list[str]] = {}
@@ -965,6 +967,11 @@ def _prepare_source_pass_execution(patch_json: str) -> None:
     ):
         allowed_runtime_names = frozenset({_SPLIT_PHASE_SUBMIT_HELPER, _SPLIT_PHASE_MATERIALIZE_HELPER})
     elif (
+        patch.get("pass_name") == "split_phase_capability_calls"
+        and patch.get("pass_version") == "pysolate.split-phase-capability-calls-pass.v1"
+    ):
+        allowed_runtime_names = frozenset({_SPLIT_PHASE_ISSUE_HELPER, _SPLIT_PHASE_COLLECT_HELPER})
+    elif (
         patch.get("pass_name") == "data_local_numpy_sum"
         and patch.get("pass_version") == "pysolate.data-local-numpy-sum-pass.v2"
     ):
@@ -1066,6 +1073,42 @@ def _materialize_split_phase_call(slot_id: str) -> dict[str, Any]:
         raise RuntimeError("split-phase Host response is invalid") from exc
 
 
+def _issue_split_phase_capability(slot_id: str, call_id: str, capability: str, arguments: dict[str, Any]) -> None:
+    if (
+        not isinstance(slot_id, str)
+        or not slot_id.startswith("slot-s")
+        or len(slot_id) > 80
+        or not isinstance(call_id, str)
+        or not call_id.startswith("split-s")
+        or len(call_id) > 80
+        or not isinstance(capability, str)
+        or not capability
+        or len(capability) > 128
+        or not isinstance(arguments, dict)
+    ):
+        raise RuntimeError("split-phase capability issue is invalid")
+    occurrence = _split_phase_occurrence_counts.get(slot_id, 0) + 1
+    _split_phase_occurrence_counts[slot_id] = occurrence
+    dynamic_slot = f"{slot_id}-{occurrence}"
+    dynamic_call_id = f"{call_id}-{occurrence}"
+    if len(dynamic_slot) > 96 or len(dynamic_call_id) > 96:
+        raise RuntimeError("split-phase capability occurrence is invalid")
+    request = {"call_id": dynamic_call_id, "capability": capability, "arguments": arguments}
+    try:
+        dynamic_request = json.dumps(
+            request, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("split-phase capability arguments are not canonical JSON") from exc
+    import _agent_runtime_host  # type: ignore[import-not-found]
+    _agent_runtime_host.submit_call(dynamic_slot, dynamic_request)
+    _split_phase_pending_slots.setdefault(slot_id, []).append(dynamic_slot)
+
+
+def _collect_split_phase_capability(slot_id: str) -> dict[str, Any]:
+    return _materialize_split_phase_call(slot_id)
+
+
 def _materialize_value_slot(slot_id: str) -> Any:
     if not isinstance(slot_id, str) or not slot_id.startswith("slot-") or len(slot_id) > 128:
         raise RuntimeError("value-slot materialization is invalid")
@@ -1145,6 +1188,8 @@ def _execute(request_json: str) -> str:
         namespace[_PREPARED_REGION_HELPER] = _materialize_prepared_region
         namespace[_SPLIT_PHASE_SUBMIT_HELPER] = _submit_split_phase_call
         namespace[_SPLIT_PHASE_MATERIALIZE_HELPER] = _materialize_split_phase_call
+        namespace[_SPLIT_PHASE_ISSUE_HELPER] = _issue_split_phase_capability
+        namespace[_SPLIT_PHASE_COLLECT_HELPER] = _collect_split_phase_capability
         namespace[_VALUE_SLOT_HELPER] = _materialize_value_slot
         main = namespace.get(_WRAPPER_MAIN)
         if not isinstance(main, types.FunctionType):

@@ -318,6 +318,98 @@ func TestSplitPhaseTableFinalizeCancelsAndJoinsUnclaimedWork(t *testing.T) {
 	}
 }
 
+func TestSplitPhaseTableIssueOrReuseStartsOneAdmittedPhysicalAttempt(t *testing.T) {
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	var physical atomic.Uint32
+	plan := splitPhasePlan(t, 1, func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		physical.Add(1)
+		started <- struct{}{}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-release:
+			return json.RawMessage(`{"text":"ready"}`), nil
+		}
+	})
+	broker, _ := capability.NewBroker(capability.Config{RunIdentity: "split-reuse", Plan: plan})
+	table, _ := capability.NewSplitPhaseTable(plan, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
+	if err := broker.AttachStagedClaimer(table); err != nil {
+		t.Fatal(err)
+	}
+	request := []byte(`{"call_id":"split-s1c0-e1c29-1","capability":"workspace.read_text","arguments":{"path":"a"}}`)
+	if err := table.IssueOrReuse(context.Background(), "slot-s1c0-e1c29-1", request); err != nil {
+		t.Fatal(err)
+	}
+	if err := table.IssueOrReuse(context.Background(), "slot-s1c0-e1c29-1", request); err != nil {
+		t.Fatalf("reuse exact attempt: %v", err)
+	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("physical call did not start")
+	}
+	close(release)
+	response, err := table.Materialize(context.Background(), "slot-s1c0-e1c29-1", broker)
+	if err != nil || !containsResult(response, "ready") {
+		t.Fatalf("response=%s err=%v", response, err)
+	}
+	if err := broker.Finalize(true); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := table.Snapshot()
+	if physical.Load() != 1 || snapshot.Submitted != 1 || snapshot.Reused != 1 || snapshot.Consumed != 1 {
+		t.Fatalf("physical=%d snapshot=%+v", physical.Load(), snapshot)
+	}
+}
+
+func TestSplitPhaseTableIssueOrReuseRejectsRequestMismatch(t *testing.T) {
+	var physical atomic.Uint32
+	plan := splitPhasePlan(t, 1, func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		physical.Add(1)
+		return json.RawMessage(`{"text":"ready"}`), nil
+	})
+	table, _ := capability.NewSplitPhaseTable(plan, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
+	first := []byte(`{"call_id":"split-s1c0-e1c29-1","capability":"workspace.read_text","arguments":{"path":"a"}}`)
+	second := []byte(`{"call_id":"split-s1c0-e1c29-1","capability":"workspace.read_text","arguments":{"path":"b"}}`)
+	if err := table.IssueOrReuse(context.Background(), "slot-s1c0-e1c29-1", first); err != nil {
+		t.Fatal(err)
+	}
+	if err := table.IssueOrReuse(context.Background(), "slot-s1c0-e1c29-1", second); !errors.Is(err, capability.ErrSplitPhaseMismatch) {
+		t.Fatalf("mismatch error=%v", err)
+	}
+	if err := table.Finalize(false); err != nil {
+		t.Fatal(err)
+	}
+	if physical.Load() != 1 {
+		t.Fatalf("physical=%d", physical.Load())
+	}
+}
+
+func TestSplitPhaseTableIssueOrReuseRejectsNonStageableWrite(t *testing.T) {
+	registry := capability.NewRegistry()
+	spec := basicSpec("workspace.write_text", "split-write-v1")
+	spec.EffectClass = capability.EffectWorkspaceWrite
+	spec.InputSchema = json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"],"additionalProperties":false}`)
+	spec.OutputSchema = json.RawMessage(`{"type":"object","properties":{"written":{"type":"boolean"}},"required":["written"],"additionalProperties":false}`)
+	var physical atomic.Uint32
+	if err := registry.Register(spec, basicGrant(t), capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		physical.Add(1)
+		return json.RawMessage(`{"written":true}`), nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	plan, _ := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+	table, _ := capability.NewSplitPhaseTable(plan, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
+	request := []byte(`{"call_id":"split-write-1","capability":"workspace.write_text","arguments":{"path":"a","content":"b"}}`)
+	if err := table.IssueOrReuse(context.Background(), "slot-write-1", request); !errors.Is(err, capability.ErrSplitPhaseUnavailable) {
+		t.Fatalf("write issue error=%v", err)
+	}
+	if physical.Load() != 0 {
+		t.Fatalf("physical=%d", physical.Load())
+	}
+}
+
 func splitPhasePlan(t *testing.T, maxCalls uint32, handler capability.HandlerFunc) *capability.Plan {
 	t.Helper()
 	registry := capability.NewRegistry()

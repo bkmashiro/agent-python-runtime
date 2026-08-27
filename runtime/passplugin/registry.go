@@ -47,6 +47,12 @@ type HostScheduledSourcePatchPlugin interface {
 	HostScheduled() bool
 }
 
+type CapabilitySourcePatchPlugin interface {
+	Plugin
+	Transform(context.Context, sourcepatch.Transformer, string, []sourcepatch.CapabilityProjection) (sourcepatch.Patch, error)
+	HostScheduled() bool
+}
+
 type ValueSlotSourcePatchPlugin interface {
 	SourcePatchPlugin
 	ValueSlotBound() bool
@@ -187,13 +193,17 @@ func NewUnifiedCatalog(config UnifiedCatalogConfig) (*Registry, error) {
 	if err != nil {
 		return nil, err
 	}
+	splitCapabilities, err := sourcepatch.NewSplitPhaseCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
+	if err != nil {
+		return nil, err
+	}
 	dataLocal, err := sourcepatch.NewDataLocalNumpySum(passregistration.SemanticAnalyzerSHA256)
 	if err != nil {
 		return nil, err
 	}
 	plugins := []Plugin{
 		semanticAdapter, preparedPureAdapter, preparedNumpyAdapter, future, preparedValue,
-		cse, fold, splitRead, dataLocal,
+		cse, fold, splitRead, splitCapabilities, dataLocal,
 	}
 	for _, definition := range passregistration.RuntimeOptimizationDefinitions() {
 		registration, registerErr := definition.Register("", runtimeOptimizationConfigSHA256(definition))
@@ -296,6 +306,28 @@ func directOptimizationSelected(mechanisms runtimeconfig.MechanismSet) bool {
 		mechanisms.SemanticPreDispatch || mechanisms.SemanticReuse || mechanisms.SplitPhaseCalls || mechanisms.ValueSlots
 }
 
+func CapabilityProjections(plan *capability.Plan) []sourcepatch.CapabilityProjection {
+	if plan == nil {
+		return nil
+	}
+	projections := make([]sourcepatch.CapabilityProjection, 0)
+	for _, spec := range plan.Specs() {
+		if !plan.PreDispatchEligible(spec.Name) || spec.Python == nil {
+			continue
+		}
+		projections = append(projections, sourcepatch.CapabilityProjection{
+			Capability: spec.Name, Module: spec.Python.Module, Method: spec.Python.Method,
+			Arguments: append([]string(nil), spec.Python.Arguments...), ResultField: spec.Python.ResultField,
+		})
+	}
+	sort.Slice(projections, func(left, right int) bool {
+		leftName := projections[left].Module + "." + projections[left].Method
+		rightName := projections[right].Module + "." + projections[right].Method
+		return leftName < rightName
+	})
+	return projections
+}
+
 func runtimeOptimizationConfigSHA256(definition passregistration.Definition) string {
 	digest := sha256.Sum256([]byte(definition.Version() + "\x00" + string(definition.Name()) + "\x00runtime-lowering"))
 	return "sha256:" + hex.EncodeToString(digest[:])
@@ -316,6 +348,7 @@ func unifiedRequirements() map[passregistration.Name]runtimeconfig.MechanismSet 
 		sourcepatch.PureScalarCSEName:                 {SemanticAnalysis: true},
 		sourcepatch.PureScalarFoldName:                {SemanticAnalysis: true},
 		sourcepatch.SplitPhaseSourcesReadName:         {SplitPhaseCalls: true},
+		sourcepatch.SplitPhaseCapabilityCallsName:     {SplitPhaseCalls: true},
 		sourcepatch.DataLocalNumpySumName:             {ValueSlots: true},
 		passregistration.SourceStreamingExecution:     {Streaming: true, PrivateWorkspace: true},
 		passregistration.StreamedChildFanout:          {Streaming: true, PrivateWorkspace: true, ImmutableBranches: true, ChildFanout: true},
@@ -541,6 +574,46 @@ func (registry *Registry) ExecuteHostScheduled(ctx context.Context, name passreg
 		return Execution{Payload: payload}, runErr
 	}
 	patch, passErr := patchPlugin.Transform(ctx, transformer, runRequest.Code)
+	if passErr != nil || !patch.Applied() {
+		payload, runErr := runner.Run(ctx, request, trustedPrepare)
+		return Execution{Payload: payload, Patch: patch, PassError: passErr}, runErr
+	}
+	payload, runErr := runner.RunHostScheduledSourcePatchDerived(ctx, request, patch, plugin.Registration())
+	return Execution{Payload: payload, Patch: patch, Applied: runErr == nil}, runErr
+}
+
+// ExecuteCapabilityHostScheduled runs the plan-bound V1 capability-call pass.
+// The projection manifest is Host-derived from the sealed capability Plan and
+// is bound into the patch before the exact Guest validates and executes it.
+func (registry *Registry) ExecuteCapabilityHostScheduled(
+	ctx context.Context,
+	name passregistration.Name,
+	transformer sourcepatch.Transformer,
+	runner HostScheduledSourcePatchRunner,
+	request []byte,
+	trustedPrepare string,
+	projections []sourcepatch.CapabilityProjection,
+) (Execution, error) {
+	if runner == nil || len(projections) == 0 {
+		return Execution{}, ErrInvalidPlugin
+	}
+	runRequest, err := runtimeconfig.DecodeRunRequest(request)
+	if err != nil {
+		return Execution{}, err
+	}
+	plugin, exists := registry.Lookup(name)
+	if !exists {
+		return Execution{}, ErrInvalidPlugin
+	}
+	capabilityPlugin, ok := plugin.(CapabilitySourcePatchPlugin)
+	if !ok || !capabilityPlugin.HostScheduled() || plugin.Registration().Stage() != passregistration.StageWholeProgramPatch {
+		return Execution{}, ErrUnsupportedStage
+	}
+	if !registry.enabled[name] {
+		payload, runErr := runner.Run(ctx, request, trustedPrepare)
+		return Execution{Payload: payload}, runErr
+	}
+	patch, passErr := capabilityPlugin.Transform(ctx, transformer, runRequest.Code, projections)
 	if passErr != nil || !patch.Applied() {
 		payload, runErr := runner.Run(ctx, request, trustedPrepare)
 		return Execution{Payload: payload, Patch: patch, PassError: passErr}, runErr

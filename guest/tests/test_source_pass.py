@@ -25,7 +25,98 @@ def request(source, pass_name="pure_scalar_cse", pass_version="pysolate.pure-sca
     )
 
 
+def capability_request(source, projections):
+    value = json.loads(request(
+        source,
+        "split_phase_capability_calls",
+        "pysolate.split-phase-capability-calls-pass.v1",
+    ))
+    value["capability_projections"] = projections
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+CAPABILITY_PROJECTIONS = [
+    {
+        "capability": "tools.get",
+        "module": "tools",
+        "method": "get",
+        "arguments": ["key"],
+        "result_field": "value",
+    },
+    {
+        "capability": "tools.price",
+        "module": "tools",
+        "method": "price",
+        "arguments": ["value"],
+        "result_field": "quote",
+    },
+]
+
+
 class SourcePassTests(unittest.TestCase):
+    def test_split_phase_capability_calls_issues_runtime_dependency_after_value_is_ready(self):
+        source = (
+            'a = tools.get("alpha")\n'
+            'x = a + 1\n'
+            'independent = 3 * 4\n'
+            'b = tools.price(x)\n'
+            'result = [b, independent]\n'
+        )
+        raw = emit_source_pass_patch_request_json(capability_request(source, CAPABILITY_PROJECTIONS))
+        patch = json.loads(raw)
+        self.assertEqual("applied", patch["status"])
+        self.assertEqual(2, patch["replacement_count"])
+        lines = patch["derived_source"].splitlines()
+        self.assertLess(lines[0].index("_pysolate_call_issue"), lines[0].index("_pysolate_call_collect"))
+        self.assertIn("_pysolate_call_issue", lines[1])
+        self.assertNotIn("_pysolate_call_collect", lines[1])
+        self.assertNotIn("_pysolate_call_issue", lines[2])
+        self.assertIn("_pysolate_call_collect", lines[3])
+        self.assertEqual(source.count("\n"), patch["derived_source"].count("\n"))
+        validate_source_pass_execution_request(source, raw)
+
+    def test_split_phase_capability_calls_stage_independent_literals_before_collect(self):
+        source = (
+            'a = tools.get("alpha")\n'
+            'b = tools.get("beta")\n'
+            'result = [a, b]\n'
+        )
+        patch = json.loads(emit_source_pass_patch_request_json(capability_request(source, CAPABILITY_PROJECTIONS)))
+        lines = patch["derived_source"].splitlines()
+        self.assertEqual("applied", patch["status"])
+        self.assertEqual(2, lines[0].count("_pysolate_call_issue"))
+        self.assertEqual(1, lines[0].count("_pysolate_call_collect"))
+        self.assertEqual(1, lines[1].count("_pysolate_call_collect"))
+
+    def test_split_phase_capability_calls_preserves_branch_and_loop_activation(self):
+        branch = (
+            'if inputs["take"]:\n'
+            '    value = tools.get("alpha")\n'
+            '    result = value\n'
+            'else:\n'
+            '    result = 0\n'
+        )
+        loop = (
+            'result = []\n'
+            'for key in inputs["keys"]:\n'
+            '    value = tools.get(key)\n'
+            '    result.append(value)\n'
+        )
+        for source in (branch, loop):
+            with self.subTest(source=source):
+                raw = emit_source_pass_patch_request_json(capability_request(source, CAPABILITY_PROJECTIONS))
+                patch = json.loads(raw)
+                self.assertEqual("applied", patch["status"])
+                self.assertEqual(1, patch["replacement_count"])
+                self.assertEqual(source.count("\n"), patch["derived_source"].count("\n"))
+                validate_source_pass_execution_request(source, raw)
+
+    def test_split_phase_capability_calls_rejects_opaque_argument_evaluation(self):
+        source = 'value = tools.get(make_key())\nresult = value\n'
+        patch = json.loads(emit_source_pass_patch_request_json(capability_request(source, CAPABILITY_PROJECTIONS)))
+        self.assertEqual("not_applicable", patch["status"])
+        self.assertEqual("", patch["derived_source"])
+
     def test_data_local_numpy_sum_emits_one_value_slot_materialization(self):
         source = (
             "import io\n"

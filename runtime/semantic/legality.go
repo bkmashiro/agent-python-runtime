@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"sort"
 
@@ -182,6 +183,16 @@ func (call QualifiedCall) ResourceSHA256() string  { return call.resourceSHA256 
 
 func (call QualifiedCall) CanonicalArguments() json.RawMessage {
 	return append(json.RawMessage(nil), call.canonicalArguments...)
+}
+
+// SplitPhaseSiteIDs uses only the source span inside one Run. Prefix extension
+// keeps that span stable; exact request matching prevents accidental reuse.
+func (call QualifiedCall) SplitPhaseSiteIDs() (string, string, bool) {
+	if !call.valid() {
+		return "", "", false
+	}
+	site := fmt.Sprintf("s%dc%d-e%dc%d", call.startLine, call.startColumn, call.endLine, call.endColumn)
+	return "slot-" + site, "split-" + site, true
 }
 
 func (call QualifiedCall) valid() bool {

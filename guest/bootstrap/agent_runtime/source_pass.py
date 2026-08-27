@@ -14,14 +14,18 @@ PURE_SCALAR_FOLD = "pure_scalar_fold"
 PURE_SCALAR_FOLD_VERSION = "pysolate.pure-scalar-fold-pass.v1"
 SPLIT_PHASE_SOURCES_READ = "split_phase_sources_read"
 SPLIT_PHASE_SOURCES_READ_VERSION = "pysolate.split-phase-sources-read-pass.v3"
+SPLIT_PHASE_CAPABILITY_CALLS = "split_phase_capability_calls"
+SPLIT_PHASE_CAPABILITY_CALLS_VERSION = "pysolate.split-phase-capability-calls-pass.v1"
 DATA_LOCAL_NUMPY_SUM = "data_local_numpy_sum"
 DATA_LOCAL_NUMPY_SUM_VERSION = "pysolate.data-local-numpy-sum-pass.v2"
 _REQUEST_KEYS = {"pass_name", "pass_version", "registration_sha256", "source"}
+_CAPABILITY_REQUEST_KEYS = _REQUEST_KEYS | {"capability_projections"}
 _PATCH_KEYS = {
     "schema_version", "status", "pass_name", "pass_version", "registration_sha256",
     "original_source_sha256", "original_ast_sha256", "derived_source",
     "derived_source_sha256", "derived_ast_sha256", "replacement_count",
 }
+_CAPABILITY_PATCH_KEYS = _PATCH_KEYS | {"capability_projections"}
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
@@ -462,6 +466,225 @@ def _split_phase_sources_read(source):
     return tree, derived_source, len(reads)
 
 
+def _validated_capability_projection_index(projections):
+    if not isinstance(projections, list) or not projections or len(projections) > 64:
+        raise ValueError("invalid split-phase capability projections")
+    expected = {"capability", "module", "method", "arguments", "result_field"}
+    index = {}
+    for projection in projections:
+        if not isinstance(projection, dict) or set(projection) != expected:
+            raise ValueError("invalid split-phase capability projection")
+        capability = projection["capability"]
+        module = projection["module"]
+        method = projection["method"]
+        arguments = projection["arguments"]
+        result_field = projection["result_field"]
+        if (
+            not isinstance(capability, str)
+            or not capability
+            or len(capability.encode("utf-8")) > 128
+            or not isinstance(module, str)
+            or not module.isidentifier()
+            or not isinstance(method, str)
+            or not method.isidentifier()
+            or not isinstance(arguments, list)
+            or len(arguments) > 16
+            or any(not isinstance(name, str) or not name.isidentifier() for name in arguments)
+            or len(set(arguments)) != len(arguments)
+            or not isinstance(result_field, str)
+            or len(result_field.encode("utf-8")) > 128
+            or (module, method) in index
+        ):
+            raise ValueError("invalid split-phase capability projection")
+        index[(module, method)] = {
+            "capability": capability,
+            "module": module,
+            "method": method,
+            "arguments": tuple(arguments),
+            "result_field": result_field,
+        }
+    return index
+
+
+def _projected_call(node, projection_index):
+    if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute) or not isinstance(node.func.value, ast.Name):
+        return None
+    return projection_index.get((node.func.value.id, node.func.attr))
+
+
+def _split_phase_capability_assignment(statement, source, projection_index, available_names):
+    assignment = _simple_assignment(statement)
+    if assignment is None or statement.lineno != statement.end_lineno:
+        return None
+    name, call = assignment
+    projection = _projected_call(call, projection_index)
+    if (
+        projection is None
+        or not isinstance(call, ast.Call)
+        or call.lineno != call.end_lineno
+        or any(isinstance(value, ast.Starred) for value in call.args)
+    ):
+        return None
+    argument_names = projection["arguments"]
+    if len(call.args) > len(argument_names) or any(keyword.arg is None for keyword in call.keywords):
+        return None
+    values = {}
+    for index, value in enumerate(call.args):
+        values[argument_names[index]] = value
+    for keyword in call.keywords:
+        if keyword.arg not in argument_names or keyword.arg in values:
+            return None
+        values[keyword.arg] = keyword.value
+    if set(values) != set(argument_names):
+        return None
+    loaded_names = set()
+    rendered = []
+    for argument_name in argument_names:
+        value = values[argument_name]
+        if isinstance(value, ast.Name):
+            loaded_names.add(value.id)
+            if value.id not in available_names:
+                return None
+        elif not (
+            isinstance(value, ast.Constant)
+            and (value.value is None or type(value.value) in (bool, int, float, str))
+        ):
+            return None
+        segment = ast.get_source_segment(source, value)
+        if not isinstance(segment, str) or not segment or "\n" in segment:
+            return None
+        rendered.append(repr(argument_name) + ": " + segment)
+    return name, call, projection, loaded_names, "{" + ", ".join(rendered) + "}"
+
+
+def _v1_transparent_expression(node):
+    if isinstance(node, ast.Constant):
+        return node.value is None or type(node.value) in (bool, int, float, str)
+    if isinstance(node, ast.Name):
+        return True
+    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult)):
+        return _v1_transparent_expression(node.left) and _v1_transparent_expression(node.right)
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub, ast.Not)):
+        return _v1_transparent_expression(node.operand)
+    return False
+
+
+def _v1_transparent_statement(statement):
+    assignment = _simple_assignment(statement)
+    return assignment is not None and statement.lineno == statement.end_lineno and _v1_transparent_expression(assignment[1])
+
+
+def _split_phase_site(call):
+    return "s%dc%d-e%dc%d" % (call.lineno, call.col_offset, call.end_lineno, call.end_col_offset)
+
+
+def _split_phase_capability_calls(source, projections):
+    if (
+        not isinstance(source, str)
+        or not source
+        or "\r" in source
+        or len(source.encode("utf-8")) > MAX_SOURCE_BYTES
+    ):
+        raise ValueError("invalid source pass input")
+    projection_index = _validated_capability_projection_index(projections)
+    tree = ast.parse(source, filename="<agent-run>", mode="exec")
+    lines = source.splitlines(keepends=True)
+    projected_calls = {
+        id(node)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and _projected_call(node, projection_index) is not None
+    }
+    if not projected_calls:
+        return tree, "", 0
+
+    edits = {}
+    supported_calls = set()
+
+    def edit(line_number):
+        return edits.setdefault(line_number - 1, {"before": [], "after": [], "replacement": None})
+
+    def process_block(statements, inherited_names):
+        if not statements:
+            return
+        definitions = {}
+        available_before = []
+        available = set(inherited_names)
+        for index, statement in enumerate(statements):
+            available_before.append(set(available))
+            assignment = _simple_assignment(statement)
+            if assignment is not None:
+                definitions[assignment[0]] = index
+                available.add(assignment[0])
+
+        for index, statement in enumerate(statements):
+            parsed = _split_phase_capability_assignment(
+                statement, source, projection_index, available_before[index]
+            )
+            if parsed is None:
+                continue
+            name, call, projection, loaded_names, arguments_source = parsed
+            supported_calls.add(id(call))
+            latest_definition = -1
+            for loaded_name in loaded_names:
+                if loaded_name in definitions and definitions[loaded_name] < index:
+                    latest_definition = max(latest_definition, definitions[loaded_name])
+            issue_after = latest_definition
+            for candidate in range(latest_definition + 1, index):
+                candidate_call = _simple_assignment(statements[candidate])
+                if candidate_call is not None and _projected_call(candidate_call[1], projection_index) is not None:
+                    continue
+                if not _v1_transparent_statement(statements[candidate]):
+                    issue_after = candidate
+            site = _split_phase_site(call)
+            base_slot = "slot-" + site
+            base_call = "split-" + site
+            issue = "_pysolate_call_issue(%r, %r, %r, %s)" % (
+                base_slot, base_call, projection["capability"], arguments_source,
+            )
+            collected = "_pysolate_call_collect(%r)" % base_slot
+            if projection["result_field"]:
+                collected += "[" + repr(projection["result_field"]) + "]"
+            materialize = name + " = " + collected
+            if issue_after < 0:
+                edit(statements[0].lineno)["before"].append(issue)
+            else:
+                edit(statements[issue_after].lineno)["after"].append(issue)
+            current = edit(statement.lineno)
+            if current["replacement"] is not None:
+                raise ValueError("overlapping split-phase capability rewrite")
+            current["replacement"] = materialize
+
+        for index, statement in enumerate(statements):
+            child_names = available_before[index]
+            if isinstance(statement, ast.If):
+                process_block(statement.body, child_names)
+                process_block(statement.orelse, child_names)
+            elif isinstance(statement, (ast.For, ast.AsyncFor)) and isinstance(statement.target, ast.Name):
+                process_block(statement.body, child_names | {statement.target.id})
+                process_block(statement.orelse, child_names)
+
+    process_block(tree.body, {"inputs"})
+    if supported_calls != projected_calls:
+        return tree, "", 0
+
+    derived = list(lines)
+    for line_index, operations in edits.items():
+        line = derived[line_index]
+        if "#" in line:
+            return tree, "", 0
+        indent = _space_indent(line)
+        if indent is None:
+            return tree, "", 0
+        newline = "\n" if line.endswith("\n") else ""
+        original = line[len(indent):].rstrip("\n")
+        body = operations["replacement"] if operations["replacement"] is not None else original
+        parts = [*operations["before"], body, *operations["after"]]
+        derived[line_index] = indent + "; ".join(parts) + newline
+    derived_source = "".join(derived)
+    ast.parse(derived_source, filename="<agent-run>", mode="exec")
+    return tree, derived_source, len(supported_calls)
+
+
 def _data_local_numpy_sum(source):
     if (
         not isinstance(source, str)
@@ -573,12 +796,19 @@ _TRANSFORMS = {
     (PURE_SCALAR_CSE, PURE_SCALAR_CSE_VERSION): _pure_scalar_cse,
     (PURE_SCALAR_FOLD, PURE_SCALAR_FOLD_VERSION): _pure_scalar_fold,
     (SPLIT_PHASE_SOURCES_READ, SPLIT_PHASE_SOURCES_READ_VERSION): _split_phase_sources_read,
+    (SPLIT_PHASE_CAPABILITY_CALLS, SPLIT_PHASE_CAPABILITY_CALLS_VERSION): _split_phase_capability_calls,
     (DATA_LOCAL_NUMPY_SUM, DATA_LOCAL_NUMPY_SUM_VERSION): _data_local_numpy_sum,
 }
 
 
 def emit_source_pass_patch_request_json(request_json):
-    request = _decode(request_json, _REQUEST_KEYS)
+    probe = json.loads(request_json)
+    capability_pass = (
+        isinstance(probe, dict)
+        and (probe.get("pass_name"), probe.get("pass_version"))
+        == (SPLIT_PHASE_CAPABILITY_CALLS, SPLIT_PHASE_CAPABILITY_CALLS_VERSION)
+    )
+    request = _decode(request_json, _CAPABILITY_REQUEST_KEYS if capability_pass else _REQUEST_KEYS)
     transform = _TRANSFORMS.get((request["pass_name"], request["pass_version"]))
     if (
         transform is None
@@ -587,7 +817,12 @@ def emit_source_pass_patch_request_json(request_json):
         or not isinstance(request["source"], str)
     ):
         raise ValueError("unsupported source pass")
-    original_tree, derived_source, replacement_count = transform(request["source"])
+    if capability_pass:
+        original_tree, derived_source, replacement_count = transform(
+            request["source"], request["capability_projections"]
+        )
+    else:
+        original_tree, derived_source, replacement_count = transform(request["source"])
     applied = replacement_count > 0
     derived_tree = ast.parse(derived_source, filename="<agent-run>", mode="exec") if applied else None
     patch = {
@@ -603,11 +838,19 @@ def emit_source_pass_patch_request_json(request_json):
         "derived_ast_sha256": ast_digest_bounded(derived_tree) if derived_tree is not None else "",
         "replacement_count": replacement_count,
     }
+    if capability_pass:
+        patch["capability_projections"] = request["capability_projections"]
     return _contract(patch)
 
 
 def validate_source_pass_execution_request(final_source, patch_json):
-    patch = _decode(patch_json, _PATCH_KEYS)
+    probe = json.loads(patch_json)
+    capability_pass = (
+        isinstance(probe, dict)
+        and (probe.get("pass_name"), probe.get("pass_version"))
+        == (SPLIT_PHASE_CAPABILITY_CALLS, SPLIT_PHASE_CAPABILITY_CALLS_VERSION)
+    )
+    patch = _decode(patch_json, _CAPABILITY_PATCH_KEYS if capability_pass else _PATCH_KEYS)
     if patch["status"] != "applied" or patch["replacement_count"] <= 0:
         raise ValueError("source pass patch is not applicable")
     request = _canonical({
@@ -616,7 +859,14 @@ def validate_source_pass_execution_request(final_source, patch_json):
         "registration_sha256": patch["registration_sha256"],
         "source": final_source,
     })
-    expected = _decode(emit_source_pass_patch_request_json(request), _PATCH_KEYS)
+    if capability_pass:
+        request_value = json.loads(request)
+        request_value["capability_projections"] = patch["capability_projections"]
+        request = _canonical(request_value)
+    expected = _decode(
+        emit_source_pass_patch_request_json(request),
+        _CAPABILITY_PATCH_KEYS if capability_pass else _PATCH_KEYS,
+    )
     if expected != patch:
         raise ValueError("source pass patch does not match the original source")
     return ast.parse(patch["derived_source"], filename="<agent-run>", mode="exec")

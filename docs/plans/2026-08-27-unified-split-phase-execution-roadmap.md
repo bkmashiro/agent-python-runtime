@@ -1,8 +1,8 @@
 # Unified Split-Phase Execution Roadmap
 
-Status: **Proposed; awaiting owner approval. No implementation is authorized by this document yet.**
+Status: **Approved architecture and execution roadmap. Implementation has not yet been launched.**
 
-This is the sole proposed execution roadmap for replacing Pysolate's overlapping source-streaming, semantic pre-dispatch, Python Future-proxy and split-phase call paths with one statically planned execution model. Historical roadmaps remain evidence records and must not be treated as competing queues once this roadmap is approved.
+This is the sole execution roadmap for replacing Pysolate's overlapping source-streaming, semantic pre-dispatch, Python Future-proxy and split-phase call paths with one statically planned execution model. Historical roadmaps remain evidence records and must not be treated as competing queues.
 
 ## Goal
 
@@ -60,6 +60,7 @@ These decisions require an explicit owner revision before implementation may con
 10. **Broker semantics remain authoritative.** Permission, budget, logical operation order, result validation and receipts are not inferred from physical completion.
 11. **One table, two issue opportunities.** Source-time pre-dispatch and AST-scheduled runtime issue populate the same Run-private attempt table.
 12. **Local streaming is a retired experiment, not a hidden fallback.** Its historical implementation and negative economics remain reproducible evidence.
+13. **Early issue uses positive admission.** Unknown physical, economic or provider observability rejects early issue. The implementation may expand coverage incrementally only by proving a stronger operation contract; rejection always falls back to later runtime issue or the original synchronous call.
 
 ## Non-goals
 
@@ -397,8 +398,8 @@ Stop rather than silently expanding the design when:
 
 ## Current execution pointer
 
-**Current:** Awaiting Yuzhe's approval of the desired state, frozen decisions, lane order and deliberate retirement of local streaming/Future proxies.
+**Current:** Approved on 2026-08-27. The architecture, lane order and deliberate retirement of local streaming/Future proxies are frozen; project execution is not yet launched.
 
-**Next after approval:** Lane 0, freeze the differential corpus and minimal ABI before production behavior changes.
+**Next on explicit execution launch:** Lane 0, freeze the differential corpus and minimal ABI before production behavior changes.
 
-**Blocked:** None. Implementation is intentionally not started until approval.
+**Blocked:** None. Awaiting an explicit project execution launch rather than an architecture decision.

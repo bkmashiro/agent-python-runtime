@@ -3,11 +3,10 @@ import hashlib
 import json
 import re
 
-from .ast_support import ast_digest_bounded
 from .semantic import MAX_SCALAR_OPERATORS, MAX_SOURCE_BYTES
 
 
-PATCH_SCHEMA_VERSION = "pysolate.source-pass-patch.v1"
+PATCH_SCHEMA_VERSION = "pysolate.source-pass-patch.v2"
 PURE_SCALAR_CSE = "pure_scalar_cse"
 PURE_SCALAR_CSE_VERSION = "pysolate.pure-scalar-cse-pass.v1"
 PURE_SCALAR_FOLD = "pure_scalar_fold"
@@ -20,8 +19,7 @@ _REQUEST_KEYS = {"pass_name", "pass_version", "registration_sha256", "source"}
 _CAPABILITY_REQUEST_KEYS = _REQUEST_KEYS | {"capability_projections"}
 _PATCH_KEYS = {
     "schema_version", "status", "pass_name", "pass_version", "registration_sha256",
-    "original_source_sha256", "original_ast_sha256", "derived_source",
-    "derived_source_sha256", "derived_ast_sha256", "replacement_count",
+    "original_source_sha256", "derived_source", "derived_source_sha256", "replacement_count",
 }
 _CAPABILITY_PATCH_KEYS = _PATCH_KEYS | {"capability_projections"}
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -618,10 +616,8 @@ def emit_source_pass_patch_request_json(request_json):
         "pass_version": request["pass_version"],
         "registration_sha256": request["registration_sha256"],
         "original_source_sha256": _digest(request["source"].encode("utf-8")),
-        "original_ast_sha256": ast_digest_bounded(original_tree),
         "derived_source": derived_source,
         "derived_source_sha256": _digest(derived_source.encode("utf-8")) if applied else "",
-        "derived_ast_sha256": ast_digest_bounded(derived_tree) if derived_tree is not None else "",
         "replacement_count": replacement_count,
     }
     if capability_pass:

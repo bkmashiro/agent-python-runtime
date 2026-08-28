@@ -25,8 +25,8 @@ func (fake *fakeTransformer) TransformSourcePass(_ context.Context, raw []byte) 
 		SchemaVersion: SchemaVersion, Status: "applied",
 		PassName: fake.request.PassName, PassVersion: fake.request.PassVersion,
 		RegistrationSHA256:   fake.request.RegistrationSHA256,
-		OriginalSourceSHA256: digest([]byte(fake.request.Source)), OriginalASTSHA256: digest([]byte("original-ast")),
-		DerivedSource: derived, DerivedSourceSHA256: digest([]byte(derived)), DerivedASTSHA256: digest([]byte("derived-ast")),
+		OriginalSourceSHA256: digest([]byte(fake.request.Source)),
+		DerivedSource:        derived, DerivedSourceSHA256: digest([]byte(derived)),
 		ReplacementCount: 1,
 	}
 	return json.Marshal(patch)
@@ -41,8 +41,8 @@ func (fake *capabilityTransformer) TransformSourcePass(_ context.Context, raw []
 		SchemaVersion: SchemaVersion, Status: "applied",
 		PassName: fake.request.PassName, PassVersion: fake.request.PassVersion,
 		RegistrationSHA256:   fake.request.RegistrationSHA256,
-		OriginalSourceSHA256: digest([]byte(fake.request.Source)), OriginalASTSHA256: digest([]byte("original-ast")),
-		DerivedSource: derived, DerivedSourceSHA256: digest([]byte(derived)), DerivedASTSHA256: digest([]byte("derived-ast")),
+		OriginalSourceSHA256: digest([]byte(fake.request.Source)),
+		DerivedSource:        derived, DerivedSourceSHA256: digest([]byte(derived)),
 		ReplacementCount: 1, CapabilityProjections: fake.request.CapabilityProjections,
 	}
 	return json.Marshal(patch)

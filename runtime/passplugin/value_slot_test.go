@@ -29,13 +29,11 @@ func (transformer valueSlotTransformer) TransformSourcePass(_ context.Context, r
 		PassVersion:          request.PassVersion,
 		RegistrationSHA256:   request.RegistrationSHA256,
 		OriginalSourceSHA256: valueSlotDigest(request.Source),
-		OriginalASTSHA256:    valueSlotDigest("original-ast"),
 	}
 	if transformer.applied {
 		patch.Status = "applied"
 		patch.DerivedSource = "result = __pysolate_materialize_slot__('slot-numpy-sum-v1')\n"
 		patch.DerivedSourceSHA256 = valueSlotDigest(patch.DerivedSource)
-		patch.DerivedASTSHA256 = valueSlotDigest("derived-ast")
 		patch.ReplacementCount = 1
 	}
 	return json.Marshal(patch)

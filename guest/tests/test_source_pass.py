@@ -59,6 +59,15 @@ CAPABILITY_PROJECTIONS = [
 
 
 class SourcePassTests(unittest.TestCase):
+    def test_source_patch_v2_uses_verifiable_source_identities_only(self):
+        raw = emit_source_pass_patch_request_json(
+            plm_capability_request('value = tools.get("alpha")\nresult = value\n', CAPABILITY_PROJECTIONS)
+        )
+        patch = json.loads(raw)
+        self.assertEqual("pysolate.source-pass-patch.v2", patch["schema_version"])
+        self.assertNotIn("original_ast_sha256", patch)
+        self.assertNotIn("derived_ast_sha256", patch)
+
     def test_same_guest_selection_does_not_replay_plm_transform(self):
         source = 'value = tools.get("alpha")\nresult = value\n'
         key = ("plm_capability_calls", "pysolate.plm-capability-calls-pass.v1")
@@ -81,6 +90,22 @@ class SourcePassTests(unittest.TestCase):
 
         self.assertEqual(1, calls)
         self.assertIsNotNone(tree)
+
+    def test_same_guest_selection_rejects_a_changed_plm_patch(self):
+        source = 'value = tools.get("alpha")\nresult = value\n'
+        patch = json.loads(emit_source_pass_patch_request_json(
+            plm_capability_request(source, CAPABILITY_PROJECTIONS)
+        ))
+        patch["derived_source"] = patch["derived_source"].replace(
+            "tools.get", "tools.other"
+        )
+        patch["derived_source_sha256"] = (
+            "sha256:" + hashlib.sha256(patch["derived_source"].encode()).hexdigest()
+        )
+        tampered = json.dumps(patch, sort_keys=True, separators=(",", ":"))
+
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            validate_source_pass_execution_request(source, tampered)
 
     def test_plm_capability_calls_emits_prepare_and_original_point_linearize(self):
         source = (
@@ -346,8 +371,7 @@ class SourcePassTests(unittest.TestCase):
         tree = validate_source_pass_execution_request(source, raw)
         host_order = [
             "schema_version", "status", "pass_name", "pass_version", "registration_sha256",
-            "original_source_sha256", "original_ast_sha256", "derived_source",
-            "derived_source_sha256", "derived_ast_sha256", "replacement_count",
+            "original_source_sha256", "derived_source", "derived_source_sha256", "replacement_count",
         ]
         host_raw = json.dumps({key: patch[key] for key in host_order}, separators=(",", ":")) + "\n"
         validate_source_pass_execution_request(source, host_raw)

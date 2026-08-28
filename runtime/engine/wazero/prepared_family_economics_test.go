@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -20,7 +21,10 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 )
 
-const preparedFamilyEconomicsSchema = "pysolate.prepared-family-economics.v1"
+const (
+	preparedFamilyEconomicsSchema         = "pysolate.prepared-family-economics.v1"
+	preparedFamilyEconomicsExpectedResult = int64(1_048_577)
+)
 
 type preparedFamilyResourceSample struct {
 	PSSBytes          uint64 `json:"pss_bytes"`
@@ -65,6 +69,8 @@ type preparedFamilyEconomicsEvidence struct {
 	ArtifactSHA256      string                             `json:"artifact_sha256"`
 	InputSHA256         string                             `json:"input_sha256"`
 	InputBytes          uint64                             `json:"input_bytes"`
+	InputElementValue   int64                              `json:"input_element_value"`
+	ExpectedResult      int64                              `json:"expected_result"`
 	RunsPerArm          int                                `json:"runs_per_arm"`
 	Fanout              int                                `json:"fanout"`
 	Isolation           string                             `json:"isolation"`
@@ -132,6 +138,8 @@ func TestPreparedFamilyEconomicsFixture(t *testing.T) {
 		ArtifactSHA256:      fmt.Sprintf("sha256:%x", artifactDigest[:]),
 		InputSHA256:         input.IdentitySHA256(),
 		InputBytes:          8 << 20,
+		InputElementValue:   1,
+		ExpectedResult:      preparedFamilyEconomicsExpectedResult,
 		RunsPerArm:          runs,
 		Fanout:              fanout,
 		Isolation:           "one fresh test subprocess per treatment and repetition; treatment order alternates",
@@ -250,8 +258,8 @@ func TestPreparedFamilyEconomicsWorker(t *testing.T) {
 		if err := json.Unmarshal(decoded.Result, &result); err != nil {
 			t.Fatal(err)
 		}
-		if result != 1 {
-			t.Fatalf("unexpected consumer result: got=%d want=1", result)
+		if result != preparedFamilyEconomicsExpectedResult {
+			t.Fatalf("unexpected consumer result: got=%d want=%d", result, preparedFamilyEconomicsExpectedResult)
 		}
 		if index == 0 {
 			sample.Result = result
@@ -301,10 +309,33 @@ func TestPreparedFamilyEconomicsRunID(t *testing.T) {
 	}
 }
 
+func TestPreparedFamilyEconomicsBodyUsesNonZeroSentinel(t *testing.T) {
+	body, expected := preparedFamilyEconomicsBody()
+	if got, want := len(body), 8<<20; got != want {
+		t.Fatalf("body bytes=%d want=%d", got, want)
+	}
+	for offset := 0; offset < len(body); offset += 8 {
+		if value := binary.LittleEndian.Uint64(body[offset:]); value != 1 {
+			t.Fatalf("body element %d=%d want=1", offset/8, value)
+		}
+	}
+	if want := int64(len(body)/8 + 1); expected != want {
+		t.Fatalf("expected result=%d want=%d", expected, want)
+	}
+}
+
 func preparedFamilyEconomicsInput(t *testing.T, profile *runtimeconfig.ExecutionProfile) PreparedNumpyInput {
 	t.Helper()
-	body := make([]byte, 8<<20)
+	body, _ := preparedFamilyEconomicsBody()
 	return realPreparedInputRaw(t, profile, "<i8", []uint64{1024, 1024}, body)
+}
+
+func preparedFamilyEconomicsBody() ([]byte, int64) {
+	body := make([]byte, 8<<20)
+	for offset := 0; offset < len(body); offset += 8 {
+		binary.LittleEndian.PutUint64(body[offset:], 1)
+	}
+	return body, preparedFamilyEconomicsExpectedResult
 }
 
 func preparedFamilyEconomicsBoundedInt(t *testing.T, name string, minimum, maximum int) int {

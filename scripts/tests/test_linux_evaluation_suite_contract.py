@@ -27,6 +27,7 @@ class LinuxEvaluationSuiteContractTests(unittest.TestCase):
             self.assertIn(flag, text)
         self.assertIn("output must be absent or an empty real directory", text)
         self.assertIn("project-linux-evaluation-manifest.py", text)
+        self.assertIn("verify-source-identity.sh", text)
         self.assertIn("pysolate.linux-evaluation-suite.v1", PROJECTOR.read_text())
 
     def test_prepared_family_gate_is_explicit_and_bounded(self) -> None:

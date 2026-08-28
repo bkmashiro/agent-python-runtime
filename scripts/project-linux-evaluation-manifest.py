@@ -39,6 +39,32 @@ def profiles(document: dict) -> dict:
     }
 
 
+def validate_copy_on_write(document: dict, runs: int, fanout: int) -> None:
+    expected_result = 1_048_577
+    if (
+        document.get("runs_per_arm") != runs
+        or document.get("fanout") != fanout
+        or document.get("input_element_value") != 1
+        or document.get("expected_result") != expected_result
+        or document.get("process_memory_source") != "/proc/self/smaps_rollup"
+    ):
+        raise ValueError("copy-on-write evidence contract drift")
+    treatments = document.get("treatments")
+    if not isinstance(treatments, list) or {row.get("mode") for row in treatments} != {"private_copy", "private_cow"}:
+        raise ValueError("copy-on-write evidence contract drift")
+    for treatment in treatments:
+        samples = treatment.get("samples")
+        if not isinstance(samples, list) or len(samples) != runs:
+            raise ValueError("copy-on-write evidence contract drift")
+        for sample in samples:
+            if (
+                sample.get("fanout") != fanout
+                or sample.get("result") != expected_result
+                or any(len(sample.get(field, [])) != fanout for field in ("runner_create_nanos", "run_nanos", "runner_close_nanos"))
+            ):
+                raise ValueError("copy-on-write evidence contract drift")
+
+
 def project(root: Path, source_commit: str, source_tree: str, source_epoch: int, runs: int, fanout: int) -> dict:
     one = load(root / "plm/one-read.json")
     four = load(root / "plm/four-read.json")
@@ -63,6 +89,7 @@ def project(root: Path, source_commit: str, source_tree: str, source_epoch: int,
         raise ValueError("PLM artifact identity drift")
     if family.get("source_commit") != source_commit or family.get("source_tree") != source_tree or family.get("artifact_sha256") != numpy_sha:
         raise ValueError("prepared-family source or artifact drift")
+    validate_copy_on_write(family, runs, fanout)
     producer_source = producer.get("source", {})
     if (
         producer_source.get("campaign_source_commit") != source_commit

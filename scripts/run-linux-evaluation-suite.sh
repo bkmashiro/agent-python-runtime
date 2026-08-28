@@ -70,6 +70,7 @@ fi
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
+scripts/verify-source-identity.sh "$source_commit" "$source_tree" "$source_epoch"
 export SOURCE_DATE_EPOCH="$source_epoch"
 export GITHUB_SHA="$source_commit"
 export AGENT_RUNTIME_SOURCE_TREE="$source_tree"

@@ -88,6 +88,10 @@ func TestPreparedFamilyEconomicsFixture(t *testing.T) {
 	}
 	runs := preparedFamilyEconomicsBoundedInt(t, "PYSOLATE_PREPARED_FAMILY_ECONOMICS_RUNS", 3, 20)
 	fanout := preparedFamilyEconomicsBoundedInt(t, "PYSOLATE_PREPARED_FAMILY_ECONOMICS_FANOUT", 1, 8)
+	orderOffset := 0
+	if os.Getenv("PYSOLATE_PREPARED_FAMILY_ECONOMICS_ORDER_OFFSET") != "" {
+		orderOffset = preparedFamilyEconomicsBoundedInt(t, "PYSOLATE_PREPARED_FAMILY_ECONOMICS_ORDER_OFFSET", 0, 1)
+	}
 	temporary, err := os.MkdirTemp(filepath.Dir(output), ".prepared-family-economics-")
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +101,7 @@ func TestPreparedFamilyEconomicsFixture(t *testing.T) {
 	samplesByMode := map[string][]preparedFamilyEconomicsSample{"private_copy": {}, "private_cow": {}}
 	for iteration := 0; iteration < runs; iteration++ {
 		order := []string{"private_copy", "private_cow"}
-		if iteration%2 == 1 {
+		if (iteration+orderOffset)%2 == 1 {
 			order[0], order[1] = order[1], order[0]
 		}
 		for _, mode := range order {

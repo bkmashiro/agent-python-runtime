@@ -1076,32 +1076,34 @@ func (engine *Engine) RunSourcePatchDerived(ctx context.Context, request []byte,
 	return engine.runWithPrepares(ctx, request, prepares, false, selection)
 }
 
-// RunHostScheduledSourcePatchDerived executes the plan-bound V1 capability-call
-// pass. Unlike the authority-free source-patch seam, this path requires a
-// Broker and the explicit default-off split-phase mechanism.
-func (engine *Engine) RunHostScheduledSourcePatchDerived(ctx context.Context, request []byte, patch sourcepatch.Patch, registration passregistration.Registration) ([]byte, error) {
-	if !engine.config.Mechanisms.SplitPhaseCalls || engine.brokerFactory == nil || engine.config.ProgramSurface != runtimeconfig.ProgramSurfaceDirect {
-		return nil, runtimeconfig.ErrMechanismDisabled
+// RunCapabilitySourcePatchInline asks the final exact Guest to lower the sealed
+// source before that same module executes it. The Host validates the returned
+// patch and installs it; rejection falls back to the unchanged source.
+func (engine *Engine) RunCapabilitySourcePatchInline(ctx context.Context, request []byte, registration passregistration.Registration, trustedPrepare string, projections []sourcepatch.CapabilityProjection) (passplugin.CapabilitySourcePatchRun, error) {
+	if !engine.config.Mechanisms.SplitPhaseCalls || engine.brokerFactory == nil || engine.config.ProgramSurface != runtimeconfig.ProgramSurfaceDirect ||
+		registration.Name() != sourcepatch.PLMCapabilityCallsName || registration.Stage() != passregistration.StageWholeProgramPatch ||
+		sourcepatch.ValidateCapabilityProjectionBinding(sourcepatch.Patch{CapabilityProjections: projections}, projections) != nil {
+		return passplugin.CapabilitySourcePatchRun{}, runtimeconfig.ErrMechanismDisabled
 	}
 	runRequest, err := runtimeconfig.DecodeRunRequest(request)
 	if err != nil {
-		return nil, err
+		return passplugin.CapabilitySourcePatchRun{}, err
 	}
-	if registration.Name() != sourcepatch.PLMCapabilityCallsName || registration.Stage() != passregistration.StageWholeProgramPatch ||
-		!patch.Applied() || patch.Validate(runRequest.Code, registration) != nil {
-		return nil, sourcepatch.ErrInvalidPatch
-	}
-	patchRaw, err := json.Marshal(patch)
+	transformRequest, err := json.Marshal(sourcepatch.Request{
+		PassName: registration.Name(), PassVersion: registration.Version(), RegistrationSHA256: registration.IdentitySHA256(),
+		Source: runRequest.Code, CapabilityProjections: projections,
+	})
 	if err != nil {
-		return nil, err
+		return passplugin.CapabilitySourcePatchRun{}, err
 	}
-	prepares := make(chan string)
+	inline := &inlineCapabilitySelection{request: transformRequest, registration: registration, projections: projections}
+	prepares := make(chan string, 1)
+	if trustedPrepare != "" {
+		prepares <- trustedPrepare
+	}
 	close(prepares)
-	selection := &derivedSelection{export: "runtime_select_source_pass_execution", payload: append(patchRaw, '\n')}
-	if registration.Name() == sourcepatch.PLMCapabilityCallsName {
-		selection.plmSourceSealIdentity = patch.OriginalSourceSHA256
-	}
-	return engine.runWithPrepares(ctx, request, prepares, false, selection)
+	payload, runErr := engine.runWithPrepares(ctx, request, prepares, false, &derivedSelection{inlineCapability: inline})
+	return passplugin.CapabilitySourcePatchRun{Payload: payload, Patch: inline.patch, Applied: inline.applied && runErr == nil, PassError: inline.passErr}, runErr
 }
 
 // RunValueSlotSourcePatchDerived executes the single v1 data-local reduction adapter.
@@ -1162,11 +1164,49 @@ func (engine *Engine) RunStream(ctx context.Context, request []byte, prepares <-
 	return engine.runWithPrepares(ctx, request, prepares, true, nil)
 }
 
+type inlineCapabilitySelection struct {
+	request      []byte
+	registration passregistration.Registration
+	projections  []sourcepatch.CapabilityProjection
+	patch        sourcepatch.Patch
+	applied      bool
+	passErr      error
+}
+
 type derivedSelection struct {
 	export                 string
 	payload                []byte
 	sourceValidationExport string
 	plmSourceSealIdentity  string
+	inlineCapability       *inlineCapabilitySelection
+}
+
+func (engine *Engine) prepareInlineCapabilitySelection(ctx context.Context, module api.Module, runRequest runtimeconfig.RunRequest, selection *derivedSelection) error {
+	inline := selection.inlineCapability
+	payload, err := callGuestResponse(ctx, module, "runtime_transform_source_pass", inline.request, engine.config.MaxResponseBytes)
+	if err != nil {
+		inline.passErr = err
+		return nil
+	}
+	patch, err := sourcepatch.Decode(payload)
+	if err != nil || patch.Validate(runRequest.Code, inline.registration) != nil || sourcepatch.ValidateCapabilityProjectionBinding(patch, inline.projections) != nil {
+		inline.passErr = sourcepatch.ErrInvalidPatch
+		return nil
+	}
+	inline.patch = patch
+	if !patch.Applied() {
+		return nil
+	}
+	patchRaw, err := json.Marshal(patch)
+	if err != nil {
+		inline.passErr = err
+		return nil
+	}
+	selection.export = "runtime_select_source_pass_execution"
+	selection.payload = append(patchRaw, '\n')
+	selection.plmSourceSealIdentity = patch.OriginalSourceSHA256
+	inline.applied = true
+	return callStatusWithBytes(ctx, module, selection.export, selection.payload)
 }
 
 func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepares <-chan string, streaming bool, selection *derivedSelection) (payload []byte, runErr error) {
@@ -1413,7 +1453,11 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 	if err := callSourceValidation(runContext, module, validationExport, request); err != nil {
 		return nil, withGuestDiagnostic(err, stderr.String())
 	}
-	if selection != nil {
+	if selection != nil && selection.inlineCapability != nil {
+		if err := engine.prepareInlineCapabilitySelection(runContext, module, runRequest, selection); err != nil {
+			return nil, withGuestDiagnostic(err, stderr.String())
+		}
+	} else if selection != nil {
 		if err := callStatusWithBytes(runContext, module, selection.export, selection.payload); err != nil {
 			return nil, withGuestDiagnostic(err, stderr.String())
 		}

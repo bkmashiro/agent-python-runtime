@@ -1,6 +1,6 @@
 # Logical-time PLM V1 contract
 
-Status: **Frozen. Gate 4 Host temporal/authority validation is implemented; compiler/Guest production execution is not yet connected.**
+Status: **Frozen and implemented through Gate 5. Gate 6 economics measurement is in progress.**
 
 Architecture source: [Logical-Time-Preserving Split-Phase Execution](logical-time-preserving-split-phase-execution.md)
 
@@ -57,9 +57,8 @@ canonical handler; it does not create a second logical operation.
 `WALLCLOCK_OBSERVING` rejects preparation. Validation cost and provider-visible validation
 events are recorded separately from candidate work and Broker receipts.
 
-The predecessor `IssueOrReuse` / `Materialize` entry points remain temporarily for the existing
-compiler path. They cannot consume a PLM candidate and are removed only after Gate 5 exact-Guest
-parity, so production behavior is not silently relabelled as PLM.
+The predecessor `IssueOrReuse` / `Materialize` entry points and their compiler/Guest/Host bridge
+were removed after exact-Guest parity. Sealed-source lowering now runs inside the one final Guest.
 
 ## Time and state
 

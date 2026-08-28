@@ -290,6 +290,15 @@ func equalCapabilityProjections(left, right []CapabilityProjection) bool {
 	return leftErr == nil && rightErr == nil && bytes.Equal(leftRaw, rightRaw)
 }
 
+// ValidateCapabilityProjectionBinding verifies that an exact-Guest patch kept
+// the Host projection manifest byte-for-byte equivalent.
+func ValidateCapabilityProjectionBinding(patch Patch, expected []CapabilityProjection) error {
+	if !validCapabilityProjections(expected) || !equalCapabilityProjections(patch.CapabilityProjections, expected) {
+		return ErrInvalidPatch
+	}
+	return nil
+}
+
 func (patch Patch) Applied() bool {
 	return patch.Status == "applied"
 }

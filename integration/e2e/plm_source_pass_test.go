@@ -2,7 +2,10 @@ package e2e_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -13,7 +16,7 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
+
 	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
 )
 
@@ -33,17 +36,8 @@ func TestRealGuestPLMSourceTimeCandidateReusesAndLinearizesAtOriginalCall(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	session, closeAnalysis := splitPhaseAnalysisSession(t, artifact, 1)
-	defer closeAnalysis()
-	plmPass, err := sourcepatch.NewPLMCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
-	if err != nil {
-		t.Fatal(err)
-	}
-	patch, err := plmPass.Transform(context.Background(), session, source, passplugin.PLMCapabilityProjections(plan))
-	if err != nil || !patch.Applied() || strings.Contains(patch.DerivedSource, "_pysolate_call_") ||
-		!strings.Contains(patch.DerivedSource, "_pysolate_plm_prepare") || !strings.Contains(patch.DerivedSource, "_pysolate_plm_linearize") {
-		t.Fatalf("patch=%+v err=%v", patch, err)
-	}
+	sourceDigest := sha256.Sum256([]byte(source))
+	sourceSealIdentity := fmt.Sprintf("sha256:%x", sourceDigest[:])
 	broker, err := capability.NewBroker(capability.Config{RunIdentity: "plm-source-time", Plan: plan})
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +47,7 @@ func TestRealGuestPLMSourceTimeCandidateReusesAndLinearizesAtOriginalCall(t *tes
 		t.Fatal(err)
 	}
 	preissue := []byte(`{"call_id":"plm-s1c8-e1c29-1","capability":"sources.read","arguments":{"path":"alpha"}}`)
-	if err := table.PrepareRuntimePLM(context.Background(), "slot-s1c8-e1c29-1", preissue, patch.OriginalSourceSHA256); err != nil {
+	if err := table.PrepareRuntimePLM(context.Background(), "slot-s1c8-e1c29-1", preissue, sourceSealIdentity); err != nil {
 		t.Fatal(err)
 	}
 
@@ -72,13 +66,17 @@ func TestRealGuestPLMSourceTimeCandidateReusesAndLinearizesAtOriginalCall(t *tes
 	}
 	defer runner.Close(context.Background())
 	engine := trustedSemanticRunner(t, runner)
-	payload, err := engine.RunHostScheduledSourcePatchDerived(context.Background(), request, patch, plmPass.Registration())
-	if err != nil {
-		t.Fatal(err)
+	execution, err := plugins.ExecuteCapabilityHostScheduled(
+		context.Background(), sourcepatch.PLMCapabilityCallsName, engine, request,
+		plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan),
+	)
+	if err != nil || !execution.Applied || strings.Contains(execution.Patch.DerivedSource, "_pysolate_call_") ||
+		!strings.Contains(execution.Patch.DerivedSource, "_pysolate_plm_prepare") || !strings.Contains(execution.Patch.DerivedSource, "_pysolate_plm_linearize") {
+		t.Fatalf("execution=%+v err=%v", execution, err)
 	}
-	result, err := decodeSuccessfulGuestResult(payload)
+	result, err := decodeSuccessfulGuestResult(execution.Payload)
 	if err != nil || string(result) != `["alpha-body",12]` {
-		t.Fatalf("result=%s payload=%s err=%v", result, payload, err)
+		t.Fatalf("result=%s payload=%s err=%v", result, execution.Payload, err)
 	}
 	receipts := broker.SnapshotReceipts()
 	evidence := engine.SplitPhaseEvidence()
@@ -129,10 +127,8 @@ func TestRealGuestPLMRuntimeDerivedCallsPreserveCodeAndReceipts(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer runner.Close(context.Background())
-	session, closeAnalysis := splitPhaseAnalysisSession(t, artifact, 1)
-	defer closeAnalysis()
 	execution, err := plugins.ExecuteCapabilityHostScheduled(
-		context.Background(), sourcepatch.PLMCapabilityCallsName, session, trustedSemanticRunner(t, runner), request,
+		context.Background(), sourcepatch.PLMCapabilityCallsName, trustedSemanticRunner(t, runner), request,
 		plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan),
 	)
 	if err != nil || !execution.Applied || strings.Contains(execution.Patch.DerivedSource, "_pysolate_call_") {
@@ -231,10 +227,8 @@ func runPLMExact(t *testing.T, artifact []byte, plan *capability.Plan, _ *e2ePLM
 		t.Fatal(err)
 	}
 	defer runner.Close(context.Background())
-	session, closeAnalysis := splitPhaseAnalysisSession(t, artifact, 1)
-	defer closeAnalysis()
 	execution, err := plugins.ExecuteCapabilityHostScheduled(
-		context.Background(), sourcepatch.PLMCapabilityCallsName, session, trustedSemanticRunner(t, runner), request,
+		context.Background(), sourcepatch.PLMCapabilityCallsName, trustedSemanticRunner(t, runner), request,
 		plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan),
 	)
 	if err != nil {
@@ -286,6 +280,89 @@ func plmTwoE2EPlan(t *testing.T, getAdapter, priceAdapter *e2ePLMAdapter) *capab
 		t.Fatal(err)
 	}
 	return plan
+}
+
+func TestRealGuestPLMEarlierExceptionDiscardsUnclaimedCandidate(t *testing.T) {
+	artifact, err := osReadGuestArtifact(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var physical atomic.Uint32
+	adapter := &e2ePLMAdapter{handler: capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		physical.Add(1)
+		return json.RawMessage(`{"body":"unused"}`), nil
+	})}
+	execution, broker, evidence := runPLMRaw(t, artifact, plmE2EPlan(t, 1, adapter), "plm-earlier-exception",
+		"boom = 1 // 0\nvalue = sources.read(\"alpha\")\nresult = value\n")
+	var payload map[string]any
+	if json.Unmarshal(execution.Payload, &payload) != nil || payload["status"] != "error" || !execution.Applied {
+		t.Fatalf("execution=%+v payload=%s", execution, execution.Payload)
+	}
+	if physical.Load() != 0 || broker.CallCount() != 0 || evidence.Submitted != 0 || evidence.CandidatesAdopted != 0 {
+		t.Fatalf("physical=%d calls=%d evidence=%+v", physical.Load(), broker.CallCount(), evidence)
+	}
+}
+
+func TestRealGuestPLMPrepareFailureRetriesOnlyAtLinearization(t *testing.T) {
+	artifact, err := osReadGuestArtifact(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var physical atomic.Uint32
+	adapter := &e2ePLMAdapter{handler: capability.HandlerFunc(func(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
+		physical.Add(1)
+		var arguments struct {
+			Path string `json:"path"`
+		}
+		if json.Unmarshal(raw, &arguments) != nil {
+			return nil, errors.New("invalid fixture arguments")
+		}
+		if arguments.Path == "alpha" {
+			return nil, errors.New("fixture provider failure")
+		}
+		return json.RawMessage(`{"body":"unused"}`), nil
+	})}
+	execution, broker, evidence := runPLMRaw(t, artifact, plmE2EPlan(t, 2, adapter), "plm-prepare-failure",
+		"first = sources.read(\"alpha\")\nsecond = sources.read(\"beta\")\nresult = [first, second]\n")
+	var payload map[string]any
+	if json.Unmarshal(execution.Payload, &payload) != nil || payload["status"] != "error" || !execution.Applied {
+		t.Fatalf("execution=%+v payload=%s", execution, execution.Payload)
+	}
+	if physical.Load() != 3 || broker.CallCount() != 1 || len(broker.SnapshotReceipts()) != 1 || evidence.CanonicalStarts != 1 || evidence.Discarded != 2 {
+		t.Fatalf("physical=%d calls=%d receipts=%+v evidence=%+v", physical.Load(), broker.CallCount(), broker.SnapshotReceipts(), evidence)
+	}
+}
+
+func runPLMRaw(t *testing.T, artifact []byte, plan *capability.Plan, runID, source string) (passplugin.Execution, *capability.Broker, capability.SplitPhaseSnapshot) {
+	t.Helper()
+	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: runID, Code: source, Inputs: json.RawMessage(`{}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plugins := unifiedPassCatalog(t)
+	plugins, err = plugins.Enable(sourcepatch.PLMCapabilityCallsName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var broker *capability.Broker
+	config := runtimeconfig.DefaultRunConfig()
+	config.Timeout = 90 * time.Second
+	runner, err := (wazeroengine.Factory{Passes: plugins, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+		created, createErr := capability.NewBroker(capability.Config{RunIdentity: runID, Plan: plan})
+		broker = created
+		return created, createErr
+	}}).New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	engine := trustedSemanticRunner(t, runner)
+	execution, err := plugins.ExecuteCapabilityHostScheduled(context.Background(), sourcepatch.PLMCapabilityCallsName, engine, request,
+		plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return execution, broker, engine.SplitPhaseEvidence()
 }
 
 type e2ePLMAdapter struct {
@@ -348,33 +425,6 @@ func plmE2EPlan(t *testing.T, maxCalls uint32, adapter *e2ePLMAdapter) *capabili
 		t.Fatal(err)
 	}
 	return plan
-}
-
-func splitPhaseAnalysisSession(t *testing.T, artifact []byte, maxRequests uint32) (sourcepatch.Transformer, func()) {
-	t.Helper()
-	config := runtimeconfig.DefaultRunConfig()
-	config.Timeout = 90 * time.Second
-	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
-	runner, err := (wazeroengine.Factory{}).New(context.Background(), artifact, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	engine := trustedSemanticRunner(t, runner)
-	session, err := engine.NewSemanticAnalysisSession(context.Background(), wazeroengine.SemanticAnalysisSessionLimits{
-		MaxRequests: maxRequests, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
-	})
-	if err != nil {
-		_ = runner.Close(context.Background())
-		t.Fatal(err)
-	}
-	return session, func() {
-		if closeErr := session.Close(context.Background()); closeErr != nil {
-			t.Fatalf("close analysis session: %v", closeErr)
-		}
-		if closeErr := runner.Close(context.Background()); closeErr != nil {
-			t.Fatalf("close analysis runner: %v", closeErr)
-		}
-	}
 }
 
 func unifiedPassCatalog(t *testing.T) *passplugin.Registry {

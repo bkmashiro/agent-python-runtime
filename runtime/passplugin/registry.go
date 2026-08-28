@@ -63,9 +63,16 @@ type SourcePatchRunner interface {
 	RunSourcePatchDerived(context.Context, []byte, sourcepatch.Patch, passregistration.Registration) ([]byte, error)
 }
 
-type HostScheduledSourcePatchRunner interface {
+type CapabilitySourcePatchRun struct {
+	Payload   []byte
+	Patch     sourcepatch.Patch
+	Applied   bool
+	PassError error
+}
+
+type CapabilitySourcePatchRunner interface {
 	Run(context.Context, []byte, string) ([]byte, error)
-	RunHostScheduledSourcePatchDerived(context.Context, []byte, sourcepatch.Patch, passregistration.Registration) ([]byte, error)
+	RunCapabilitySourcePatchInline(context.Context, []byte, passregistration.Registration, string, []sourcepatch.CapabilityProjection) (CapabilitySourcePatchRun, error)
 }
 
 type ValueSlotSourcePatchRunner interface {
@@ -539,57 +546,19 @@ func (registry *Registry) Execute(ctx context.Context, name passregistration.Nam
 	return Execution{Payload: payload, Patch: patch, Applied: runErr == nil}, runErr
 }
 
-// ExecuteHostScheduled runs one explicitly Host-scheduled source patch. The
-// separate entry point prevents an effect-owning pass from entering the
-// authority-free RunSourcePatchDerived seam.
-func (registry *Registry) ExecuteHostScheduled(ctx context.Context, name passregistration.Name, transformer sourcepatch.Transformer, runner HostScheduledSourcePatchRunner, request []byte, trustedPrepare string) (Execution, error) {
-	if runner == nil {
-		return Execution{}, ErrInvalidPlugin
-	}
-	runRequest, err := runtimeconfig.DecodeRunRequest(request)
-	if err != nil {
-		return Execution{}, err
-	}
-	plugin, exists := registry.Lookup(name)
-	if !exists {
-		return Execution{}, ErrInvalidPlugin
-	}
-	patchPlugin, sourcePatch := plugin.(SourcePatchPlugin)
-	scheduled, hostScheduled := plugin.(HostScheduledSourcePatchPlugin)
-	if !sourcePatch || !hostScheduled || !scheduled.HostScheduled() || plugin.Registration().Stage() != passregistration.StageWholeProgramPatch {
-		return Execution{}, ErrUnsupportedStage
-	}
-	if !registry.enabled[name] {
-		payload, runErr := runner.Run(ctx, request, trustedPrepare)
-		return Execution{Payload: payload}, runErr
-	}
-	patch, passErr := patchPlugin.Transform(ctx, transformer, runRequest.Code)
-	if passErr != nil || !patch.Applied() {
-		payload, runErr := runner.Run(ctx, request, trustedPrepare)
-		return Execution{Payload: payload, Patch: patch, PassError: passErr}, runErr
-	}
-	payload, runErr := runner.RunHostScheduledSourcePatchDerived(ctx, request, patch, plugin.Registration())
-	return Execution{Payload: payload, Patch: patch, Applied: runErr == nil}, runErr
-}
-
-// ExecuteCapabilityHostScheduled runs the plan-bound V1 capability-call pass.
-// The projection manifest is Host-derived from the sealed capability Plan and
-// is bound into the patch before the exact Guest validates and executes it.
+// ExecuteCapabilityHostScheduled runs the plan-bound PLM pass inside the same
+// exact Guest that executes the request. The Host supplies only the sealed
+// projection manifest and validates the returned patch before installation.
 func (registry *Registry) ExecuteCapabilityHostScheduled(
 	ctx context.Context,
 	name passregistration.Name,
-	transformer sourcepatch.Transformer,
-	runner HostScheduledSourcePatchRunner,
+	runner CapabilitySourcePatchRunner,
 	request []byte,
 	trustedPrepare string,
 	projections []sourcepatch.CapabilityProjection,
 ) (Execution, error) {
 	if runner == nil || len(projections) == 0 {
 		return Execution{}, ErrInvalidPlugin
-	}
-	runRequest, err := runtimeconfig.DecodeRunRequest(request)
-	if err != nil {
-		return Execution{}, err
 	}
 	plugin, exists := registry.Lookup(name)
 	if !exists {
@@ -603,13 +572,8 @@ func (registry *Registry) ExecuteCapabilityHostScheduled(
 		payload, runErr := runner.Run(ctx, request, trustedPrepare)
 		return Execution{Payload: payload}, runErr
 	}
-	patch, passErr := capabilityPlugin.Transform(ctx, transformer, runRequest.Code, projections)
-	if passErr != nil || !patch.Applied() {
-		payload, runErr := runner.Run(ctx, request, trustedPrepare)
-		return Execution{Payload: payload, Patch: patch, PassError: passErr}, runErr
-	}
-	payload, runErr := runner.RunHostScheduledSourcePatchDerived(ctx, request, patch, plugin.Registration())
-	return Execution{Payload: payload, Patch: patch, Applied: runErr == nil}, runErr
+	result, runErr := runner.RunCapabilitySourcePatchInline(ctx, request, plugin.Registration(), trustedPrepare, projections)
+	return Execution{Payload: result.Payload, Patch: result.Patch, Applied: result.Applied, PassError: result.PassError}, runErr
 }
 
 // ExecuteValueSlot selects and validates one fixed value-slot patch before it

@@ -427,10 +427,9 @@ Tasks:
 - [x] Keep result/exception materialization at the same original point.
 - [x] Preserve permission denial, logical order and receipt identity.
 - [x] Preserve physical failure hiding until linearization and no logical receipt for unlinearized candidates.
-- [ ] Delete or version-replace predecessor APIs after the new path is integrated; do not retain two product tables.
+- [x] Delete or version-replace predecessor APIs after the new path is integrated; do not retain two product tables.
 
-The final retirement item closes in Gate 5 after compiler/Guest parity. Until then the old names
-remain isolated from PLM candidates and are not described as the new product contract.
+The predecessor names and compiler/Guest/Host bridge were removed after Gate 5 exact-Guest parity; PLM uses one candidate/job table and one inline lowering path.
 
 **Gate G3:** One real immutable operation proves prepare-before-source-call, original-point linearization, one physical start on valid adoption, canonical restart on invalid candidate, ordinary Python value/exception and exact Broker evidence.
 
@@ -470,16 +469,16 @@ Primary files:
 
 Tasks:
 
-- [ ] Version `split_phase_capability_calls` into the PLM pass; do not silently change v1 evidence identity.
-- [ ] Emit prepare candidate handles and original-point linearize/materialize calls for direct typed assignments.
-- [ ] Keep source-time candidate identity compatible with final sealed source site and dynamic occurrence.
-- [ ] Keep runtime-derived prepare after actual arguments become concrete.
-- [ ] Keep branch-local linearization after CPython enters the branch.
-- [ ] Keep loop occurrences exact and bounded.
-- [ ] Preserve argument evaluation, exception and source-location order.
-- [ ] Reject the whole transform on helper shadowing, reflection, unsupported wrappers, ambiguous source or unsafe statement movement.
-- [ ] Prove unsupported source executes byte-identical original code synchronously.
-- [ ] Delete obsolete predecessor bridge names after exact Guest parity.
+- [x] Version `split_phase_capability_calls` into the PLM pass; do not silently change v1 evidence identity.
+- [x] Emit prepare candidate handles and original-point linearize/materialize calls for direct typed assignments.
+- [x] Keep source-time candidate identity compatible with final sealed source site and dynamic occurrence.
+- [x] Keep runtime-derived prepare after actual arguments become concrete.
+- [x] Keep branch-local linearization after CPython enters the branch.
+- [x] Keep loop occurrences exact and bounded.
+- [x] Preserve argument evaluation, exception and source-location order.
+- [x] Reject the whole transform on helper shadowing, reflection, unsupported wrappers, ambiguous source or unsafe statement movement.
+- [x] Prove unsupported source executes byte-identical original code synchronously.
+- [x] Delete obsolete predecessor bridge names after exact Guest parity.
 
 **Gate G5:** Exact Guest tests pass source-time candidate adoption, runtime-derived `A -> code -> B`, branches, loops, mismatches, invalidation, earlier exception, failure/discard and pass-off fallback without Python Futures or Host DAG state.
 
@@ -496,9 +495,9 @@ Tasks:
 
 - [ ] Freeze matched baseline/predecessor/PLM timing protocol before implementation measurements.
 - [ ] Instrument instantiate, initialize, runtime init, analysis, lowering, compile/load, prepare, validation, provider, linearization, materialization and final execution spans.
-- [ ] Implement the smaller viable alternative first.
-- [ ] Preserve exact target-Guest AST authority and all-or-nothing pre-execution selection.
-- [ ] Prove no second Agent-source execution, retained Agent interpreter or cross-Run mutable analyzer.
+- [x] Implement the smaller viable alternative first.
+- [x] Preserve exact target-Guest AST authority and all-or-nothing pre-execution selection.
+- [x] Prove no second Agent-source execution, retained Agent interpreter or cross-Run mutable analyzer.
 - [ ] Measure cold end-to-end and equivalently pre-provisioned profiles separately.
 - [ ] If the first alternative cannot pass the mechanism or cost gate, try the second once; do not create a third framework.
 - [ ] Record memory, discarded capacity and fallback costs.
@@ -601,8 +600,8 @@ Tasks:
 
 ## Current execution pointer
 
-**Current:** Gates 0 through 4 are complete except the Gate 3 predecessor-bridge retirement, which remains conditioned on Gate 5 exact-Guest parity. PLM contracts are Plan-bound to exact Host validators; resource identity is derived from canonical arguments; immutable, snapshot, versioned, leased, current, wallclock, stable-failure, authority and provider-quota rows pass.
+**Current:** Gates 0 through 5 are complete. The PLM pass and Guest ABI are versioned independently, the predecessor bridge is removed, exact Guest control-flow/failure/fallback cases pass and sealed-source lowering now runs inside the one final Guest before its one Agent-source execution.
 
-**Next:** Execute Gate 5: version the sealed-source pass and Guest ABI to emit PLM prepare plus original-point linearize/materialize, preserve fallback/control-flow semantics, then retire the predecessor bridge after exact parity.
+**Next:** Complete Gate 6: freeze the matched timing protocol, add stage spans, measure cold and equivalently pre-provisioned profiles and record the economics decision without changing the two-alternative limit.
 
 **Blocked:** No blocker.

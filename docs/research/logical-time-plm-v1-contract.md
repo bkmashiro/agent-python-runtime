@@ -12,11 +12,11 @@ Evidence provenance:
   target `5bc36725f13034fa5418d6396d1c503820b513d4` with artifact
   `sha256:e9e2416f0cd34b397222267ec18637b6973597a2ec9ec4bb9e9bb526eca40585`;
 - [production-refactor economics](../evidence/plm-v1-production-economics.json) uses the same
-  protocol at target `57b8f3a0894cdd8a29b318096e09f32e9c37731b` with artifact
-  `sha256:fc0f034ba35ca11d87e18aeef2a93ee1fc33dd228a9c72c8708c2745b70a89a8`;
+  protocol at target `5d13d5c5ce8e6bfdb3bf2dde77ad4003b948fe4a` with artifact
+  `sha256:02825c67cd1cd3bd8cfe333965e248c7b6ef41684bca73f42be25f5274b1bc9b`;
 - [body-safe temporal/fault matrix](../evidence/plm-v1-fault-matrix.json) is the final verification
-  at target `57b8f3a0894cdd8a29b318096e09f32e9c37731b` with artifact
-  `sha256:fc0f034ba35ca11d87e18aeef2a93ee1fc33dd228a9c72c8708c2745b70a89a8`;
+  at target `5d13d5c5ce8e6bfdb3bf2dde77ad4003b948fe4a` with artifact
+  `sha256:02825c67cd1cd3bd8cfe333965e248c7b6ef41684bca73f42be25f5274b1bc9b`;
 - [bounded conditional small core](plm-v1-small-core.md)
 
 Executable schema and oracle:

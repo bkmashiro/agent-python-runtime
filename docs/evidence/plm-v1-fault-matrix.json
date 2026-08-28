@@ -1,6 +1,6 @@
 {
-  "artifact_sha256": "sha256:fc0f034ba35ca11d87e18aeef2a93ee1fc33dd228a9c72c8708c2745b70a89a8",
-  "artifact_source_commit": "57b8f3a0894cdd8a29b318096e09f32e9c37731b",
+  "artifact_sha256": "sha256:02825c67cd1cd3bd8cfe333965e248c7b6ef41684bca73f42be25f5274b1bc9b",
+  "artifact_source_commit": "5d13d5c5ce8e6bfdb3bf2dde77ad4003b948fe4a",
   "economics_recalculated": [
     {
       "baseline_median_nanos": 4018421375,
@@ -230,7 +230,7 @@
     "first": 0,
     "last": 15
   },
-  "target_commit": "57b8f3a0894cdd8a29b318096e09f32e9c37731b",
+  "target_commit": "5d13d5c5ce8e6bfdb3bf2dde77ad4003b948fe4a",
   "visible_projection": [
     "return_or_exception",
     "logical_call_count",

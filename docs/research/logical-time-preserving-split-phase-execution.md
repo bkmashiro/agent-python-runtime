@@ -55,7 +55,7 @@ It establishes the following bounded properties:
 - setup failure, cancellation, late completion and typed uncertain provider outcomes have bounded Run-owned dispositions;
 - unsupported source and a disabled pass execute unchanged.
 
-The predecessor `issue_or_reuse`/`collect` bridge is Removed. Its immutable-read evidence and `+151.40%` cold result remain historical facts. PLM's initial Gate 6 result was `+32.01%` cold and `+48.27%` with Engines precompiled. The production refactor reduced those deltas to `+4.57%` and `+6.42%` under the same protocol. All remain fixture-scoped, non-positive results rather than broad speedup claims.
+The predecessor `issue_or_reuse`/`collect` bridge is Removed. Its immutable-read evidence and `+151.40%` cold result remain historical facts. PLM's initial Gate 6 result was `+32.01%` cold and `+48.27%` with Engines precompiled. The production refactor reduced those deltas to `+2.15%` and `+3.12%` under the same protocol. All remain fixture-scoped, non-positive results rather than broad speedup claims.
 
 ## Two time domains
 
@@ -321,8 +321,8 @@ engines precompiled    2.690 s -> 3.989 s   +48.27%
 After removing duplicate transform replay, unverifiable AST digests, dual compilation, derived-source transport and a quadratic source scan, the same protocol measured:
 
 ```text
-cold end-to-end        4.125 s -> 4.314 s    +4.57%
-engines precompiled    2.736 s -> 2.912 s    +6.42%
+cold end-to-end        4.054 s -> 4.141 s    +2.15%
+engines precompiled    2.716 s -> 2.801 s    +3.12%
 ```
 
 The remaining cost is bounded final-Guest compiler work, not a hidden second execution or temporal validation. Correctness and economics remain separate; PLM stays default-off because both controlled profiles remain negative.

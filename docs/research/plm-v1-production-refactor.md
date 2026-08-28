@@ -8,16 +8,16 @@ The matched five-run fixture now measures:
 
 | profile | sequential median | PLM median | delta |
 |---|---:|---:|---:|
-| cold end to end | 4.125 s | 4.314 s | +4.57% |
-| Engine precompiled | 2.736 s | 2.912 s | +6.42% |
+| cold end to end | 4.054 s | 4.141 s | +2.15% |
+| Engine precompiled | 2.716 s | 2.801 s | +3.12% |
 
 Exact evidence: [`plm-v1-production-economics.json`](../evidence/plm-v1-production-economics.json).
-It is attributed to target `57b8f3a0894cdd8a29b318096e09f32e9c37731b` and artifact
-`sha256:fc0f034ba35ca11d87e18aeef2a93ee1fc33dd228a9c72c8708c2745b70a89a8`.
+It is attributed to target `5d13d5c5ce8e6bfdb3bf2dde77ad4003b948fe4a` and artifact
+`sha256:02825c67cd1cd3bd8cfe333965e248c7b6ef41684bca73f42be25f5274b1bc9b`.
 
 The original Gate 6 fixture measured `+32.01%` cold and `+48.27%` with Engines
-precompiled. Absolute PLM overhead fell from about 1.29 seconds to 0.19 seconds cold
-and 0.18 seconds precompiled. The old measurement remains an attributed historical
+precompiled. Absolute PLM overhead fell from about 1.29 seconds to about 0.09
+seconds in both profiles. The old measurement remains an attributed historical
 record; it is not rewritten as if it came from the production-refactored target.
 
 ## What was removed
@@ -30,7 +30,11 @@ The final Guest no longer:
 - computes source-patch AST digests that the Host cannot independently verify;
 - serializes a derived source body for the PLM-only same-Guest selection;
 - copies an expanding visible-name set for every statement;
-- rescans the whole tree to repair locations for two inserted helper nodes.
+- rescans the whole tree to repair locations for two inserted helper nodes;
+- loads unrelated generic source passes on the PLM hot path;
+- walks the full AST a second time for checks that narrow lexical admission can reject;
+- copies admitted source back into the same Guest or reparses the same patch;
+- exposes a second generic `Transform` owner for the Host-scheduled PLM pass.
 
 The active path is:
 
@@ -57,6 +61,8 @@ The refactor retains checks that enforce a real authority or semantic boundary:
   of the same reserved names is rejected;
 - projection receivers and methods cannot be rebound, imported under a conflicting name or
   changed through direct dynamic mutation;
+- lexical admission uses Python-compatible NFKC normalization and AST byte offsets, so Unicode
+  identifier aliases and non-newline separators cannot bypass fallback;
 - code, frame, traceback and tracing observation makes PLM not applicable because transformed
   execution would otherwise be observable;
 - runtime initialization clears any pending same-Guest selected tree, preventing cross-Run reuse;
@@ -65,8 +71,10 @@ The refactor retains checks that enforce a real authority or semantic boundary:
   original logical call.
 
 These checks are not responsible for the remaining latency. Original-point temporal
-validation remains microsecond-scale. The remaining fixture delta is compiler-pass work,
-while the available prepare-to-linearize window is only about 0.3 ms.
+validation remains microsecond-scale. The final lifecycle records about 87–88 ms of PLM
+lowering and a matched end-to-end delta of 85–87 ms. The roughly 338–344 ms selected-tree
+validation and compilation stage replaces baseline compilation; it is not all incremental
+PLM cost. The available prepare-to-linearize window in this fixture is only about 0.3 ms.
 
 ## Decision
 

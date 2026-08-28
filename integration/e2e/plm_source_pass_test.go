@@ -250,6 +250,23 @@ func TestRealGuestPLMPreservesBranchLoopInvalidationAndFallback(t *testing.T) {
 			t.Fatalf("result=%s physical=%d calls=%d evidence=%+v patch=%+v", result, physical.Load(), broker.CallCount(), evidence, patch)
 		}
 	})
+	t.Run("semicolon fallback", func(t *testing.T) {
+		var physical atomic.Uint32
+		adapter := &e2ePLMAdapter{handler: capability.HandlerFunc(func(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
+			physical.Add(1)
+			var arguments struct {
+				Path string `json:"path"`
+			}
+			_ = json.Unmarshal(raw, &arguments)
+			return json.Marshal(map[string]string{"body": arguments.Path + "-body"})
+		})}
+		plan := plmE2EPlan(t, 1, adapter)
+		source := "value = sources.read(\"alpha\"); marker = \"after\"\nresult = [value, marker]\n"
+		result, broker, evidence, patch := runPLMExact(t, artifact, plan, adapter, "plm-semicolon-fallback", source, json.RawMessage(`{}`))
+		if string(result) != `["alpha-body","after"]` || physical.Load() != 1 || broker.CallCount() != 1 || patch.Applied() || evidence.CandidatesPrepared != 0 {
+			t.Fatalf("result=%s physical=%d calls=%d evidence=%+v patch=%+v", result, physical.Load(), broker.CallCount(), evidence, patch)
+		}
+	})
 }
 
 func runPLMExact(t *testing.T, artifact []byte, plan *capability.Plan, _ *e2ePLMAdapter, runID, source string, inputs json.RawMessage) (json.RawMessage, *capability.Broker, capability.SplitPhaseSnapshot, sourcepatch.Patch) {

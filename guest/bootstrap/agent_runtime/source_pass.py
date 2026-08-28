@@ -285,9 +285,19 @@ def _projected_call(node, projection_index):
     return projection_index.get((node.func.value.id, node.func.attr))
 
 
+def _isolated_physical_line(node, source):
+    lines = source.splitlines()
+    if node.lineno != node.end_lineno or node.lineno < 1 or node.lineno > len(lines):
+        return False
+    line = lines[node.lineno - 1]
+    prefix = line[:node.col_offset].strip()
+    suffix = line[node.end_col_offset:].strip()
+    return not prefix and (not suffix or suffix.startswith("#"))
+
+
 def _split_phase_capability_assignment(statement, source, projection_index, available_names):
     assignment = _simple_assignment(statement)
-    if assignment is None or statement.lineno != statement.end_lineno:
+    if assignment is None or not _isolated_physical_line(statement, source):
         return None
     name, call = assignment
     projection = _projected_call(call, projection_index)

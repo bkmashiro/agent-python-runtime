@@ -117,6 +117,17 @@ class SourcePassTests(unittest.TestCase):
         self.assertEqual(source.count("\n"), patch["derived_source"].count("\n"))
         validate_source_pass_execution_request(source, raw)
 
+    def test_plm_capability_calls_rejects_semicolon_siblings(self):
+        for source in (
+            'values.append("before"); value = tools.get("alpha")\nresult = value\n',
+            'value = tools.get("alpha"); values.append("after")\nresult = value\n',
+        ):
+            patch = json.loads(emit_source_pass_patch_request_json(
+                plm_capability_request(source, CAPABILITY_PROJECTIONS)
+            ))
+            self.assertEqual("not_applicable", patch["status"])
+            self.assertEqual("", patch["derived_source"])
+
     def test_plm_capability_calls_stage_independent_literals_before_linearize(self):
         source = (
             'a = tools.get("alpha")\n'

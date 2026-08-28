@@ -205,12 +205,13 @@ func TestPreparedFamilyEconomicsWorker(t *testing.T) {
 	}, 0, fanout)
 	sample := preparedFamilyEconomicsSample{Mode: mode, Iteration: iteration, Fanout: fanout, FamilyPrepareNanos: familyPrepare, BaselineResources: baseline}
 	for index := 0; index < fanout; index++ {
+		runID := preparedFamilyEconomicsRunID(mode, iteration, index)
 		started = time.Now()
 		runner, err := family.NewRunner(context.Background(), PreparedRunnerConfig{
 			RunConfig: config,
 			InvocationRef: runtimeconfig.InvocationRef{
 				AgentRunID: "prepared-family-economics", InvocationID: fmt.Sprintf("inv-%s-%d-%d", mode, iteration, index),
-				InvocationAttempt: 1, ExecutionID: fmt.Sprintf("exec-%s-%d-%d", mode, iteration, index),
+				InvocationAttempt: 1, ExecutionID: runID,
 			},
 		})
 		sample.RunnerCreateNanos = append(sample.RunnerCreateNanos, uint64(time.Since(started)))
@@ -224,7 +225,7 @@ func TestPreparedFamilyEconomicsWorker(t *testing.T) {
 	sample.DirtyCreateDeltaBytes = int64(sample.AfterCreateResources.PrivateDirtyBytes) - int64(baseline.PrivateDirtyBytes)
 
 	for index, runner := range runners {
-		runID := fmt.Sprintf("run-%s-%d-%d", mode, iteration, index)
+		runID := preparedFamilyEconomicsRunID(mode, iteration, index)
 		request := runtimeconfig.RunRequest{
 			RunID:         runID,
 			Code:          "import numpy\ndataset.flat[0] = dataset.flat[0] + 1\nresult = int(dataset.sum())\n",
@@ -294,6 +295,12 @@ func TestPreparedFamilyEconomicsMedian(t *testing.T) {
 	}
 }
 
+func TestPreparedFamilyEconomicsRunID(t *testing.T) {
+	if got := preparedFamilyEconomicsRunID("private_cow", 2, 3); got != "run-private_cow-2-3" {
+		t.Fatalf("run id=%q", got)
+	}
+}
+
 func preparedFamilyEconomicsInput(t *testing.T, profile *runtimeconfig.ExecutionProfile) PreparedNumpyInput {
 	t.Helper()
 	body := make([]byte, 8<<20)
@@ -338,6 +345,10 @@ func readPreparedFamilyProcessMemory(t *testing.T) preparedFamilyResourceSample 
 		t.Fatalf("smaps_rollup sample=%+v err=%v", sample, err)
 	}
 	return sample
+}
+
+func preparedFamilyEconomicsRunID(mode string, iteration, index int) string {
+	return fmt.Sprintf("run-%s-%d-%d", mode, iteration, index)
 }
 
 func preparedFamilyEconomicsMedian(samples []preparedFamilyEconomicsSample, selectValue func(preparedFamilyEconomicsSample) uint64) uint64 {

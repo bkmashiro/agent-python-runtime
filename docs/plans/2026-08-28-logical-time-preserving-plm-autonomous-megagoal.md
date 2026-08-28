@@ -493,8 +493,8 @@ Evaluate only two bounded alternatives before choosing:
 
 Tasks:
 
-- [ ] Freeze matched baseline/predecessor/PLM timing protocol before implementation measurements.
-- [ ] Instrument instantiate, initialize, runtime init, analysis, lowering, compile/load, prepare, validation, provider, linearization, materialization and final execution spans.
+- [x] Freeze matched baseline/predecessor/PLM timing protocol before implementation measurements.
+- [x] Instrument instantiate, initialize, runtime init, analysis, lowering, compile/load, prepare, validation, provider, linearization, materialization and final execution spans.
 - [x] Implement the smaller viable alternative first.
 - [x] Preserve exact target-Guest AST authority and all-or-nothing pre-execution selection.
 - [x] Prove no second Agent-source execution, retained Agent interpreter or cross-Run mutable analyzer.

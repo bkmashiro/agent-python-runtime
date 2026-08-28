@@ -129,6 +129,8 @@ func runPLMEconomicsSample(t *testing.T, artifact []byte, source, mode, profile 
 	var broker *capability.Broker
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 90 * time.Second
+	var beforeSetup goruntime.MemStats
+	goruntime.ReadMemStats(&beforeSetup)
 	setupStarted := time.Now()
 	runner, err := (wazeroengine.Factory{Passes: plugins, BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		created, createErr := capability.NewBroker(capability.Config{RunIdentity: runID, Plan: plan})
@@ -140,8 +142,8 @@ func runPLMEconomicsSample(t *testing.T, artifact []byte, source, mode, profile 
 		t.Fatal(err)
 	}
 	engine := trustedSemanticRunner(t, runner)
-	var before goruntime.MemStats
-	goruntime.ReadMemStats(&before)
+	var beforeTimed goruntime.MemStats
+	goruntime.ReadMemStats(&beforeTimed)
 	timedStarted := time.Now()
 	if profile == "cold_end_to_end" {
 		timedStarted = setupStarted
@@ -170,7 +172,10 @@ func runPLMEconomicsSample(t *testing.T, artifact []byte, source, mode, profile 
 	totalNanos := uint64(time.Since(timedStarted))
 	var after goruntime.MemStats
 	goruntime.ReadMemStats(&after)
-	allocated := after.TotalAlloc - before.TotalAlloc
+	allocated := after.TotalAlloc - beforeTimed.TotalAlloc
+	if profile == "cold_end_to_end" {
+		allocated = after.TotalAlloc - beforeSetup.TotalAlloc
+	}
 	if broker == nil || broker.CallCount() != 1 {
 		t.Fatalf("mode=%s broker=%v", mode, broker)
 	}

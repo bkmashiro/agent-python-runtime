@@ -15,6 +15,7 @@ class LinuxEvaluationSuiteContractTests(unittest.TestCase):
         self.assertIn("plm-multiread-economics-gate.sh", text)
         self.assertIn("prepared-family-economics-gate.sh", text)
         self.assertIn("cmd/transparent-campaign", text)
+        self.assertNotIn('mkdir -p "$output/producer/private"', text)
         self.assertNotIn("shimmy", text.lower())
         self.assertNotIn("integrated-evidence", text)
 

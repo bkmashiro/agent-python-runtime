@@ -79,7 +79,7 @@ if [[ -n $build_cache_root ]]; then
   export AGENT_RUNTIME_BUILD_CACHE_MODE=auto
 fi
 
-mkdir -p "$output/artifacts" "$output/plm" "$output/prepared-family" "$output/producer/private"
+mkdir -p "$output/artifacts" "$output/plm" "$output/prepared-family" "$output/producer"
 python3 - "$output/platform.json" <<'PY'
 import json, os, pathlib, platform, socket, subprocess, sys
 

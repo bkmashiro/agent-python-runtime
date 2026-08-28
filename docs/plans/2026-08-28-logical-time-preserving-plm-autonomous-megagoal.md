@@ -498,13 +498,13 @@ Tasks:
 - [x] Implement the smaller viable alternative first.
 - [x] Preserve exact target-Guest AST authority and all-or-nothing pre-execution selection.
 - [x] Prove no second Agent-source execution, retained Agent interpreter or cross-Run mutable analyzer.
-- [ ] Measure cold end-to-end and equivalently pre-provisioned profiles separately.
-- [ ] If the first alternative cannot pass the mechanism or cost gate, try the second once; do not create a third framework.
-- [ ] Record memory, discarded capacity and fallback costs.
+- [x] Measure cold end-to-end and equivalently pre-provisioned profiles separately.
+- [x] If the first alternative cannot pass the mechanism or cost gate, try the second once; do not create a third framework.
+- [x] Record memory, discarded capacity and fallback costs.
 
 **Gate G6-M:** Exact source/AST/result/exception/authority parity and one formal Agent-source execution hold.
 
-**Gate G6-E:** At least one frozen non-trivial latency regime has positive median end-to-end saving after all analysis/lowering/validation/provider costs, with positive saving in at least 4/5 trials. If both bounded alternatives fail, retain correct PLM default-off and record the negative result.
+**Gate G6-E result:** The controlled fixture remained negative in both profiles. PLM stays default-off and `plm-v1-second-alternative-no-go.md` records why no third runtime framework is justified.
 
 ## Gate 7: Differential, temporal and fault campaign
 
@@ -600,8 +600,8 @@ Tasks:
 
 ## Current execution pointer
 
-**Current:** Gates 0 through 5 are complete. The PLM pass and Guest ABI are versioned independently, the predecessor bridge is removed, exact Guest control-flow/failure/fallback cases pass and sealed-source lowering now runs inside the one final Guest before its one Agent-source execution.
+**Current:** Gates 0 through 6 are complete. PLM uses one final Guest, exact Guest correctness passes and the controlled economics fixture is negative in both profiles, so PLM remains default-off without a third runtime framework.
 
-**Next:** Complete Gate 6: freeze the matched timing protocol, add stage spans, measure cold and equivalently pre-provisioned profiles and record the economics decision without changing the two-alternative limit.
+**Next:** Execute Gate 7 differential, temporal and fault evidence, then proceed to the small-core artefact and closeout.
 
 **Blocked:** No blocker.

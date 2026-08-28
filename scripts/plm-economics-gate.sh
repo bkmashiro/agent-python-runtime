@@ -6,6 +6,10 @@ ARTIFACT=${AGENT_RUNTIME_GUEST:-}
 RUNS=${PLM_ECONOMICS_RUNS:-5}
 OUTPUT=${1:-"${ROOT_DIR}/docs/evidence/plm-v1-economics.json"}
 
+if [[ "${OUTPUT}" != /* ]]; then
+  OUTPUT="${ROOT_DIR}/${OUTPUT}"
+fi
+
 if [[ -z "${ARTIFACT}" || ! -f "${ARTIFACT}" ]]; then
   echo "AGENT_RUNTIME_GUEST must point to the exact CPython/WASI artifact" >&2
   exit 2

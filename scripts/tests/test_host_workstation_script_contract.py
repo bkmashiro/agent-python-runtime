@@ -37,6 +37,8 @@ class HostWorkstationScriptContractTests(unittest.TestCase):
         self.assertIn("./runtime/prepareddataset", text)
         self.assertIn("./runtime/engine/...", text)
         self.assertIn("run-linux-evaluation-suite.sh", text)
+        self.assertIn("./scripts/run-linux-evaluation-suite.sh", text)
+        self.assertNotIn('$stage/scripts/run-linux-evaluation-suite.sh', text)
         self.assertNotIn("eval ", text)
         self.assertNotIn("$command", text)
 

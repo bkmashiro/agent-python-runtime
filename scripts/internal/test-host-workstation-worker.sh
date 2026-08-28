@@ -81,7 +81,7 @@ set +e
       "$GOROOT/bin/go" vet ./runtime/engine/... ./runtime/numpycodec ./runtime/workspace ./runtime/subagent
       ;;
     evaluation)
-      "$stage/scripts/run-linux-evaluation-suite.sh" \
+      ./scripts/run-linux-evaluation-suite.sh \
         --output "$output/evaluation" \
         --source-commit "$source_commit" \
         --source-tree "$source_tree" \

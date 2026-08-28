@@ -145,7 +145,7 @@ print(json.loads(pathlib.Path(sys.argv[1]).read_text())['artifact_sha256'])
 PY
 )
 go run ./research/workflowbench/cmd/project-transparent-campaign \
-  --input "$output/producer/private" \
+  --evidence-root "$output/producer/private" \
   --expected-artifact "$artifact_sha" \
   --expected-campaign-commit "$source_commit" \
   --json-output "$output/producer/public.json" \

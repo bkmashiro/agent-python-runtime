@@ -1,15 +1,15 @@
 # Host-Scheduled Calls and Immutable Value Reuse Autonomous Mega-Goal
 
-> **For Hermes:** This is the planned runtime successor to the completed
-> [correctness-gated source-bound optimizer Mega-Goal](2026-08-23-correctness-gated-agent-python-optimizer-autonomous-megagoal.md).
-> Read this file fully, inspect live Git state, then continue through successive verified
-> slices. A green test, signed commit, or rejected candidate is a checkpoint, not a stop
-> condition. Stop only at the decision/resource/safety gates below or complete closeout.
+> **Historical/completed roadmap:** Do not resume this file. The direct capability Future
+> retained at its closeout was later removed by the unified split-phase predecessor. The
+> sole active execution queue is the
+> [Logical-Time-Preserving PLM Mega-Goal](2026-08-28-logical-time-preserving-plm-autonomous-megagoal.md).
 
-**Status:** Completed experimental campaign with two post-closeout corrections. The original
+**Status:** Historical completed experimental campaign with two post-closeout corrections. The original
 analyzer-driven split-phase pass, fixed data-local source pass, cache widening and composition
-remain no-go. Simpler direct capability Future and explicit prepared-value successors are
-retained Experimental/default-off after positive exact-Guest evidence.
+remain no-go. At this campaign's closeout, direct capability Future and explicit
+prepared-value successors were retained Experimental/default-off; the Future successor
+was later removed, while prepared-value evidence remains historical.
 
 **Post-closeout correction (2026-08-24):** the original split-phase treatment paid for a
 second cold exact analyzer Guest before formal execution. That was unnecessary for Future
@@ -597,7 +597,7 @@ If blocked, report the exact blocker, modified files, tests/gates run, live Git 
 the safest decision or alternative. Never weaken an acceptance condition to manufacture
 completion.
 
-## Current execution pointer
+## Historical closure pointer
 
 `Completed: exact-Guest semantic gates pass. Split-phase source lowering is rejected after a
 196.60% slowdown; fixed NumPy data-local reduction is rejected after a 6.29% slowdown;

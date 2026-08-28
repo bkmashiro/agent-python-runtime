@@ -7,8 +7,10 @@ go test ./...
 go vet ./...
 ```
 
-For the unified split-phase refactor, use the dedicated wrapper instead of
-reconstructing the focused, race, full or exact-Guest commands:
+The active proposed execution queue is the
+[Logical-Time-Preserving PLM Mega-Goal](plans/2026-08-28-logical-time-preserving-plm-autonomous-megagoal.md).
+It reuses the predecessor's dedicated wrapper instead of reconstructing focused, race,
+full or exact-Guest commands:
 
 ```bash
 scripts/unified-split-phase-gate.sh focused

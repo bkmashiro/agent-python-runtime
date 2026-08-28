@@ -35,15 +35,26 @@ remain typed Host effects. This does not replace the authority-lifecycle
 direction; fresh execution prevents hidden interpreter state from becoming
 workflow continuation state.
 
-The active execution direction is the
-[unified split-phase roadmap](plans/2026-08-27-unified-split-phase-execution-roadmap.md).
-Source streaming performs incremental analysis only. A positively admitted fixed-input Host read may start physically before source seal; after seal, one plan-bound whole-program pass fixes compiler-internal `issue_or_reuse` and original-position `collect` sites. The derived program then runs once as ordinary synchronous CPython. Runtime-derived arguments issue only after Python makes them concrete. Source-time and runtime issue share one Run-private attempt table, while the Broker retains logical permission, order, validation and receipts.
+The active proposed execution direction is the
+[Logical-Time-Preserving PLM megagoal](plans/2026-08-28-logical-time-preserving-plm-autonomous-megagoal.md).
+The current predecessor performs incremental source analysis, may start a read admitted
+by its plan-epoch contract and emits `issue_or_reuse` plus original-position `collect`
+sites. Its verified end-to-end fixture uses immutable reads.
+PLM retains synchronous CPython but distinguishes physical preparation from logical
+linearization. At the original source call, an operation-specific temporal validator
+adopts a candidate or starts the canonical operation. V1 materializes there as well.
+This successor is Proposed, not current implementation.
 
-Retained-prefix Guest execution and the independent semantic pre-dispatch controller remain only as historical comparators behind the explicit `LegacyResearchExecution` gate. The Python Future projection and hard-coded `split_phase_sources_read` pass were removed. This deliberately gives up source-generation overlap with pure local Python and private filesystem mutation; unsupported or unproved cases use unchanged sequential execution.
+Retained-prefix Guest execution and the independent semantic pre-dispatch controller are
+intended to remain historical comparators. Independent review found a lower-level
+constructor bypass and Run/Broker ownership defects; PLM Gate 2 must close them before the
+research-only claim is complete. The Python Future projection and hard-coded
+`split_phase_sources_read` pass were removed. Unsupported or unproved cases use unchanged
+sequential execution.
 
 Other bounded Experimental mechanisms include portable immutable roots, structured recursive child orchestration, exact AST-qualified whole-Run Agent Function reuse/single-flight, explicit single-wait fresh re-evaluation, one never-served single-use prepared module, bounded Linux private-memory COW, and continuation-preserving cold-I/O. General arbitrary-Python purity, production fan-out scheduling, automatic cold/reuse policy, generalized write commit/reconciliation, collect sinking and broad performance claims remain Deferred or Proposed.
 
-The [direct prepared-value lane](research/direct-prepared-values-v1.md) remains an independent default-off mechanism and retains its fixed NumPy evidence. Historical Future and analyzer-driven source-pass measurements remain attached to those removed mechanisms; they are not unified-runtime speedups. The current [stage-aware pass catalog](source-pass-plugins.md) registers 17 default-off entries. Selection remains static, with no generic IR, automatic order solver, Host dependency graph or cost model.
+The [direct prepared-value lane](research/direct-prepared-values-v1.md) remains an independent default-off mechanism and retains its fixed NumPy evidence. Historical Future and analyzer-driven source-pass measurements remain attached to those removed mechanisms; they are not PLM speedups. The current [stage-aware pass catalog](source-pass-plugins.md) exposes 17 default-off entries, while one bounded pipeline instance selects at most 16. Selection remains static, with no generic IR, automatic order solver, Host dependency graph or cost model.
 
 Optional mechanisms must remain orthogonal at their public contract boundaries.
 Result caching, single-flight, workflow re-evaluation, immutable workspace

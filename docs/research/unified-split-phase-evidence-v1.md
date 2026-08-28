@@ -1,6 +1,7 @@
 # Unified split-phase execution evidence v1
 
-Status: **Correctness passed; current cold exact-Guest economics are negative.**
+Status: **Historical predecessor evidence: correctness passed for the immutable fixture;
+cold exact-Guest economics are negative.**
 
 The machine-readable record is [`unified-split-phase-v1.json`](../evidence/unified-split-phase-v1.json).
 

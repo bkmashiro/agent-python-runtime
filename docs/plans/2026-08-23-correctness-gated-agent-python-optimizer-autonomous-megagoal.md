@@ -561,7 +561,7 @@ Stop only when one of these is true:
 Do not stop because one pass is rejected. Record the result and continue with independent
 admitted phases.
 
-## Current execution pointer
+## Historical closure pointer
 
 `Complete: P0, P0M, the retained P1S streaming overlay and P8 are verified. The P1-P7
 implementation candidates that require a new source-patch, effect, scheduling, workspace

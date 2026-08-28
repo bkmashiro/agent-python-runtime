@@ -629,7 +629,7 @@ A failed candidate mechanism is not automatically a blocker. Record the no-go an
 continue through independent campaign, observability and paper-story tracks where their
 claims remain valid.
 
-## Current execution pointer
+## Historical closure pointer
 
 **Track E real adapter:** the architecture gate is resolved in favor of a strict boundary:
 Pysolate Runtime remains general, while the 20 programs are a declarative research fixture.

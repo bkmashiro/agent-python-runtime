@@ -1,8 +1,14 @@
 # Unified Split-Phase Execution Roadmap
 
-Status: **Implemented through Gate Documentation. Final independent review is pending.**
+Status: **Historical predecessor prototype and evidence record. Superseded on 2026-08-28.**
 
-This is the sole execution roadmap for replacing Pysolate's overlapping source-streaming, semantic pre-dispatch, Python Future-proxy and split-phase call paths with one statically planned execution model. Historical roadmaps remain evidence records and must not be treated as competing queues.
+This roadmap produced the verified `issue_or_reuse` / original-site `collect` prototype,
+retired Python Future proxies and the hard-coded `sources.read` pass, and recorded a
+negative cold exact-Guest economics result. Do not resume it as an execution queue. The
+active successor is the
+[Logical-Time-Preserving PLM Autonomous Mega-Goal](2026-08-28-logical-time-preserving-plm-autonomous-megagoal.md),
+which introduces explicit original-point linearization and Run-owned candidate/job
+semantics.
 
 ## Goal
 
@@ -76,16 +82,20 @@ These decisions require an explicit owner revision before implementation may con
 - pooling unrelated benchmark workloads into one speedup;
 - editing thesis, report or defence artifacts before the runtime and evidence gates close.
 
-## Current baseline
+## Historical launch baseline
 
-Live implementation currently contains four overlapping paths:
+The following inventory describes the live tree when this predecessor roadmap launched.
+It is retained to explain the migration and must not be read as current implementation
+status.
+
+At launch, the implementation contained four overlapping paths:
 
 1. `semantic_pre_dispatch` can start a qualified fixed-input external read before final source completion and lets later unchanged Python claim it.
 2. `source_streaming_execution` retains a private Guest and executes supported local suites while later source arrives.
 3. `capability_future_projection` injects `_CapabilityFuture` proxies and resolves them through Python dunder operations and final result traversal.
 4. `split_phase_sources_read` emits `_pysolate_call_submit` and `_pysolate_call_materialize` for a narrow `sources.read` execution patch.
 
-Relevant implementation facts:
+Relevant launch-time implementation facts:
 
 - `runtime/capability/split_phase.go` already separates physical `Submit` from Broker-routed `Materialize` and finalizes unclaimed attempts;
 - `guest/bootstrap/agent_runtime/__init__.py` already assigns dynamic occurrence identities for split-phase slots;
@@ -386,20 +396,22 @@ Stop rather than silently expanding the design when:
 - general Python object transport;
 - production-default enablement before natural-workload evidence.
 
-## Tracking rules
+## Historical tracking rules
 
-- This file is the only execution source of truth for this refactor once approved.
-- Maintain exactly one `Current execution pointer` below.
+- This file was the execution source of truth for the predecessor refactor.
+- Its historical pointer below is not an active queue.
 - Update lane status and the pointer after each coherent verified slice; do not append command transcripts or commit IDs.
 - Link concise evidence artifacts or rejection summaries only when they change a gate.
 - Remove stale future tasks rather than preserving multiple contradictory queues.
 - A test pass, commit, review or phase completion is a checkpoint, not a stopping condition.
 - Continue to the next independent unblocked slice until Gate Closeout, a stop condition or an owner decision.
 
-## Current execution pointer
+## Historical closure pointer
 
 **Current:** Contract, Host, compiler, integration, retirement, evidence and active project documentation are complete. The post-retirement exact Guest, full suite and full race suite pass.
 
-**Next:** Resume only after Yuzhe's incoming project update; reconcile that update before completing the pending independent review and Gate Closeout.
+**Next:** Do not resume. Follow the PLM successor megagoal.
 
-**Blocked:** No implementation blocker. Closeout is intentionally paused for the owner update and the already-dispatched bounded review.
+**Blocked:** Independent review found Run/Broker ownership, constructor-gate,
+setup-failure cleanup and unbounded reuse-telemetry defects. The successor treats these as
+mandatory PLM ownership work rather than closing this predecessor architecture.

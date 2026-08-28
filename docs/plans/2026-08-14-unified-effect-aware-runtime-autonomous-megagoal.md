@@ -604,7 +604,7 @@ If blocked, report the exact decision/evidence needed, modified files, tests run
 status and safest alternatives. A low opportunity result is a valid research outcome,
 not permission to manufacture a broader optimizer.
 
-## Current execution pointer
+## Historical closure pointer
 
 **Track F:** first script the repeated gate/evidence workflow and refactor existing
 whole-Run reuse to consume shared legality without behavior change. Then implement an

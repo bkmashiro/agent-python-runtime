@@ -1,6 +1,6 @@
 # Semantic Speculation Optimizer Autonomous Mega-Goal
 
-> **Status update (2026-08-27): execution paused at an owner architecture decision.** Do not resume the current pointer or unchecked phases. The proposed successor is [Unified Split-Phase Execution Roadmap](2026-08-27-unified-split-phase-execution-roadmap.md), which retires retained-prefix Guest execution and Python Future proxies in favour of one source-time/runtime split-phase model. Preserve this file as the implementation and negative-evidence record for the explored semantic-speculation paths.
+> **Status update (2026-08-28): historical evidence record.** Do not resume the current pointer or unchecked phases. Its immediate successor was the [Unified Split-Phase Execution Roadmap](2026-08-27-unified-split-phase-execution-roadmap.md); the sole active successor is now the [Logical-Time-Preserving PLM Autonomous Mega-Goal](2026-08-28-logical-time-preserving-plm-autonomous-megagoal.md). Preserve this file as the implementation and negative-evidence record for the explored semantic-speculation paths.
 
 > **For Hermes:** This is a historical long-running `/goal` handoff and evidence log. Read it for mechanism and experiment context, but do not resume its execution pointer or unchecked phases. Follow the successor roadmap named above for any newly approved work.
 

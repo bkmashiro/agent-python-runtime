@@ -1,9 +1,12 @@
 # Unified split-phase execution V1 contract
 
-Status: **Frozen by Gate Contract for implementation.**
+Status: **Historical predecessor contract; implemented and superseded by PLM.**
 
-This is the small executable contract for the roadmap in
-`docs/plans/2026-08-27-unified-split-phase-execution-roadmap.md`. The longer
+This was the small executable contract for the roadmap in
+`docs/plans/2026-08-27-unified-split-phase-execution-roadmap.md`. Do not extend it as
+the active ABI; follow the
+[Logical-Time-Preserving PLM megagoal](../plans/2026-08-28-logical-time-preserving-plm-autonomous-megagoal.md).
+The longer
 formal report in `docs/research/pysolate-issue-collect-formal-report.md` remains
 a proof sketch and design reserve. V1 does not implement collect sinking,
 unresolved-branch speculation or prepare/commit writes.

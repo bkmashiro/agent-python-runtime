@@ -1634,7 +1634,9 @@ runtime issue_or_reuse
 collect 保持原调用位置
 ```
 
-这一步已经可以正式证明，而且与现有 Pysolate 最接近。
+这一步是最接近现有 Pysolate 的条件式证明候选；只有在本文列出的
+prepare silence、temporal validity、Run ownership 与 exception-order obligations
+逐项关闭后，才能将 proof sketch 提升为正式证明。
 
 ## Phase 2：基本块内 issue hoisting
 

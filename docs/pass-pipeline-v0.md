@@ -53,13 +53,14 @@ The maximum v0 limits are:
 
 | limit | maximum |
 |---|---:|
-| registered passes | 16 |
+| selected entries in one pipeline instance | 16 |
 | positive derived-source growth | 1 MiB |
 | positive derived-AST growth | 8192 nodes |
 | physical preparation | 8 MiB |
 | reanalysis | 16 |
 
-A caller may lower a limit but cannot widen it. Overflow is rejected before a
+A catalog may expose more definitions than one pipeline instance selects. A caller may
+lower the per-instance limit but cannot widen it. Overflow is rejected before a
 record can represent an applied pass. These bounds do not grant authority and do
 not bypass the stricter limits of source validation, Guest analysis, prepared
 memory or capability admission.

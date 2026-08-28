@@ -55,7 +55,9 @@ The prepared-value binding is analyzer-free. The capability-call pass uses one e
 
 ## Unified optimization catalog
 
-`passplugin.NewDefaultUnifiedCatalog` registers 17 default-off entries:
+`passplugin.NewDefaultUnifiedCatalog` exposes 17 default-off entries. It is a lookup
+catalog, not one `passpipeline.Pipeline`; any concrete pipeline instance selects at most
+the pipeline's bounded 16 entries:
 
 - the retained stage adapters for semantic analysis, prepared regions and Run bindings;
 - `prepared_pure_region`, `pure_scalar_cse`, `pure_scalar_fold`,

@@ -70,7 +70,7 @@ _OBSERVATION_NAMES = {
     "globals", "hasattr", "inspect", "locals", "traceback", "vars", "__code__",
     "__traceback__", "tb_frame", "tb_next", "tb_lineno", "f_code", "f_back", "gi_code",
     "cr_code", "ag_code", "_getframe", "settrace", "gettrace", "setprofile", "getprofile",
-    "call_tracing", "monitoring",
+    "call_tracing", "monitoring", "__getattribute__", "__dict__", "attrgetter", "methodcaller",
 }
 
 
@@ -93,13 +93,21 @@ def _observes_transformed_code(source):
     return "co_" in source or any(_identifier_count(source, name) for name in _OBSERVATION_NAMES)
 
 
+def _admission_source(source):
+    if source.isascii():
+        return source
+    import unicodedata
+
+    return unicodedata.normalize("NFKC", source)
+
+
 def _isolated_physical_line(node, lines):
     if node.lineno != node.end_lineno or node.lineno < 1 or node.lineno > len(lines):
         return False
     line = lines[node.lineno - 1]
     return not line[:node.col_offset].strip() and (
         not line[node.end_col_offset:].strip()
-        or line[node.end_col_offset:].strip().startswith("#")
+        or line[node.end_col_offset:].strip().startswith(b"#")
     )
 
 
@@ -227,8 +235,9 @@ def _transform(source, projections, prepared_tree=None):
     tree = prepared_tree if isinstance(prepared_tree, ast.Module) else ast.parse(
         source, filename="<agent-run>", mode="exec"
     )
-    lines = source.splitlines()
-    if _observes_transformed_code(source):
+    lines = source.encode("utf-8").split(b"\n")
+    admission_source = _admission_source(source)
+    if _observes_transformed_code(admission_source):
         return tree, 0, None
 
     edits = {}
@@ -297,7 +306,7 @@ def _transform(source, projections, prepared_tree=None):
 
     process_block(tree.body, {"inputs"})
     if not supported_calls or any(
-        _identifier_count(source, module) != supported_modules[module]
+        _identifier_count(admission_source, module) != supported_modules[module]
         for module in projection_modules
     ):
         return tree, 0, None

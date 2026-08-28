@@ -196,6 +196,7 @@ class SourcePassTests(unittest.TestCase):
         for source in (
             'values.append("before"); value = tools.get("alpha")\nresult = value\n',
             'value = tools.get("alpha"); values.append("after")\nresult = value\n',
+            'value = tools.get("alpha")\f; marker = "after"\nresult = [value, marker]\n',
             'if inputs["take"]: value = tools.get("alpha")\nresult = value\n',
             'for item in inputs["items"]: value = tools.get(item)\nresult = value\n',
         ):
@@ -282,6 +283,15 @@ class SourcePassTests(unittest.TestCase):
             'from other import tools\nvalue = tools.get("alpha")\nresult = value\n',
             'tools.__dict__["get"] = lambda key: {"value": "local"}\nvalue = tools.get("alpha")\nresult = value\n',
             'import sys\nsys.settrace(lambda *args: None)\nvalue = tools.get("alpha")\nresult = value\n',
+            (
+                "import sys\n"
+                "frame = object.__getattribute__(sys, '_get' + 'frame')()\n"
+                "code = object.__getattribute__(frame, 'f_' + 'code')\n"
+                "value = tools.get('alpha')\n"
+                "result = object.__getattribute__(code, 'c' + 'o_' + 'code')\n"
+            ),
+            'value = tools.get("alpha")\nresult = value.ｃｏ_ｃｏｄｅ\n',
+            'ｔｏｏｌｓ.get = lambda key: {"value": "local"}\nvalue = tools.get("alpha")\nresult = value\n',
             'value = tools.get("alpha")\nresult = getattr(getattr(globals()["_pysolate_agent_main"], "__code__"), "co_code")\n',
         )
         for source in cases:

@@ -14,7 +14,7 @@ HEX40 = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 IDENTIFIER = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 SUM_LINE = re.compile(r"^([0-9a-f]{64})  ([^\n]+)$")
-SUITES = {"baseline", "prepared-family"}
+SUITES = {"baseline", "prepared-family", "evaluation"}
 
 
 def file_digest(path: pathlib.Path) -> str:

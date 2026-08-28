@@ -20,7 +20,7 @@ if [[ ! $source_commit =~ ^[0-9a-f]{40}$ || ! $source_tree =~ ^[0-9a-f]{40}$ || 
   echo "invalid source identity" >&2
   exit 4
 fi
-case "$suite" in baseline|prepared-family) ;; *) echo "invalid suite" >&2; exit 5 ;; esac
+case "$suite" in baseline|prepared-family|evaluation) ;; *) echo "invalid suite" >&2; exit 5 ;; esac
 
 approved_root=$(realpath -e /vol/bitbucket/ys25/pysolate)
 stage_real=$(realpath -e "$stage")
@@ -79,6 +79,16 @@ set +e
       "$GOROOT/bin/go" test ./runtime/engine/... ./runtime/numpycodec ./runtime/workspace ./runtime/subagent -count=1
       "$GOROOT/bin/go" test -race ./runtime/engine/... ./runtime/workspace ./runtime/subagent -count=1
       "$GOROOT/bin/go" vet ./runtime/engine/... ./runtime/numpycodec ./runtime/workspace ./runtime/subagent
+      ;;
+    evaluation)
+      "$stage/scripts/run-linux-evaluation-suite.sh" \
+        --output "$output/evaluation" \
+        --source-commit "$source_commit" \
+        --source-tree "$source_tree" \
+        --source-epoch "$source_epoch" \
+        --runs 5 \
+        --fanout 4 \
+        --build-cache-root "$approved_root/cache/guest-layers"
       ;;
   esac
 } >"$output/test.log" 2>&1

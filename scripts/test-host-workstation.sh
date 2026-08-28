@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-usage: scripts/test-host-workstation.sh --suite baseline|prepared-family --output ABSOLUTE_DIR [--gateway shell2|shell3]
+usage: scripts/test-host-workstation.sh --suite baseline|prepared-family|evaluation --output ABSOLUTE_DIR [--gateway shell2|shell3]
 
 Stage the exact clean HEAD on gpu31, run one allowlisted Host-test suite, retrieve a bounded evidence bundle,
 verify it locally, and clean only this run's remote staging/output directories.
@@ -22,7 +22,7 @@ while [[ $# -gt 0 ]]; do
     *) usage >&2; exit 2 ;;
   esac
 done
-case "$suite" in baseline|prepared-family) ;; *) usage >&2; exit 2 ;; esac
+case "$suite" in baseline|prepared-family|evaluation) ;; *) usage >&2; exit 2 ;; esac
 case "$gateway" in shell2|shell3) ;; *) usage >&2; exit 2 ;; esac
 if [[ -z $output || $output != /* ]]; then
   echo "--output must be an absolute path" >&2

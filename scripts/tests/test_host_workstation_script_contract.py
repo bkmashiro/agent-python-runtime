@@ -22,7 +22,7 @@ def load_verifier():
 class HostWorkstationScriptContractTests(unittest.TestCase):
     def test_wrapper_is_clean_head_and_enum_only(self) -> None:
         text = WRAPPER.read_text()
-        self.assertIn('case "$suite" in baseline|prepared-family)', text)
+        self.assertIn('case "$suite" in baseline|prepared-family|evaluation)', text)
         self.assertIn("git status --porcelain", text)
         self.assertIn("git archive --format=tar HEAD", text)
         self.assertIn('case "$gateway" in shell2|shell3)', text)
@@ -36,6 +36,7 @@ class HostWorkstationScriptContractTests(unittest.TestCase):
         self.assertIn('case "$suite" in', text)
         self.assertIn("./runtime/prepareddataset", text)
         self.assertIn("./runtime/engine/...", text)
+        self.assertIn("run-linux-evaluation-suite.sh", text)
         self.assertNotIn("eval ", text)
         self.assertNotIn("$command", text)
 
@@ -64,6 +65,33 @@ class HostWorkstationScriptContractTests(unittest.TestCase):
             (root / "extra").write_text("not covered\n")
             with self.assertRaisesRegex(ValueError, "exact evidence file set"):
                 verifier.verify(root, commit, tree, "baseline")
+
+    def test_verifier_accepts_evaluation_bundle_without_acceptance_report(self) -> None:
+        verifier = load_verifier()
+        with tempfile.TemporaryDirectory() as raw:
+            root = pathlib.Path(raw)
+            commit, tree = "a" * 40, "b" * 40
+            result = {
+                "schema_version": "pysolate.workstation-host-test.v2",
+                "acceptance_report": False,
+                "source_commit": commit,
+                "source_tree": tree,
+                "builder": "gpu31.doc.ic.ac.uk",
+                "target": "linux/amd64",
+                "suite": "evaluation",
+                "passed": True,
+                "go_version": "go1.25.0",
+                "duration_millis": 1,
+            }
+            (root / "RESULT.READY").write_text(json.dumps(result, sort_keys=True, separators=(",", ":")) + "\n")
+            (root / "test.log").write_text("ok\n")
+            evidence = root / "evaluation"
+            evidence.mkdir()
+            (evidence / "suite-manifest.json").write_text("{}\n")
+            verifier.write_checksums(root)
+            verified = verifier.verify(root, commit, tree, "evaluation")
+            self.assertTrue(verified["passed"])
+
     def test_verifier_accepts_prepared_family_report_and_rejects_source_drift(self) -> None:
         verifier = load_verifier()
         with tempfile.TemporaryDirectory() as raw:

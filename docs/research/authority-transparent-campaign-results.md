@@ -2,20 +2,20 @@
 
 ## Conclusion
 
-Across 5 paired repetitions of the fixed 20-program campaign, qualified execution used a median of 17 physical executions versus 19 for baseline: a paired reduction of 2 executions (10.5%). Median wall time was 29.30 s versus 35.07 s; this descriptive small-sample result is not a production throughput claim.
+Across 5 paired repetitions of the fixed 20-program campaign, qualified execution used a median of 17 physical executions versus 19 for baseline: a paired reduction of 2 executions (10.5%). Median wall time was 30.62 s versus 42.99 s; this descriptive small-sample result is not a production throughput claim.
 
 ![Paired physical execution counts](../figures/authority-transparent-campaign.svg)
 
 | Treatment | Physical executions, median [min, max] | Wall time, median [min, max] | Process CPU, median [min, max] |
 |---|---:|---:|---:|
-| Baseline | 19 [19, 19] | 35.07 s [34.39, 38.00] | 93.30 s [92.01, 94.95] |
-| Qualified | 17 [17, 17] | 29.30 s [28.91, 32.32] | 87.21 s [87.09, 88.48] |
+| Baseline | 19 [19, 19] | 42.99 s [34.14, 47.31] | 112.14 s [91.91, 121.84] |
+| Qualified | 17 [17, 17] | 30.62 s [29.14, 40.26] | 91.18 s [88.12, 114.89] |
 
 ## Provenance
 
-- Campaign source: eeb67fa475d7cf51cd8d08835a03c4cc6558e0a4
-- Guest artifact: sha256:4dc00643195df736cfa31a3cde5a43bde4c2586ef8aa9a36c4cecf104ed3a084
-- Guest artifact source: eeb67fa475d7cf51cd8d08835a03c4cc6558e0a4
+- Campaign source: eb45d3af224be281ca105d200b5547c00d4cb4ab
+- Guest artifact: sha256:923e58c534b0534ac1ff5246ee2771fd3490cd304bc39bed340dc3fe883377ea
+- Guest artifact source: eb45d3af224be281ca105d200b5547c00d4cb4ab
 - Manifest: sha256:01b1598760962311be630a2bbc5ac0e259ac211ed6bcd4b9e29933201a83cfc7
 - Host: linux/amd64; go1.25.0; Linux 6.17.0-35-generic #35~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Tue May 26 19:30:42 UTC 2
 - Evidence strength: paired repetitions, full min–max shown; no confidence interval inferred.

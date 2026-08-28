@@ -1,23 +1,22 @@
-# Unified Linux evaluation suite
+# Pysolate Linux evaluation suite
 
-The dissertation evaluation lanes run from one clean `agent-python-runtime`
-commit on one Linux/x86-64 host. The suite does not consume Shimmy benchmark
-results.
+The dissertation evaluation suite runs from one clean `agent-python-runtime`
+commit. It does not consume Shimmy benchmark results.
 
 ## Lanes
 
 1. **PLM economics** runs the one-read control and four-read treatment with the
    same freshly built base Guest.
-2. **Prepared Family economics** compares private copy with Linux private COW
-   for the same 8 MiB NumPy input and four single-use consumers. Every treatment
-   and repetition runs in a fresh test subprocess. The report records family
-   preparation, consumer creation and execution, process proportional set size,
-   and private dirty memory.
-3. **Producer sharing** runs the fixed 20-program authority campaign with the
-   same base Guest used by PLM.
+2. **Copy-on-write economics** compares private copy with Linux private COW
+   for an 8 MiB NumPy input filled with integer ones and four single-use
+   consumers. Every treatment and repetition runs in a separate test subprocess.
+   The report records shared-image setup, consumer creation and execution,
+   process proportional set size, and private dirty memory.
+3. **Producer sharing** runs the authority workload with the base Guest used by
+   PLM.
 
-Prepared Family is not a reset benchmark. It does not support the historical
-Shimmy reset-time or dirty-rate-crossover claims.
+The copy-on-write lane is not a reset benchmark. It does not support the
+historical Shimmy reset-time or dirty-rate-crossover claims.
 
 ## ICL gpu31
 
@@ -50,8 +49,8 @@ scripts/run-linux-evaluation-suite.sh \
   --build-cache-root /absolute/build-cache
 ```
 
-The output directory must be absent or empty. Existing evidence is never
-overwritten.
+The source tree is recomputed before any build or measurement. The output
+directory must be absent or empty. Existing evidence is never overwritten.
 
 ## Output
 

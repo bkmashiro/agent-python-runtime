@@ -30,7 +30,7 @@ case "${MODE}" in
       echo "guest mode requires AGENT_RUNTIME_GUEST to name an existing non-empty artifact" >&2
       exit 2
     fi
-    go test ./integration/e2e -run 'TestRealGuestUnifiedSplitPhase' -count=1 -v
+    go test ./integration/e2e -run 'TestRealGuestPLM' -count=1 -v
     ;;
   *)
     echo "usage: $0 {focused|race|full|guest}" >&2

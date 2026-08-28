@@ -388,6 +388,72 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(0, self.runtime._validate_request_source_for_patch(raw))
         self.assertNotIn("definitely_missing_pysolate_module", sys.modules)
 
+    def test_patch_execution_compiles_only_the_selected_tree(self):
+        source = 'value = tools.get("alpha")\nresult = value\n'
+        request = {"run_id": "single-compile", "code": source, "inputs": {}}
+        raw = json.dumps(request)
+        source_pass = importlib.import_module(f"{self.runtime.__name__}.source_pass")
+        patch_request = json.dumps({
+            "pass_name": "plm_capability_calls",
+            "pass_version": "pysolate.plm-capability-calls-pass.v1",
+            "registration_sha256": "sha256:" + "a" * 64,
+            "source": source,
+            "capability_projections": [{
+                "capability": "tools.get",
+                "module": "tools",
+                "method": "get",
+                "arguments": ["key"],
+                "result_field": "value",
+            }],
+        }, sort_keys=True, separators=(",", ":"))
+        compile_wrapper = self.runtime._compile_agent_wrapper
+        compile_calls = 0
+
+        def counted_compile(*args, **kwargs):
+            nonlocal compile_calls
+            compile_calls += 1
+            return compile_wrapper(*args, **kwargs)
+
+        setattr(self.runtime, "_compile_agent_wrapper", counted_compile)
+        try:
+            self.assertEqual(0, self.runtime._validate_request_source_for_patch(raw))
+            patch = source_pass.emit_source_pass_patch_request_json(patch_request)
+            self.runtime._prepare_source_pass_execution(patch)
+        finally:
+            setattr(self.runtime, "_compile_agent_wrapper", compile_wrapper)
+
+        self.assertEqual(1, compile_calls)
+
+    def test_patch_fallback_compiles_original_once(self):
+        request = {"run_id": "single-compile-fallback", "code": "result = 7\n", "inputs": {}}
+        raw = json.dumps(request)
+        compile_wrapper = self.runtime._compile_agent_wrapper
+        compile_calls = 0
+
+        def counted_compile(*args, **kwargs):
+            nonlocal compile_calls
+            compile_calls += 1
+            return compile_wrapper(*args, **kwargs)
+
+        setattr(self.runtime, "_compile_agent_wrapper", counted_compile)
+        try:
+            self.assertEqual(0, self.runtime._validate_request_source_for_patch(raw))
+            response = json.loads(self.runtime._execute(raw))
+        finally:
+            setattr(self.runtime, "_compile_agent_wrapper", compile_wrapper)
+
+        self.assertEqual("ok", response["status"])
+        self.assertEqual(7, response["result"])
+        self.assertEqual(1, compile_calls)
+
+    def test_patch_admission_rejects_user_runtime_helpers(self):
+        raw = json.dumps({
+            "run_id": "patch-reserved-helper",
+            "code": "result = _pysolate_plm_prepare('slot', 'call', 'tools.get', {})",
+            "inputs": {},
+        })
+        self.assertEqual(2, self.runtime._validate_request_source_for_patch(raw))
+
     def test_rejects_non_static_agent_import_forms_before_execution(self):
         cases = {
             "dunder": "result = __import__(inputs['module'])",

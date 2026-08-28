@@ -1103,7 +1103,10 @@ func (engine *Engine) RunCapabilitySourcePatchInline(ctx context.Context, reques
 		prepares <- trustedPrepare
 	}
 	close(prepares)
-	payload, runErr := engine.runWithPrepares(ctx, request, prepares, false, &derivedSelection{inlineCapability: inline})
+	payload, runErr := engine.runWithPrepares(ctx, request, prepares, false, &derivedSelection{
+		sourceValidationExport: "runtime_validate_source_for_patch",
+		inlineCapability:       inline,
+	})
 	return passplugin.CapabilitySourcePatchRun{Payload: payload, Patch: inline.patch, Applied: inline.applied && runErr == nil, PassError: inline.passErr}, runErr
 }
 

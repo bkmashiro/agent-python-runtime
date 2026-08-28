@@ -683,11 +683,11 @@ class _ModuleAssignedNameCollector(ast.NodeVisitor):
         self._visit_comprehensions(node.generators)
 
 
-def _compile_agent_wrapper(
+def _validate_agent_wrapper_inputs(
     body: list[ast.stmt],
     preamble: list[ast.stmt],
     allowed_runtime_names: frozenset[str] = frozenset(),
-) -> tuple[types.CodeType, str]:
+) -> _ModuleAssignedNameCollector:
     validate_ast_recursion_shape_bounded(ast.Module(body=body, type_ignores=[]))
     collector = _ModuleAssignedNameCollector()
     for node in (*preamble, *body):
@@ -697,6 +697,16 @@ def _compile_agent_wrapper(
     for node in walk_ast_bounded(ast.Module(body=body, type_ignores=[])):
         if isinstance(node, ast.Name) and node.id.startswith("_pysolate_") and node.id not in allowed_runtime_names:
             raise SyntaxError("agent source uses a reserved runtime name")
+    return collector
+
+
+def _compile_agent_wrapper(
+    body: list[ast.stmt],
+    preamble: list[ast.stmt],
+    allowed_runtime_names: frozenset[str] = frozenset(),
+    validated_collector: _ModuleAssignedNameCollector | None = None,
+) -> tuple[types.CodeType, str]:
+    collector = validated_collector or _validate_agent_wrapper_inputs(body, preamble, allowed_runtime_names)
     future_annotations = any(
         isinstance(node, ast.ImportFrom) and node.module == "__future__" and any(alias.name == "annotations" for alias in node.names)
         for node in preamble
@@ -744,13 +754,11 @@ def _compile_agent_wrapper(
     return code, digest
 
 
-def _validate_agent_source(source: str, compatibility: dict[str, Any] | None) -> tuple[int, types.CodeType | None, list[ast.stmt]]:
-    global _validated_effective_ast_sha256
-    try:
-        tree = ast.parse(source, filename="<agent-run>", mode="exec")
-    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
-        return _SOURCE_CONTRACT_INVALID, None, []
-
+def _admit_agent_tree(
+    tree: ast.Module,
+    compatibility: dict[str, Any] | None,
+    allowed_runtime_names: frozenset[str] = frozenset(),
+) -> tuple[int, list[ast.stmt], list[ast.stmt], list[ast.stmt], _ModuleAssignedNameCollector | None]:
     import_nodes: list[ast.stmt] = []
     imported_roots: set[str] = set()
     preamble_open = True
@@ -759,20 +767,20 @@ def _validate_agent_source(source: str, compatibility: dict[str, Any] | None) ->
             continue
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             if not preamble_open:
-                return _SOURCE_CONTRACT_UNSUPPORTED, None, []
+                return _SOURCE_CONTRACT_UNSUPPORTED, [], [], [], None
             import_nodes.append(node)
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     root = alias.name.partition(".")[0]
                     if root in _FORBIDDEN_IMPORT_ROOTS:
-                        return _SOURCE_CONTRACT_UNSUPPORTED, None, []
+                        return _SOURCE_CONTRACT_UNSUPPORTED, [], [], [], None
                     imported_roots.add(root)
             else:
                 if node.level != 0 or node.module is None or any(alias.name == "*" for alias in node.names):
-                    return _SOURCE_CONTRACT_UNSUPPORTED, None, []
+                    return _SOURCE_CONTRACT_UNSUPPORTED, [], [], [], None
                 root = node.module.partition(".")[0]
                 if root in _FORBIDDEN_IMPORT_ROOTS:
-                    return _SOURCE_CONTRACT_UNSUPPORTED, None, []
+                    return _SOURCE_CONTRACT_UNSUPPORTED, [], [], [], None
                 if root != "__future__":
                     imported_roots.add(root)
             continue
@@ -781,23 +789,39 @@ def _validate_agent_source(source: str, compatibility: dict[str, Any] | None) ->
     top_level_import_ids = {id(node) for node in import_nodes}
     for node in walk_ast_bounded(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)) and id(node) not in top_level_import_ids:
-            return _SOURCE_CONTRACT_UNSUPPORTED, None, []
+            return _SOURCE_CONTRACT_UNSUPPORTED, [], [], [], None
         if isinstance(node, ast.Name) and node.id in _FORBIDDEN_DYNAMIC_NAMES:
-            return _SOURCE_CONTRACT_UNSUPPORTED, None, []
+            return _SOURCE_CONTRACT_UNSUPPORTED, [], [], [], None
         if isinstance(node, ast.Attribute) and node.attr in {"__import__", "import_module"}:
-            return _SOURCE_CONTRACT_UNSUPPORTED, None, []
+            return _SOURCE_CONTRACT_UNSUPPORTED, [], [], [], None
         if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value in _FORBIDDEN_DYNAMIC_NAMES:
-            return _SOURCE_CONTRACT_UNSUPPORTED, None, []
+            return _SOURCE_CONTRACT_UNSUPPORTED, [], [], [], None
 
     if compatibility is not None:
         declarations = compatibility["imports"]
         if any("." in name for name in declarations) or set(declarations) != imported_roots:
-            return _SOURCE_CONTRACT_UNSUPPORTED, None, []
+            return _SOURCE_CONTRACT_UNSUPPORTED, [], [], [], None
 
     body = [node for node in tree.body if id(node) not in top_level_import_ids]
     future_nodes: list[ast.stmt] = [node for node in import_nodes if isinstance(node, ast.ImportFrom) and node.module == "__future__"]
     try:
-        code, effective_digest = _compile_agent_wrapper(body, future_nodes)
+        collector = _validate_agent_wrapper_inputs(body, future_nodes, allowed_runtime_names)
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
+        return _SOURCE_CONTRACT_INVALID, [], [], [], None
+    return _SOURCE_CONTRACT_OK, body, future_nodes, import_nodes, collector
+
+
+def _validate_agent_source(source: str, compatibility: dict[str, Any] | None) -> tuple[int, types.CodeType | None, list[ast.stmt]]:
+    global _validated_effective_ast_sha256
+    try:
+        tree = ast.parse(source, filename="<agent-run>", mode="exec")
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
+        return _SOURCE_CONTRACT_INVALID, None, []
+    status, body, future_nodes, import_nodes, collector = _admit_agent_tree(tree, compatibility)
+    if status != _SOURCE_CONTRACT_OK or collector is None:
+        return status, None, []
+    try:
+        code, effective_digest = _compile_agent_wrapper(body, future_nodes, validated_collector=collector)
         _validated_effective_ast_sha256 = effective_digest
     except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
         return _SOURCE_CONTRACT_INVALID, None, []
@@ -827,25 +851,33 @@ def _preload_and_seal_imports(import_nodes: list[ast.stmt]) -> dict[str, Any] | 
         return None
 
 
+def _admit_unrestricted_tree(
+    tree: ast.Module,
+    allowed_runtime_names: frozenset[str] = frozenset(),
+) -> tuple[list[ast.stmt], list[ast.stmt], _ModuleAssignedNameCollector]:
+    preamble: list[ast.stmt] = []
+    body: list[ast.stmt] = []
+    future_open = True
+    for index, node in enumerate(tree.body):
+        if index == 0 and _module_docstring(node):
+            preamble.append(node)
+            continue
+        if future_open and isinstance(node, ast.ImportFrom) and node.module == "__future__":
+            preamble.append(node)
+            continue
+        future_open = False
+        if isinstance(node, ast.ImportFrom) and node.module == "__future__":
+            raise SyntaxError("from __future__ imports must occur at the beginning of the file")
+        body.append(node)
+    return body, preamble, _validate_agent_wrapper_inputs(body, preamble, allowed_runtime_names)
+
+
 def _validate_unrestricted_source(source: str) -> tuple[int, types.CodeType | None]:
     global _validated_effective_ast_sha256
     try:
         tree = ast.parse(source, filename="<agent-run>", mode="exec")
-        preamble: list[ast.stmt] = []
-        body: list[ast.stmt] = []
-        future_open = True
-        for index, node in enumerate(tree.body):
-            if index == 0 and _module_docstring(node):
-                preamble.append(node)
-                continue
-            if future_open and isinstance(node, ast.ImportFrom) and node.module == "__future__":
-                preamble.append(node)
-                continue
-            future_open = False
-            if isinstance(node, ast.ImportFrom) and node.module == "__future__":
-                raise SyntaxError("from __future__ imports must occur at the beginning of the file")
-            body.append(node)
-        code, digest = _compile_agent_wrapper(body, preamble)
+        body, preamble, collector = _admit_unrestricted_tree(tree)
+        code, digest = _compile_agent_wrapper(body, preamble, validated_collector=collector)
         _validated_effective_ast_sha256 = digest
         return _SOURCE_CONTRACT_OK, code
     except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
@@ -880,20 +912,25 @@ def _validate_request_source(request_json: str) -> int:
 
 
 def _validate_request_source_for_patch(request_json: str) -> int:
-    """Validate original source without importing modules erased by a derived patch."""
+    """Admit original source without compiling or importing it before patch selection."""
     global _validated_request_json, _validated_code, _validated_import_globals
     if not isinstance(request_json, str):
         return _SOURCE_CONTRACT_INVALID
     request, error = _decode_request(request_json)
     if error is not None or request is None:
         return _SOURCE_CONTRACT_INVALID
-    if request.get("compatibility") is None:
-        return _validate_request_source(request_json)
-    status, code, _ = _validate_agent_source(request["code"], request.get("compatibility"))
-    if status != _SOURCE_CONTRACT_OK or code is None:
-        return status
+    try:
+        tree = ast.parse(request["code"], filename="<agent-run>", mode="exec")
+        if request.get("compatibility") is None:
+            _admit_unrestricted_tree(tree)
+        else:
+            status, _, _, _, collector = _admit_agent_tree(tree, request.get("compatibility"))
+            if status != _SOURCE_CONTRACT_OK or collector is None:
+                return status
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
+        return _SOURCE_CONTRACT_INVALID
     _validated_request_json = request_json
-    _validated_code = code
+    _validated_code = None
     _validated_import_globals = {}
     return _SOURCE_CONTRACT_OK
 
@@ -906,26 +943,18 @@ def _install_derived_tree(
 ) -> None:
     global _validated_code, _validated_effective_ast_sha256, _validated_import_globals
     compatibility = request.get("compatibility")
-    import_nodes: list[ast.stmt] = []
     if compatibility is None:
-        preamble: list[ast.stmt] = []
-        body: list[ast.stmt] = []
-        future_open = True
-        for index, node in enumerate(tree.body):
-            if index == 0 and _module_docstring(node):
-                preamble.append(node)
-                continue
-            if future_open and isinstance(node, ast.ImportFrom) and node.module == "__future__":
-                preamble.append(node)
-                continue
-            future_open = False
-            body.append(node)
+        body, preamble, collector = _admit_unrestricted_tree(tree, allowed_runtime_names)
+        import_nodes: list[ast.stmt] = []
     else:
-        import_nodes = [node for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom))]
-        import_ids = {id(node) for node in import_nodes}
-        body = [node for node in tree.body if id(node) not in import_ids]
-        preamble = [node for node in import_nodes if isinstance(node, ast.ImportFrom) and node.module == "__future__"]
-    code, digest = _compile_agent_wrapper(body, preamble, allowed_runtime_names)
+        status, body, preamble, import_nodes, collector = _admit_agent_tree(
+            tree, compatibility, allowed_runtime_names
+        )
+        if status != _SOURCE_CONTRACT_OK or collector is None:
+            raise RuntimeError("derived source violates the source contract")
+    code, digest = _compile_agent_wrapper(
+        body, preamble, allowed_runtime_names, validated_collector=collector
+    )
     if preload_derived_imports:
         preload = _preload_and_seal_imports(import_nodes)
         if preload is None:
@@ -947,8 +976,8 @@ def _prepare_prepared_region_execution(selection_request_json: str) -> None:
 
 
 def _prepare_source_pass_execution(patch_json: str) -> None:
-    if _validated_request_json is None or _validated_code is None:
-        raise RuntimeError("original agent source must be validated before source pass selection")
+    if _validated_request_json is None:
+        raise RuntimeError("original agent source must be admitted before source pass selection")
     request, error = _decode_request(_validated_request_json)
     if error is not None or request is None:
         raise RuntimeError("validated original request is unavailable")

@@ -249,6 +249,9 @@ func TestPreparedFamilyEconomicsWorker(t *testing.T) {
 		if err := json.Unmarshal(decoded.Result, &result); err != nil {
 			t.Fatal(err)
 		}
+		if result != 1 {
+			t.Fatalf("unexpected consumer result: got=%d want=1", result)
+		}
 		if index == 0 {
 			sample.Result = result
 		} else if result != sample.Result {

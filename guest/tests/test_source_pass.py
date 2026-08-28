@@ -3,7 +3,7 @@ import hashlib
 import json
 import unittest
 
-from agent_runtime import source_pass
+from agent_runtime import plm_source_pass
 from agent_runtime.source_pass import (
     emit_source_pass_patch_request_json,
     validate_source_pass_execution_request,
@@ -81,8 +81,7 @@ class SourcePassTests(unittest.TestCase):
 
     def test_same_guest_selection_does_not_replay_plm_transform(self):
         source = 'value = tools.get("alpha")\nresult = value\n'
-        key = ("plm_capability_calls", "pysolate.plm-capability-calls-pass.v1")
-        transform = source_pass._TRANSFORMS[key]
+        transform = plm_source_pass._transform
         calls = 0
 
         def counted_transform(*args):
@@ -90,14 +89,14 @@ class SourcePassTests(unittest.TestCase):
             calls += 1
             return transform(*args)
 
-        source_pass._TRANSFORMS[key] = counted_transform
+        plm_source_pass._transform = counted_transform
         try:
             raw = emit_source_pass_patch_request_json(
                 plm_capability_request(source, CAPABILITY_PROJECTIONS)
             )
             tree = validate_source_pass_execution_request(source, raw)
         finally:
-            source_pass._TRANSFORMS[key] = transform
+            plm_source_pass._transform = transform
 
         self.assertEqual(1, calls)
         self.assertIsNotNone(tree)

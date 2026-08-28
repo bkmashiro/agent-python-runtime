@@ -379,9 +379,9 @@ def _initialize(config_json: str) -> None:
     _validated_source_tree = None
     _validated_import_globals = {}
     _validated_effective_ast_sha256 = None
-    source_pass = sys.modules.get(f"{__name__}.source_pass")
-    if source_pass is not None:
-        source_pass._reset_source_pass_state()
+    plm_source_pass = sys.modules.get(f"{__name__}.plm_source_pass")
+    if plm_source_pass is not None:
+        plm_source_pass.reset_state()
 
 
 
@@ -982,24 +982,33 @@ def _prepare_prepared_region_execution(selection_request_json: str) -> None:
 
 def _transform_source_pass(request_json: str) -> str:
     global _validated_source_tree
+    try:
+        transform_request = json.loads(request_json)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("source pass request is invalid") from exc
+    if not isinstance(transform_request, dict):
+        raise ValueError("source pass request is invalid")
     prepared_tree = _validated_source_tree
     if prepared_tree is not None:
         if _validated_request_json is None:
             raise ValueError("source pass source was not admitted")
         request, error = _decode_request(_validated_request_json)
-        try:
-            transform_request = json.loads(request_json)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("source pass request is invalid") from exc
         if (
             error is not None
             or request is None
-            or not isinstance(transform_request, dict)
             or transform_request.get("source") != request["code"]
         ):
             raise ValueError("source pass source does not match the admitted request")
         _validated_source_tree = None
+    if (
+        transform_request.get("pass_name") == "plm_capability_calls"
+        and transform_request.get("pass_version") == "pysolate.plm-capability-calls-pass.v1"
+    ):
+        from .plm_source_pass import emit_patch
+
+        return emit_patch(request_json, prepared_tree)
     from .source_pass import emit_source_pass_patch_request_json
+
     return emit_source_pass_patch_request_json(request_json, prepared_tree)
 
 
@@ -1009,12 +1018,22 @@ def _prepare_source_pass_execution(patch_json: str) -> None:
     request, error = _decode_request(_validated_request_json)
     if error is not None or request is None:
         raise RuntimeError("validated original request is unavailable")
-    from .source_pass import validate_source_pass_execution_request
-    tree = validate_source_pass_execution_request(request["code"], patch_json)
     try:
         patch = json.loads(patch_json)
     except (TypeError, ValueError) as exc:
         raise RuntimeError("source pass patch is invalid") from exc
+    if (
+        isinstance(patch, dict)
+        and patch.get("pass_name") == "plm_capability_calls"
+        and patch.get("pass_version") == "pysolate.plm-capability-calls-pass.v1"
+    ):
+        from .plm_source_pass import select_tree
+
+        tree = select_tree(request["code"], patch_json)
+    else:
+        from .source_pass import validate_source_pass_execution_request
+
+        tree = validate_source_pass_execution_request(request["code"], patch_json)
     allowed_runtime_names = frozenset()
     if (
         patch.get("pass_name") == "plm_capability_calls"

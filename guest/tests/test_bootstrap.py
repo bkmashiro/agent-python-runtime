@@ -388,6 +388,31 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(0, self.runtime._validate_request_source_for_patch(raw))
         self.assertNotIn("definitely_missing_pysolate_module", sys.modules)
 
+    def test_plm_transform_does_not_load_generic_source_pass(self):
+        source = 'value = tools.get("alpha")\nresult = value\n'
+        raw = json.dumps({"run_id": "narrow-plm-module", "code": source, "inputs": {}})
+        patch_request = json.dumps({
+            "pass_name": "plm_capability_calls",
+            "pass_version": "pysolate.plm-capability-calls-pass.v1",
+            "registration_sha256": "sha256:" + "1" * 64,
+            "source": source,
+            "capability_projections": [{
+                "capability": "tools.get", "module": "tools", "method": "get",
+                "arguments": ["key"], "result_field": "value",
+            }],
+        }, sort_keys=True, separators=(",", ":"))
+        generic_name = f"{self.runtime.__name__}.source_pass"
+        plm_name = f"{self.runtime.__name__}.plm_source_pass"
+        sys.modules.pop(generic_name, None)
+        sys.modules.pop(plm_name, None)
+
+        self.assertEqual(0, self.runtime._validate_request_source_for_patch(raw))
+        patch = self.runtime._transform_source_pass(patch_request)
+
+        self.assertNotIn(generic_name, sys.modules)
+        self.assertIn(plm_name, sys.modules)
+        self.assertEqual("applied", json.loads(patch)["status"])
+
     def test_patch_execution_compiles_only_the_selected_tree(self):
         source = 'value = tools.get("alpha")\nresult = value\n'
         request = {"run_id": "single-compile", "code": source, "inputs": {}}
@@ -435,10 +460,10 @@ class BootstrapTests(unittest.TestCase):
         }, sort_keys=True, separators=(",", ":"))
         self.assertEqual(0, self.runtime._validate_request_source_for_patch(raw))
         self.runtime._transform_source_pass(patch_request)
-        source_pass = importlib.import_module(f"{self.runtime.__name__}.source_pass")
-        self.assertIsNotNone(source_pass._pending_capability_selection)
+        source_pass = importlib.import_module(f"{self.runtime.__name__}.plm_source_pass")
+        self.assertIsNotNone(source_pass._pending_selection)
         self.runtime._initialize("{}")
-        self.assertIsNone(source_pass._pending_capability_selection)
+        self.assertIsNone(source_pass._pending_selection)
 
     def test_patch_execution_parses_original_source_once(self):
         source = 'value = tools.get("alpha")\nresult = value\n'

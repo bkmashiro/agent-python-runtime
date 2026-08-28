@@ -1,5 +1,4 @@
 import ast
-import copy
 import hashlib
 import json
 import re
@@ -17,22 +16,13 @@ PLM_CAPABILITY_CALLS_VERSION = "pysolate.plm-capability-calls-pass.v1"
 DATA_LOCAL_NUMPY_SUM = "data_local_numpy_sum"
 DATA_LOCAL_NUMPY_SUM_VERSION = "pysolate.data-local-numpy-sum-pass.v2"
 _REQUEST_KEYS = {"pass_name", "pass_version", "registration_sha256", "source"}
-_CAPABILITY_REQUEST_KEYS = _REQUEST_KEYS | {"capability_projections"}
 _PATCH_COMMON_KEYS = {
     "schema_version", "status", "pass_name", "pass_version", "registration_sha256",
     "original_source_sha256", "replacement_count",
 }
 _PATCH_KEYS = _PATCH_COMMON_KEYS | {"derived_source", "derived_source_sha256"}
-_CAPABILITY_PATCH_KEYS = _PATCH_COMMON_KEYS | {"capability_projections"}
+
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
-_pending_capability_selection = None
-
-
-def _reset_source_pass_state():
-    global _pending_capability_selection
-    _pending_capability_selection = None
-
-
 def _digest(value):
     return "sha256:" + hashlib.sha256(value).hexdigest()
 
@@ -241,314 +231,6 @@ def _pure_scalar_fold(source):
     return tree, derived_source, len(replacements)
 
 
-def _validated_capability_projection_index(projections):
-    if not isinstance(projections, list) or not projections or len(projections) > 64:
-        raise ValueError("invalid split-phase capability projections")
-    expected = {"capability", "module", "method", "arguments", "result_field"}
-    index = {}
-    for projection in projections:
-        if not isinstance(projection, dict) or set(projection) != expected:
-            raise ValueError("invalid split-phase capability projection")
-        capability = projection["capability"]
-        module = projection["module"]
-        method = projection["method"]
-        arguments = projection["arguments"]
-        result_field = projection["result_field"]
-        if (
-            not isinstance(capability, str)
-            or not capability
-            or len(capability.encode("utf-8")) > 128
-            or not isinstance(module, str)
-            or not module.isidentifier()
-            or not isinstance(method, str)
-            or not method.isidentifier()
-            or not isinstance(arguments, list)
-            or len(arguments) > 16
-            or any(not isinstance(name, str) or not name.isidentifier() for name in arguments)
-            or len(set(arguments)) != len(arguments)
-            or not isinstance(result_field, str)
-            or len(result_field.encode("utf-8")) > 128
-            or (module, method) in index
-        ):
-            raise ValueError("invalid split-phase capability projection")
-        index[(module, method)] = {
-            "capability": capability,
-            "module": module,
-            "method": method,
-            "arguments": tuple(arguments),
-            "result_field": result_field,
-        }
-    return index
-
-
-def _projected_call(node, projection_index):
-    if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute) or not isinstance(node.func.value, ast.Name):
-        return None
-    return projection_index.get((node.func.value.id, node.func.attr))
-
-
-def _observes_compiled_code(node):
-    if isinstance(node, ast.Attribute):
-        return node.attr.startswith("co_") or node.attr in {
-            "__code__", "__traceback__", "tb_frame", "tb_next", "tb_lineno",
-            "f_code", "f_back", "gi_code", "cr_code", "ag_code", "_getframe",
-            "settrace", "gettrace", "setprofile", "getprofile", "call_tracing", "monitoring",
-        }
-    if isinstance(node, ast.Name):
-        return node.id in {
-            "__import__", "breakpoint", "compile", "dir", "eval", "exec", "getattr", "globals",
-            "hasattr", "locals", "vars",
-        }
-    if isinstance(node, ast.Import):
-        return any(alias.name.partition(".")[0] in {"dis", "inspect", "traceback"} for alias in node.names)
-    if isinstance(node, ast.ImportFrom) and node.module is not None:
-        return node.module.partition(".")[0] in {"dis", "inspect", "traceback"}
-    return False
-
-
-def _mutates_projection_receiver(node, modules):
-    if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
-        return node.id in modules
-    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-        return node.name in modules
-    if isinstance(node, ast.arg):
-        return node.arg in modules
-    if isinstance(node, ast.Attribute) and isinstance(node.ctx, (ast.Store, ast.Del)):
-        return isinstance(node.value, ast.Name) and node.value.id in modules
-    if isinstance(node, ast.Attribute) and node.attr == "__dict__":
-        return isinstance(node.value, ast.Name) and node.value.id in modules
-    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {"setattr", "delattr"}:
-        return bool(node.args) and isinstance(node.args[0], ast.Name) and node.args[0].id in modules
-    if isinstance(node, ast.alias) and node.asname in modules:
-        return node.name.partition(".")[0] != node.asname
-    if isinstance(node, ast.ImportFrom):
-        return any((alias.asname or alias.name) in modules for alias in node.names)
-    return False
-
-
-def _isolated_physical_line(node, lines):
-    if node.lineno != node.end_lineno or node.lineno < 1 or node.lineno > len(lines):
-        return False
-    line = lines[node.lineno - 1]
-    prefix = line[:node.col_offset].strip()
-    suffix = line[node.end_col_offset:].strip()
-    return not prefix and (not suffix or suffix.startswith("#"))
-
-
-def _split_phase_capability_assignment(statement, lines, projection_index):
-    assignment = _simple_assignment(statement)
-    if assignment is None or not _isolated_physical_line(statement, lines):
-        return None
-    name, call = assignment
-    projection = _projected_call(call, projection_index)
-    if (
-        projection is None
-        or not isinstance(call, ast.Call)
-        or call.lineno != call.end_lineno
-        or any(isinstance(value, ast.Starred) for value in call.args)
-    ):
-        return None
-    argument_names = projection["arguments"]
-    if len(call.args) > len(argument_names) or any(keyword.arg is None for keyword in call.keywords):
-        return None
-    values = {}
-    for index, value in enumerate(call.args):
-        values[argument_names[index]] = value
-    for keyword in call.keywords:
-        if keyword.arg not in argument_names or keyword.arg in values:
-            return None
-        values[keyword.arg] = keyword.value
-    if set(values) != set(argument_names):
-        return None
-    loaded_names = set()
-    for argument_name in argument_names:
-        value = values[argument_name]
-        if isinstance(value, ast.Name):
-            loaded_names.add(value.id)
-        elif not (
-            isinstance(value, ast.Constant)
-            and (value.value is None or type(value.value) in (bool, int, float, str))
-        ):
-            return None
-    return name, call, projection, loaded_names, values
-
-
-def _v1_transparent_expression(node):
-    if isinstance(node, ast.Constant):
-        return node.value is None or type(node.value) in (bool, int, float, str)
-    if isinstance(node, ast.Name):
-        return True
-    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult)):
-        return _v1_transparent_expression(node.left) and _v1_transparent_expression(node.right)
-    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub, ast.Not)):
-        return _v1_transparent_expression(node.operand)
-    return False
-
-
-def _v1_transparent_statement(statement):
-    assignment = _simple_assignment(statement)
-    return assignment is not None and statement.lineno == statement.end_lineno and _v1_transparent_expression(assignment[1])
-
-
-def _split_phase_site(call):
-    return "s%dc%d-e%dc%d" % (call.lineno, call.col_offset, call.end_lineno, call.end_col_offset)
-
-
-def _plm_arguments_tree(argument_names, values):
-    return ast.Dict(
-        keys=[ast.Constant(value=name) for name in argument_names],
-        values=[copy.deepcopy(values[name]) for name in argument_names],
-    )
-
-
-def _plm_runtime_name(name):
-    node = ast.Name(id=name, ctx=ast.Load())
-    setattr(node, "_pysolate_trusted_runtime", True)
-    return node
-
-
-def _plm_prepare_tree(base_slot, base_call, projection, argument_names, values, location):
-    node = ast.Expr(value=ast.Call(
-        func=_plm_runtime_name("_pysolate_plm_prepare"),
-        args=[
-            ast.Constant(value=base_slot),
-            ast.Constant(value=base_call),
-            ast.Constant(value=projection["capability"]),
-            _plm_arguments_tree(argument_names, values),
-        ],
-        keywords=[],
-    ))
-    return ast.fix_missing_locations(ast.copy_location(node, location))
-
-
-def _plm_materialize_tree(name, base_slot, projection, argument_names, values, location):
-    value = ast.Call(
-        func=_plm_runtime_name("_pysolate_plm_linearize"),
-        args=[
-            ast.Constant(value=base_slot),
-            ast.Constant(value=projection["capability"]),
-            _plm_arguments_tree(argument_names, values),
-        ],
-        keywords=[],
-    )
-    if projection["result_field"]:
-        value = ast.Subscript(value=value, slice=ast.Constant(value=projection["result_field"]), ctx=ast.Load())
-    return ast.fix_missing_locations(ast.copy_location(
-        ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=value), location
-    ))
-
-
-def _plm_capability_calls(source, projections, prepared_tree=None):
-    if (
-        not isinstance(source, str)
-        or not source
-        or "\r" in source
-        or len(source.encode("utf-8")) > MAX_SOURCE_BYTES
-    ):
-        raise ValueError("invalid source pass input")
-    projection_index = _validated_capability_projection_index(projections)
-    projection_modules = {module for module, _ in projection_index}
-    tree = prepared_tree if isinstance(prepared_tree, ast.Module) else ast.parse(source, filename="<agent-run>", mode="exec")
-    lines = source.splitlines()
-    projected_calls = set()
-    for node in ast.walk(tree):
-        if _observes_compiled_code(node) or _mutates_projection_receiver(node, projection_modules):
-            return tree, "", 0, None
-        if isinstance(node, ast.Call) and _projected_call(node, projection_index) is not None:
-            projected_calls.add(id(node))
-    if not projected_calls:
-        return tree, "", 0, None
-
-    ast_edits = {}
-    supported_calls = set()
-
-    def ast_edit(statement):
-        return ast_edits.setdefault(id(statement), {"before": [], "after": [], "replacement": None})
-
-    def process_block(statements, inherited_names):
-        if not statements:
-            return
-        definitions = {}
-        for index, statement in enumerate(statements):
-            assignment = _simple_assignment(statement)
-            if assignment is not None:
-                definitions.setdefault(assignment[0], []).append(index)
-
-        def names_before(index):
-            return inherited_names | {name for name, positions in definitions.items() if positions[0] < index}
-
-        def latest_definition_before(name, index):
-            return max((position for position in definitions.get(name, ()) if position < index), default=-1)
-
-        for index, statement in enumerate(statements):
-            parsed = _split_phase_capability_assignment(
-                statement, lines, projection_index
-            )
-            if parsed is None:
-                continue
-            name, call, projection, loaded_names, values = parsed
-            if not loaded_names.issubset(names_before(index)):
-                continue
-            supported_calls.add(id(call))
-            latest_definition = -1
-            for loaded_name in loaded_names:
-                latest_definition = max(latest_definition, latest_definition_before(loaded_name, index))
-            issue_after = latest_definition
-            for candidate in range(latest_definition + 1, index):
-                candidate_call = _simple_assignment(statements[candidate])
-                if candidate_call is not None and _projected_call(candidate_call[1], projection_index) is not None:
-                    continue
-                if not _v1_transparent_statement(statements[candidate]):
-                    issue_after = candidate
-            site = _split_phase_site(call)
-            base_slot = "slot-" + site
-            base_call = "plm-" + site
-            argument_names = projection["arguments"]
-            if issue_after < 0:
-                target = statements[0]
-                ast_edit(target)["before"].append(_plm_prepare_tree(
-                    base_slot, base_call, projection, argument_names, values, target
-                ))
-            else:
-                target = statements[issue_after]
-                ast_edit(target)["after"].append(_plm_prepare_tree(
-                    base_slot, base_call, projection, argument_names, values, target
-                ))
-            current_ast = ast_edit(statement)
-            if current_ast["replacement"] is not None:
-                raise ValueError("overlapping split-phase capability rewrite")
-            current_ast["replacement"] = _plm_materialize_tree(
-                name, base_slot, projection, argument_names, values, statement
-            )
-
-        for index, statement in enumerate(statements):
-            if isinstance(statement, ast.If):
-                child_names = names_before(index)
-                process_block(statement.body, child_names)
-                process_block(statement.orelse, child_names)
-            elif isinstance(statement, (ast.For, ast.AsyncFor)) and isinstance(statement.target, ast.Name):
-                child_names = names_before(index)
-                process_block(statement.body, child_names | {statement.target.id})
-                process_block(statement.orelse, child_names)
-
-        rewritten = []
-        for statement in statements:
-            operations = ast_edits.get(id(statement))
-            if operations is None:
-                rewritten.append(statement)
-                continue
-            rewritten.extend(operations["before"])
-            rewritten.append(operations["replacement"] or statement)
-            rewritten.extend(operations["after"])
-        statements[:] = rewritten
-
-    process_block(tree.body, {"inputs"})
-    if supported_calls != projected_calls:
-        return tree, "", 0, None
-
-    return tree, "", len(supported_calls), tree
-
-
 def _data_local_numpy_sum(source):
     if (
         not isinstance(source, str)
@@ -659,22 +341,21 @@ def _data_local_numpy_sum(source):
 _TRANSFORMS = {
     (PURE_SCALAR_CSE, PURE_SCALAR_CSE_VERSION): _pure_scalar_cse,
     (PURE_SCALAR_FOLD, PURE_SCALAR_FOLD_VERSION): _pure_scalar_fold,
-    (PLM_CAPABILITY_CALLS, PLM_CAPABILITY_CALLS_VERSION): _plm_capability_calls,
     (DATA_LOCAL_NUMPY_SUM, DATA_LOCAL_NUMPY_SUM_VERSION): _data_local_numpy_sum,
 }
 
 
 def emit_source_pass_patch_request_json(request_json, prepared_tree=None):
-    global _pending_capability_selection
-    _reset_source_pass_state()
     probe = json.loads(request_json)
-    capability_pass = (
+    if (
         isinstance(probe, dict)
-        and (probe.get("pass_name"), probe.get("pass_version")) in {
-            (PLM_CAPABILITY_CALLS, PLM_CAPABILITY_CALLS_VERSION),
-        }
-    )
-    request = _decode(request_json, _CAPABILITY_REQUEST_KEYS if capability_pass else _REQUEST_KEYS)
+        and probe.get("pass_name") == PLM_CAPABILITY_CALLS
+        and probe.get("pass_version") == PLM_CAPABILITY_CALLS_VERSION
+    ):
+        from .plm_source_pass import emit_patch
+
+        return emit_patch(request_json, prepared_tree)
+    request = _decode(request_json, _REQUEST_KEYS)
     transform = _TRANSFORMS.get((request["pass_name"], request["pass_version"]))
     if (
         transform is None
@@ -683,13 +364,7 @@ def emit_source_pass_patch_request_json(request_json, prepared_tree=None):
         or not isinstance(request["source"], str)
     ):
         raise ValueError("unsupported source pass")
-    if capability_pass:
-        _, derived_source, replacement_count, derived_tree = transform(
-            request["source"], request["capability_projections"], prepared_tree
-        )
-    else:
-        _, derived_source, replacement_count = transform(request["source"])
-        derived_tree = ast.parse(derived_source, filename="<agent-run>", mode="exec") if replacement_count > 0 else None
+    _, derived_source, replacement_count = transform(request["source"])
     applied = replacement_count > 0
     patch = {
         "schema_version": PATCH_SCHEMA_VERSION,
@@ -700,56 +375,31 @@ def emit_source_pass_patch_request_json(request_json, prepared_tree=None):
         "original_source_sha256": _digest(request["source"].encode("utf-8")),
         "replacement_count": replacement_count,
     }
-    if capability_pass:
-        patch["capability_projections"] = request["capability_projections"]
-        if applied:
-            _pending_capability_selection = (request["source"], patch, derived_tree)
-    else:
-        patch["derived_source"] = derived_source
-        patch["derived_source_sha256"] = _digest(derived_source.encode("utf-8")) if applied else ""
+    patch["derived_source"] = derived_source
+    patch["derived_source_sha256"] = _digest(derived_source.encode("utf-8")) if applied else ""
     return _contract(patch)
 
 
 def validate_source_pass_execution_request(final_source, patch_json):
-    global _pending_capability_selection
     probe = json.loads(patch_json)
-    capability_pass = (
+    if (
         isinstance(probe, dict)
-        and (probe.get("pass_name"), probe.get("pass_version")) in {
-            (PLM_CAPABILITY_CALLS, PLM_CAPABILITY_CALLS_VERSION),
-        }
-    )
-    patch = _decode(patch_json, _CAPABILITY_PATCH_KEYS if capability_pass else _PATCH_KEYS)
+        and probe.get("pass_name") == PLM_CAPABILITY_CALLS
+        and probe.get("pass_version") == PLM_CAPABILITY_CALLS_VERSION
+    ):
+        from .plm_source_pass import select_tree
+
+        return select_tree(final_source, patch_json)
+    patch = _decode(patch_json, _PATCH_KEYS)
     if patch["status"] != "applied" or patch["replacement_count"] <= 0:
         raise ValueError("source pass patch is not applicable")
-    pending = _pending_capability_selection
-    _pending_capability_selection = None
-    if capability_pass and pending is not None:
-        pending_source, pending_patch, pending_tree = pending
-        if final_source == pending_source and patch == pending_patch:
-            return pending_tree
     request = _canonical({
         "pass_name": patch["pass_name"],
         "pass_version": patch["pass_version"],
         "registration_sha256": patch["registration_sha256"],
         "source": final_source,
     })
-    if capability_pass:
-        request_value = json.loads(request)
-        request_value["capability_projections"] = patch["capability_projections"]
-        request = _canonical(request_value)
-    replayed_tree = None
-    try:
-        expected = _decode(
-            emit_source_pass_patch_request_json(request),
-            _CAPABILITY_PATCH_KEYS if capability_pass else _PATCH_KEYS,
-        )
-        if capability_pass and _pending_capability_selection is not None:
-            replayed_tree = _pending_capability_selection[2]
-    finally:
-        _pending_capability_selection = None
+    expected = _decode(emit_source_pass_patch_request_json(request), _PATCH_KEYS)
     if expected != patch:
         raise ValueError("source pass patch does not match the original source")
-    if replayed_tree is not None:
-        return replayed_tree
     return ast.parse(patch["derived_source"], filename="<agent-run>", mode="exec")

@@ -374,7 +374,7 @@ def _plm_prepare_tree(base_slot, base_call, projection, argument_names, values, 
         ],
         keywords=[],
     ))
-    return ast.copy_location(node, location)
+    return ast.fix_missing_locations(ast.copy_location(node, location))
 
 
 def _plm_materialize_tree(name, base_slot, projection, argument_names, values, location):
@@ -389,10 +389,9 @@ def _plm_materialize_tree(name, base_slot, projection, argument_names, values, l
     )
     if projection["result_field"]:
         value = ast.Subscript(value=value, slice=ast.Constant(value=projection["result_field"]), ctx=ast.Load())
-    return ast.copy_location(
-        ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=value),
-        location,
-    )
+    return ast.fix_missing_locations(ast.copy_location(
+        ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=value), location
+    ))
 
 
 def _plm_capability_calls(source, projections, prepared_tree=None):
@@ -477,11 +476,12 @@ def _plm_capability_calls(source, projections, prepared_tree=None):
             )
 
         for index, statement in enumerate(statements):
-            child_names = names_before(index)
             if isinstance(statement, ast.If):
+                child_names = names_before(index)
                 process_block(statement.body, child_names)
                 process_block(statement.orelse, child_names)
             elif isinstance(statement, (ast.For, ast.AsyncFor)) and isinstance(statement.target, ast.Name):
+                child_names = names_before(index)
                 process_block(statement.body, child_names | {statement.target.id})
                 process_block(statement.orelse, child_names)
 
@@ -500,7 +500,6 @@ def _plm_capability_calls(source, projections, prepared_tree=None):
     if supported_calls != projected_calls:
         return tree, "", 0, None
 
-    tree = ast.fix_missing_locations(tree)
     return tree, "", len(supported_calls), tree
 
 

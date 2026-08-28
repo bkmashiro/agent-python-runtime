@@ -8,6 +8,16 @@ import (
 
 const PLMContractVersionV1 = "pysolate.plm-contract.v1"
 
+const PLMProviderOutcomeUncertainCode = "provider_outcome_uncertain"
+
+// PLMProviderOutcomeUncertain is returned by an adapter when it cannot prove
+// whether a physical provider operation took effect. Such an outcome is
+// terminal at the logical call and must never be replayed automatically.
+type PLMProviderOutcomeUncertain interface {
+	error
+	ProviderOutcomeUncertain() bool
+}
+
 type TemporalMode string
 
 type PrepareEffectMode string
@@ -140,8 +150,9 @@ func (binding CandidateBinding) valid() bool {
 type CandidateOutcome string
 
 const (
-	CandidateValue   CandidateOutcome = "value"
-	CandidateFailure CandidateOutcome = "failure"
+	CandidateValue     CandidateOutcome = "value"
+	CandidateFailure   CandidateOutcome = "failure"
+	CandidateUncertain CandidateOutcome = "uncertain"
 )
 
 // TemporalEvidence is produced by an operation-specific Host adapter. Generic
@@ -249,7 +260,7 @@ func DecidePLMLinearization(contract PLMContract, candidate CandidateCertificate
 		return LinearizationDecision{Action: LinearizationStartCanonical, Reason: reason}
 	}
 	if contract.Validate() != nil || !candidate.Binding.valid() || !current.Binding.valid() ||
-		(candidate.Outcome != CandidateValue && candidate.Outcome != CandidateFailure) {
+		(candidate.Outcome != CandidateValue && candidate.Outcome != CandidateFailure && candidate.Outcome != CandidateUncertain) {
 		return restart(LinearizationInvalidContract)
 	}
 	if candidate.Binding != current.Binding {

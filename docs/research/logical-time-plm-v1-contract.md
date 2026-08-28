@@ -184,6 +184,11 @@ prepare timeout/error
 A metadata label alone cannot adopt a prepare-time failure. No prepare exception is surfaced to
 Python before the original call.
 
+An adapter may return the typed `PLMProviderOutcomeUncertain` error only when it cannot prove
+whether the physical provider operation took effect. The candidate still passes binding,
+temporal and provider-proof checks at `L`, but materialises
+`provider_outcome_uncertain` as one logical error. It is never replayed canonically.
+
 ## Authority
 
 V1 always uses `RECHECK_AT_LINEARIZE`. Authority used for physical preparation does not grant the

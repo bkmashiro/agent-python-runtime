@@ -155,6 +155,10 @@ func (prepared *PreparedPLM) Call(ctx context.Context) (StagedCapabilityOutcome,
 	}
 	physicalResultBytes := uint64(len(result))
 	if err != nil {
+		var uncertain PLMProviderOutcomeUncertain
+		if errors.As(err, &uncertain) && uncertain.ProviderOutcomeUncertain() {
+			return StagedCapabilityOutcome{ErrorCode: PLMProviderOutcomeUncertainCode, PhysicalResultBytes: physicalResultBytes}, nil
+		}
 		if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
 			return StagedCapabilityOutcome{PhysicalResultBytes: physicalResultBytes}, err
 		}

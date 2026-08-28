@@ -22,7 +22,7 @@ type StagedCapabilityOutcome struct {
 func (outcome StagedCapabilityOutcome) Validate() error {
 	hasResult := len(outcome.Result) != 0
 	hasError := outcome.ErrorCode != ""
-	if hasResult == hasError || (hasError && outcome.ErrorCode != "handler_error" && outcome.ErrorCode != "invalid_result") {
+	if hasResult == hasError || (hasError && outcome.ErrorCode != "handler_error" && outcome.ErrorCode != "invalid_result" && outcome.ErrorCode != PLMProviderOutcomeUncertainCode) {
 		return ErrPreDispatchUnavailable
 	}
 	return nil

@@ -193,6 +193,8 @@ type plmVerticalAdapter struct {
 	providerSession string
 	transportRuns   atomic.Uint32
 	transportReady  chan struct{}
+	validate        func(context.Context, capability.PLMValidationRequest) (capability.PLMValidationResult, error)
+	maxCalls        uint32
 }
 
 func (adapter *plmVerticalAdapter) Call(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
@@ -215,7 +217,10 @@ func (adapter *plmVerticalAdapter) PLMValidatorIdentities() capability.PLMValida
 	}
 }
 
-func (adapter *plmVerticalAdapter) ValidatePLM(context.Context, capability.PLMValidationRequest) (capability.PLMValidationResult, error) {
+func (adapter *plmVerticalAdapter) ValidatePLM(ctx context.Context, request capability.PLMValidationRequest) (capability.PLMValidationResult, error) {
+	if adapter.validate != nil {
+		return adapter.validate(ctx, request)
+	}
 	return capability.PLMValidationResult{
 		Temporal: adapter.temporal, TemporalValid: adapter.temporalValid,
 		ProviderNonInterferenceValid: adapter.providerValid, StableFailureValid: adapter.stableValid,
@@ -270,7 +275,11 @@ func plmVerticalPlan(t *testing.T, mode capability.TemporalMode, adapter *plmVer
 	if err := registry.Register(spec, basicGrant(t), adapter); err != nil {
 		t.Fatal(err)
 	}
-	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+	maxCalls := adapter.maxCalls
+	if maxCalls == 0 {
+		maxCalls = 1
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: maxCalls})
 	if err != nil {
 		t.Fatal(err)
 	}

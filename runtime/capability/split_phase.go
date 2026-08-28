@@ -344,7 +344,11 @@ func (table *SplitPhaseTable) execute(ctx context.Context, entry *splitPhaseEntr
 		}
 	} else if outcome.ErrorCode != "" && entry.plmContract != nil {
 		entry.candidateState = CandidateFailed
-		entry.certificate.Outcome = CandidateFailure
+		if outcome.ErrorCode == PLMProviderOutcomeUncertainCode {
+			entry.certificate.Outcome = CandidateUncertain
+		} else {
+			entry.certificate.Outcome = CandidateFailure
+		}
 	}
 	table.recordLocked(entry, disposition)
 	close(entry.done)
@@ -517,6 +521,12 @@ func (table *SplitPhaseTable) ClaimCall(ctx context.Context, callID, capabilityN
 	table.mu.Lock()
 	defer table.mu.Unlock()
 	if entry.plmContract != nil && (entry.runErr != nil || entry.outcome.ErrorCode != "") {
+		if entry.outcome.ErrorCode == PLMProviderOutcomeUncertainCode {
+			entry.consumed = true
+			table.snapshot.Consumed++
+			table.recordLocked(entry, "provider_outcome_uncertain")
+			return entry.outcome, nil
+		}
 		if ctx.Err() != nil {
 			return StagedCapabilityOutcome{}, ctx.Err()
 		}

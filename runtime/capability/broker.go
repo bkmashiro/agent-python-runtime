@@ -361,6 +361,9 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 		}
 		if claimErr == nil && staged.ErrorCode != "" {
 			broker.record(call, operation, "error", nil)
+			if staged.ErrorCode == PLMProviderOutcomeUncertainCode {
+				return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: PLMProviderOutcomeUncertainCode, Message: "Provider outcome is uncertain; the operation was not replayed"}})
+			}
 			if staged.ErrorCode == "handler_error" {
 				return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "handler_error", Message: "Host tool failed"}})
 			}

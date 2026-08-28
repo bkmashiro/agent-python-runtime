@@ -11,8 +11,6 @@ PURE_SCALAR_CSE = "pure_scalar_cse"
 PURE_SCALAR_CSE_VERSION = "pysolate.pure-scalar-cse-pass.v1"
 PURE_SCALAR_FOLD = "pure_scalar_fold"
 PURE_SCALAR_FOLD_VERSION = "pysolate.pure-scalar-fold-pass.v1"
-PLM_CAPABILITY_CALLS = "plm_capability_calls"
-PLM_CAPABILITY_CALLS_VERSION = "pysolate.plm-capability-calls-pass.v1"
 DATA_LOCAL_NUMPY_SUM = "data_local_numpy_sum"
 DATA_LOCAL_NUMPY_SUM_VERSION = "pysolate.data-local-numpy-sum-pass.v2"
 _REQUEST_KEYS = {"pass_name", "pass_version", "registration_sha256", "source"}
@@ -346,16 +344,6 @@ _TRANSFORMS = {
 
 
 def emit_source_pass_patch_request_json(request_json, prepared_tree=None):
-    probe = json.loads(request_json)
-    if (
-        isinstance(probe, dict)
-        and probe.get("pass_name") == PLM_CAPABILITY_CALLS
-        and probe.get("pass_version") == PLM_CAPABILITY_CALLS_VERSION
-    ):
-        from .plm_source_pass import emit_patch
-
-        source = probe.pop("source", None)
-        return emit_patch(probe, source, prepared_tree)
     request = _decode(request_json, _REQUEST_KEYS)
     transform = _TRANSFORMS.get((request["pass_name"], request["pass_version"]))
     if (
@@ -382,15 +370,6 @@ def emit_source_pass_patch_request_json(request_json, prepared_tree=None):
 
 
 def validate_source_pass_execution_request(final_source, patch_json):
-    probe = json.loads(patch_json)
-    if (
-        isinstance(probe, dict)
-        and probe.get("pass_name") == PLM_CAPABILITY_CALLS
-        and probe.get("pass_version") == PLM_CAPABILITY_CALLS_VERSION
-    ):
-        from .plm_source_pass import select_tree
-
-        return select_tree(final_source, probe)
     patch = _decode(patch_json, _PATCH_KEYS)
     if patch["status"] != "applied" or patch["replacement_count"] <= 0:
         raise ValueError("source pass patch is not applicable")

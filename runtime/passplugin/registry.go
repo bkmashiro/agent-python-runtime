@@ -49,7 +49,6 @@ type HostScheduledSourcePatchPlugin interface {
 
 type CapabilitySourcePatchPlugin interface {
 	Plugin
-	Transform(context.Context, sourcepatch.Transformer, string, []sourcepatch.CapabilityProjection) (sourcepatch.Patch, error)
 	HostScheduled() bool
 }
 

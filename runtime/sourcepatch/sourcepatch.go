@@ -168,13 +168,6 @@ func (pass PureScalarCSE) Transform(ctx context.Context, transformer Transformer
 	return transform(ctx, transformer, source, pass.registration, PureScalarCSEName, nil)
 }
 
-func (pass PLMCapabilityCalls) Transform(ctx context.Context, transformer Transformer, source string, projections []CapabilityProjection) (Patch, error) {
-	if !validCapabilityProjections(projections) {
-		return Patch{}, ErrInvalidPatch
-	}
-	return transform(ctx, transformer, source, pass.registration, PLMCapabilityCallsName, projections)
-}
-
 func (pass DataLocalNumpySum) Transform(ctx context.Context, transformer Transformer, source string) (Patch, error) {
 	return transform(ctx, transformer, source, pass.registration, DataLocalNumpySumName, nil)
 }

@@ -5,8 +5,8 @@ import unittest
 
 from agent_runtime import plm_source_pass
 from agent_runtime.source_pass import (
-    emit_source_pass_patch_request_json,
-    validate_source_pass_execution_request,
+    emit_source_pass_patch_request_json as emit_generic_patch,
+    validate_source_pass_execution_request as validate_generic_patch,
 )
 
 
@@ -57,6 +57,21 @@ CAPABILITY_PROJECTIONS = [
         "result_field": "quote",
     },
 ]
+
+
+def emit_source_pass_patch_request_json(raw, prepared_tree=None):
+    request_value = json.loads(raw)
+    if request_value.get("pass_name") == plm_source_pass.PASS_NAME:
+        source = request_value.pop("source")
+        return plm_source_pass.emit_patch(request_value, source, prepared_tree)
+    return emit_generic_patch(raw, prepared_tree)
+
+
+def validate_source_pass_execution_request(source, raw):
+    patch = json.loads(raw)
+    if patch.get("pass_name") == plm_source_pass.PASS_NAME:
+        return plm_source_pass.select_tree(source, patch)
+    return validate_generic_patch(source, raw)
 
 
 class SourcePassTests(unittest.TestCase):

@@ -430,7 +430,41 @@ func (table *SplitPhaseTable) LinearizeAndMaterialize(ctx context.Context, slotI
 	entry.stableFailureValidated = current.StableFailureValidated
 	decision := DecidePLMLinearization(contract, candidate, current)
 	if decision.Action != LinearizationAdopt {
-		table.rejectPLMCandidateLocked(entry, decision.Reason)
+		entry.cancel()
+		if contextErr := ctx.Err(); contextErr != nil {
+			entry.jobState = JobCancelled
+			table.recordLocked(entry, "job_cancelled")
+			table.snapshot.LinearizationNanos = saturatingAdd64(table.snapshot.LinearizationNanos, uint64(time.Since(linearizationStarted)))
+			table.mu.Unlock()
+			return nil, contextErr
+		}
+		done := entry.done
+		table.mu.Unlock()
+		select {
+		case <-done:
+		case <-ctx.Done():
+			table.mu.Lock()
+			entry.jobState = JobCancelled
+			table.recordLocked(entry, "job_cancelled")
+			table.snapshot.LinearizationNanos = saturatingAdd64(table.snapshot.LinearizationNanos, uint64(time.Since(linearizationStarted)))
+			table.mu.Unlock()
+			return nil, ctx.Err()
+		}
+		table.mu.Lock()
+		if contextErr := ctx.Err(); contextErr != nil {
+			entry.jobState = JobCancelled
+			table.recordLocked(entry, "job_cancelled")
+			table.snapshot.LinearizationNanos = saturatingAdd64(table.snapshot.LinearizationNanos, uint64(time.Since(linearizationStarted)))
+			table.mu.Unlock()
+			return nil, contextErr
+		}
+		if entry.certificate.Outcome == CandidateUncertain {
+			entry.rejected = true
+			table.snapshot.CandidatesRejected++
+			table.recordLocked(entry, "candidate_terminal_uncertain:"+string(decision.Reason))
+		} else {
+			table.rejectPLMCandidateLocked(entry, decision.Reason)
+		}
 	} else {
 		table.recordLocked(entry, "candidate_validated")
 	}

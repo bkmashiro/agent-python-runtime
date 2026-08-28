@@ -325,7 +325,9 @@ func TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder(t *testing.T) {
 func TestPLMCancellationAndLateCompletionRemainRunOwned(t *testing.T) {
 	t.Run("during validation", func(t *testing.T) {
 		entered := make(chan struct{})
+		var physical atomic.Uint32
 		adapter := &plmVerticalAdapter{handler: func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+			physical.Add(1)
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
@@ -346,15 +348,21 @@ func TestPLMCancellationAndLateCompletionRemainRunOwned(t *testing.T) {
 			t.Fatal(err)
 		}
 		ctx, cancel := context.WithCancel(context.Background())
-		responseCh := make(chan []byte, 1)
+		type cancellationResult struct {
+			response []byte
+			err      error
+		}
+		responseCh := make(chan cancellationResult, 1)
 		go func() {
-			response, _ := table.LinearizeAndMaterialize(ctx, "slot-cancel", plmVerticalLogical(certificate, "a.txt"))
-			responseCh <- response
+			response, err := table.LinearizeAndMaterialize(ctx, "slot-cancel", plmVerticalLogical(certificate, "a.txt"))
+			responseCh <- cancellationResult{response: response, err: err}
 		}()
 		<-entered
 		cancel()
-		if response := <-responseCh; !containsCode(response, "handler_error") {
-			t.Fatalf("response=%s", response)
+		got := <-responseCh
+		if physical.Load() > 1 || (got.err == nil && !containsCode(got.response, "handler_error")) ||
+			(got.err != nil && !errors.Is(got.err, context.Canceled)) {
+			t.Fatalf("physical=%d response=%s err=%v", physical.Load(), got.response, got.err)
 		}
 		if err := broker.Finalize(false); err != nil {
 			t.Fatal(err)

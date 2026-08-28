@@ -192,9 +192,11 @@ A metadata label alone cannot adopt a prepare-time failure. No prepare exception
 Python before the original call.
 
 An adapter may return the typed `PLMProviderOutcomeUncertain` error only when it cannot prove
-whether the physical provider operation took effect. The candidate still passes binding,
-temporal and provider-proof checks at `L`, but materialises
-`provider_outcome_uncertain` as one logical error. It is never replayed canonically.
+whether the physical provider operation took effect. Once the exact slot/request candidate is
+bound at `L`, any restart decision first cancels and settles that candidate. If it reports
+uncertainty, PLM materialises `provider_outcome_uncertain` as one logical error even when the
+candidate value fails temporal or provider-proof checks. This is not adoption of the candidate
+value, and the Host never starts a second canonical provider operation.
 
 ## Authority
 

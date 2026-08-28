@@ -229,17 +229,25 @@ func DecidePLMLinearization(contract PLMContract, candidate CandidateCertificate
 type CandidateState string
 
 const (
-	CandidatePreparing CandidateState = "preparing"
+	CandidatePrepared  CandidateState = "prepared"
+	CandidateRunning   CandidateState = "running"
 	CandidateReady     CandidateState = "ready"
 	CandidateFailed    CandidateState = "failed"
+	CandidateCancelled CandidateState = "cancelled"
 	CandidateAdopted   CandidateState = "adopted"
 	CandidateDiscarded CandidateState = "discarded"
+
+	// CandidatePreparing is retained as a source-compatible name for the frozen
+	// Gate 1 schema; new execution records Prepared then Running explicitly.
+	CandidatePreparing = CandidatePrepared
 )
 
 func ValidCandidateTransition(from, to CandidateState) bool {
 	switch from {
-	case CandidatePreparing:
-		return to == CandidateReady || to == CandidateFailed || to == CandidateDiscarded
+	case CandidatePrepared:
+		return to == CandidateRunning || to == CandidateCancelled || to == CandidateDiscarded
+	case CandidateRunning:
+		return to == CandidateReady || to == CandidateFailed || to == CandidateCancelled
 	case CandidateReady, CandidateFailed:
 		return to == CandidateAdopted || to == CandidateDiscarded
 	default:
@@ -250,16 +258,18 @@ func ValidCandidateTransition(from, to CandidateState) bool {
 type JobState string
 
 const (
-	JobPending      JobState = "pending"
+	JobLinearized   JobState = "linearized"
 	JobCompleted    JobState = "completed"
 	JobFailed       JobState = "failed"
 	JobMaterialized JobState = "materialized"
 	JobCancelled    JobState = "cancelled"
+
+	JobPending = JobLinearized
 )
 
 func ValidJobTransition(from, to JobState) bool {
 	switch from {
-	case JobPending:
+	case JobLinearized:
 		return to == JobCompleted || to == JobFailed || to == JobCancelled
 	case JobCompleted, JobFailed:
 		return to == JobMaterialized

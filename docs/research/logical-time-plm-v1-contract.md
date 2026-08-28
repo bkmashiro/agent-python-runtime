@@ -1,6 +1,6 @@
 # Logical-time PLM V1 contract
 
-Status: **Frozen for Gate 2 implementation. Not connected to production execution.**
+Status: **Frozen. Gate 3 Host P + (L=M) substrate is implemented; compiler/Guest production execution is not yet connected.**
 
 Architecture source: [Logical-Time-Preserving Split-Phase Execution](logical-time-preserving-split-phase-execution.md)
 
@@ -30,6 +30,27 @@ L = M = original source call
 
 Delayed materialization is not admitted. The existing compiler may move physical preparation,
 but no concrete value or exception crosses the original call as a Python proxy.
+
+## Executable Gate 3 Host slice
+
+The existing Run-owned table now exposes a versioned PLM path without creating a second
+attempt framework:
+
+```go
+PrepareOrReuse(ctx, slot, request, contract, certificate)
+LinearizeAndMaterialize(ctx, slot, currentContext)
+```
+
+`PrepareOrReuse` admits only `IMMUTABLE` in Gate 3, creates no Broker call and records no
+receipt. `LinearizeAndMaterialize` is invoked at the original logical source position. It
+creates one internal job, evaluates the frozen linearization decision and makes exactly one
+Broker call. A valid candidate is claimed by that call. A mismatch or a prepare-time failure
+detaches the candidate and lets the same Broker call execute the canonical handler; it does
+not create a second logical operation.
+
+The predecessor `IssueOrReuse` / `Materialize` entry points remain temporarily for the existing
+compiler path. They cannot consume a PLM candidate and are removed only after Gate 5 exact-Guest
+parity, so production behavior is not silently relabelled as PLM.
 
 ## Time and state
 

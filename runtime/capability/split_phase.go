@@ -3,8 +3,10 @@ package capability
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -47,21 +49,33 @@ type SplitPhaseSnapshot struct {
 	PhysicalResultBytes uint64
 	MaximumConcurrent   uint32
 	EventsDropped       uint32
+	CandidatesPrepared  uint32
+	CandidatesAdopted   uint32
+	CandidatesRejected  uint32
+	CanonicalStarts     uint32
+	JobsLinearized      uint32
+	JobsMaterialized    uint32
 	Events              []SplitPhaseEvent
 }
 
 type splitPhaseEntry struct {
-	slotID        string
-	call          request
-	request       []byte
-	prepared      *PreparedPreDispatch
-	cancel        context.CancelFunc
-	done          chan struct{}
-	outcome       StagedCapabilityOutcome
-	runErr        error
-	materializing bool
-	consumed      bool
-	discarded     bool
+	slotID         string
+	call           request
+	request        []byte
+	prepared       *PreparedPreDispatch
+	cancel         context.CancelFunc
+	done           chan struct{}
+	outcome        StagedCapabilityOutcome
+	runErr         error
+	materializing  bool
+	consumed       bool
+	discarded      bool
+	plmContract    *PLMContract
+	certificate    *CandidateCertificate
+	candidateState CandidateState
+	jobState       JobState
+	canonical      bool
+	rejected       bool
 }
 
 // SplitPhaseTable owns a bounded set of physical Future attempts for one Run.
@@ -116,14 +130,23 @@ func (table *SplitPhaseTable) PlanIdentity() string {
 	return table.plan.Identity()
 }
 
-// IssueOrReuse is the V1 split-phase entry point. It admits only operations
-// with a positive PreDispatch contract and reuses one exact Run-private
-// attempt when source-time analysis already populated the dynamic slot.
+// IssueOrReuse is the historical predecessor entry point. Gate 5 removes it
+// after the compiler and Guest ABI use PrepareOrReuse.
 func (table *SplitPhaseTable) IssueOrReuse(ctx context.Context, slotID string, raw []byte) error {
-	return table.issue(ctx, slotID, raw)
+	return table.issue(ctx, slotID, raw, nil, nil)
 }
 
-func (table *SplitPhaseTable) issue(ctx context.Context, slotID string, raw []byte) error {
+// PrepareOrReuse starts or reuses one Host-private PLM candidate. It creates no
+// logical Broker call or receipt. Gate 3 admits only immutable candidates; the
+// remaining temporal modes are wired by Gate 4.
+func (table *SplitPhaseTable) PrepareOrReuse(ctx context.Context, slotID string, raw []byte, contract PLMContract, certificate CandidateCertificate) error {
+	if contract.Validate() != nil || contract.Temporal != TemporalImmutable || !contract.CanPrepareValueCandidate() {
+		return ErrSplitPhaseUnavailable
+	}
+	return table.issue(ctx, slotID, raw, &contract, &certificate)
+}
+
+func (table *SplitPhaseTable) issue(ctx context.Context, slotID string, raw []byte, plmContract *PLMContract, certificate *CandidateCertificate) error {
 	if table == nil || ctx == nil || !validIdentity(slotID) {
 		return ErrSplitPhaseUnavailable
 	}
@@ -144,6 +167,14 @@ func (table *SplitPhaseTable) issue(ctx context.Context, slotID string, raw []by
 	}
 	canonicalArguments := prepared.Arguments()
 	call.Arguments = canonicalArguments
+	if plmContract != nil {
+		if certificate == nil || validatePLMPreparation(table, prepared, call, *plmContract, *certificate) != nil {
+			return ErrSplitPhaseUnavailable
+		}
+		if plmContract.CostUnits != costUnits || plmContract.MaxResultBytes != maxResultBytes {
+			return ErrSplitPhaseUnavailable
+		}
+	}
 	canonicalRequest, err := json.Marshal(call)
 	if err != nil || len(canonicalRequest) == 0 || len(canonicalRequest) > maxCallBytes {
 		return ErrSplitPhaseUnavailable
@@ -159,7 +190,8 @@ func (table *SplitPhaseTable) issue(ctx context.Context, slotID string, raw []by
 			table.mu.Unlock()
 			return ErrSplitPhaseConsumed
 		}
-		if !bytes.Equal(existing.request, canonicalRequest) || table.entriesByCall[call.CallID] != existing {
+		if !bytes.Equal(existing.request, canonicalRequest) || table.entriesByCall[call.CallID] != existing ||
+			!samePLMPreparation(existing, plmContract, certificate) {
 			table.mu.Unlock()
 			return ErrSplitPhaseMismatch
 		}
@@ -183,6 +215,12 @@ func (table *SplitPhaseTable) issue(ctx context.Context, slotID string, raw []by
 		slotID: slotID, call: call, request: canonicalRequest, prepared: prepared,
 		cancel: cancel, done: make(chan struct{}),
 	}
+	if plmContract != nil {
+		contractCopy, certificateCopy := *plmContract, *certificate
+		entry.plmContract, entry.certificate = &contractCopy, &certificateCopy
+		entry.candidateState = CandidatePrepared
+		table.snapshot.CandidatesPrepared++
+	}
 	table.entriesBySlot[slotID] = entry
 	table.entriesByCall[call.CallID] = entry
 	table.reservedCostUnits += uint64(costUnits)
@@ -197,6 +235,9 @@ func (table *SplitPhaseTable) issue(ctx context.Context, slotID string, raw []by
 
 func (table *SplitPhaseTable) execute(ctx context.Context, entry *splitPhaseEntry) {
 	table.mu.Lock()
+	if entry.plmContract != nil {
+		entry.candidateState = CandidateRunning
+	}
 	table.snapshot.PhysicalStarts++
 	table.active++
 	if table.active > table.snapshot.MaximumConcurrent {
@@ -214,18 +255,106 @@ func (table *SplitPhaseTable) execute(ctx context.Context, entry *splitPhaseEntr
 	entry.outcome = outcome
 	entry.runErr = runErr
 	disposition := "ready"
+	if entry.plmContract != nil {
+		entry.candidateState = CandidateReady
+		entry.certificate.Outcome = CandidateValue
+	}
 	if runErr != nil {
 		disposition = "failed"
 		table.snapshot.Failed++
+		if entry.plmContract != nil {
+			entry.candidateState = CandidateFailed
+			entry.certificate.Outcome = CandidateFailure
+		}
 		if errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) {
 			disposition = "cancelled"
 			table.snapshot.Failed--
 			table.snapshot.Cancelled++
+			if entry.plmContract != nil {
+				entry.candidateState = CandidateCancelled
+			}
 		}
+	} else if outcome.ErrorCode != "" && entry.plmContract != nil {
+		entry.candidateState = CandidateFailed
+		entry.certificate.Outcome = CandidateFailure
 	}
 	table.recordLocked(entry, disposition)
 	close(entry.done)
 	table.mu.Unlock()
+}
+
+// LinearizeAndMaterialize is the folded V1 L=M operation. Invocation of this
+// method is the original logical source point. It creates one internal job,
+// validates the candidate, then routes exactly one logical call through the
+// owning Broker. Invalid candidates detach before that Broker call so the same
+// logical admission starts the canonical handler.
+func (table *SplitPhaseTable) LinearizeAndMaterialize(ctx context.Context, slotID string, current LinearizationContext) ([]byte, error) {
+	if table == nil || table.owner == nil || ctx == nil {
+		return nil, ErrSplitPhaseUnavailable
+	}
+	table.mu.Lock()
+	entry, ok := table.entriesBySlot[slotID]
+	if !ok || table.closed || entry.plmContract == nil || entry.certificate == nil {
+		table.mu.Unlock()
+		return nil, ErrSplitPhaseUnavailable
+	}
+	if entry.materializing || entry.consumed || entry.jobState != "" {
+		table.mu.Unlock()
+		return nil, ErrSplitPhaseConsumed
+	}
+	entry.materializing = true
+	entry.jobState = JobLinearized
+	table.snapshot.JobsLinearized++
+	requestCopy := append([]byte(nil), entry.request...)
+	candidate := *entry.certificate
+	candidate.Outcome = CandidateValue
+	decision := DecidePLMLinearization(*entry.plmContract, candidate, current)
+	if decision.Action != LinearizationAdopt {
+		table.rejectPLMCandidateLocked(entry, decision.Reason)
+	} else {
+		table.recordLocked(entry, "candidate_validated")
+	}
+	table.recordLocked(entry, "linearized")
+	table.mu.Unlock()
+
+	encoded, callErr := table.owner.Call(ctx, requestCopy)
+
+	table.mu.Lock()
+	if callErr != nil {
+		entry.jobState = JobFailed
+		table.recordLocked(entry, "job_failed")
+	} else {
+		var logical response
+		if json.Unmarshal(encoded, &logical) != nil || logical.Status != "ok" {
+			entry.jobState = JobFailed
+			table.recordLocked(entry, "job_failed")
+		} else {
+			entry.jobState = JobCompleted
+			table.recordLocked(entry, "job_completed")
+		}
+		entry.jobState = JobMaterialized
+		table.snapshot.JobsMaterialized++
+		table.recordLocked(entry, "materialized")
+	}
+	table.mu.Unlock()
+	return encoded, callErr
+}
+
+func (table *SplitPhaseTable) rejectPLMCandidateLocked(entry *splitPhaseEntry, reason LinearizationReason) {
+	if entry == nil || entry.rejected {
+		return
+	}
+	entry.rejected = true
+	entry.canonical = true
+	table.snapshot.CandidatesRejected++
+	table.snapshot.CanonicalStarts++
+	entry.cancel()
+	if entry.candidateState == CandidateReady || entry.candidateState == CandidateFailed {
+		entry.candidateState = CandidateDiscarded
+		entry.discarded = true
+		table.snapshot.Discarded++
+	}
+	table.recordLocked(entry, "candidate_rejected:"+string(reason))
 }
 
 // Materialize routes the original request through Broker so logical budget,
@@ -236,7 +365,7 @@ func (table *SplitPhaseTable) Materialize(ctx context.Context, slotID string) ([
 	}
 	table.mu.Lock()
 	entry, ok := table.entriesBySlot[slotID]
-	if !ok || table.closed {
+	if !ok || table.closed || entry.plmContract != nil {
 		table.mu.Unlock()
 		return nil, ErrSplitPhaseUnavailable
 	}
@@ -268,6 +397,10 @@ func (table *SplitPhaseTable) ClaimCall(ctx context.Context, callID, capabilityN
 		table.mu.Unlock()
 		return StagedCapabilityOutcome{}, ErrStagedObservationNotTargeted
 	}
+	if entry.canonical {
+		table.mu.Unlock()
+		return StagedCapabilityOutcome{}, ErrStagedObservationNotTargeted
+	}
 	if !entry.materializing || entry.call.Capability != capabilityName || !bytes.Equal(entry.call.Arguments, arguments) {
 		table.mu.Unlock()
 		return StagedCapabilityOutcome{}, ErrSplitPhaseMismatch
@@ -287,6 +420,13 @@ func (table *SplitPhaseTable) ClaimCall(ctx context.Context, callID, capabilityN
 
 	table.mu.Lock()
 	defer table.mu.Unlock()
+	if entry.plmContract != nil && (entry.runErr != nil || entry.outcome.ErrorCode != "") && entry.plmContract.Failure == FailureRetryAtLinearize {
+		if ctx.Err() != nil {
+			return StagedCapabilityOutcome{}, ctx.Err()
+		}
+		table.rejectPLMCandidateLocked(entry, LinearizationRetryFailure)
+		return StagedCapabilityOutcome{}, ErrStagedObservationNotTargeted
+	}
 	if entry.runErr != nil {
 		return StagedCapabilityOutcome{}, entry.runErr
 	}
@@ -294,6 +434,11 @@ func (table *SplitPhaseTable) ClaimCall(ctx context.Context, callID, capabilityN
 		return StagedCapabilityOutcome{}, ErrSplitPhaseMismatch
 	}
 	entry.consumed = true
+	if entry.plmContract != nil {
+		entry.candidateState = CandidateAdopted
+		table.snapshot.CandidatesAdopted++
+		table.recordLocked(entry, "candidate_adopted")
+	}
 	table.snapshot.LogicalClaims++
 	table.snapshot.Consumed++
 	table.recordLocked(entry, "consumed")
@@ -330,6 +475,9 @@ func (table *SplitPhaseTable) Finalize(_ bool) error {
 			continue
 		}
 		entry.discarded = true
+		if entry.plmContract != nil && (entry.candidateState == CandidateReady || entry.candidateState == CandidateFailed) {
+			entry.candidateState = CandidateDiscarded
+		}
 		table.snapshot.Discarded++
 		table.recordLocked(entry, "discarded")
 	}
@@ -373,6 +521,31 @@ func saturatingIncrement(value uint32) uint32 {
 		return value
 	}
 	return value + 1
+}
+
+func validatePLMPreparation(table *SplitPhaseTable, prepared *PreparedPreDispatch, call request, contract PLMContract, certificate CandidateCertificate) error {
+	if table == nil || prepared == nil || contract.Temporal != TemporalImmutable || contract.Failure != FailureRetryAtLinearize ||
+		!certificate.Binding.valid() || certificate.Temporal.Mode != TemporalImmutable || certificate.Temporal.ResourceIdentity == "" ||
+		(certificate.Outcome != "" && certificate.Outcome != CandidateValue) {
+		return ErrSplitPhaseUnavailable
+	}
+	digest := sha256.Sum256(prepared.Arguments())
+	binding := certificate.Binding
+	if binding.RunIdentity != table.RunIdentity() || binding.PlanIdentity != table.PlanIdentity() || binding.Capability != call.Capability ||
+		binding.HandlerIdentity != prepared.registered.spec.HandlerIdentity || binding.ArgumentsSHA256 != fmt.Sprintf("sha256:%x", digest[:]) {
+		return ErrSplitPhaseMismatch
+	}
+	return nil
+}
+
+func samePLMPreparation(entry *splitPhaseEntry, contract *PLMContract, certificate *CandidateCertificate) bool {
+	if entry == nil || (entry.plmContract == nil) != (contract == nil) || (entry.certificate == nil) != (certificate == nil) {
+		return false
+	}
+	if contract == nil {
+		return true
+	}
+	return *entry.plmContract == *contract && entry.certificate.Binding == certificate.Binding && entry.certificate.Temporal == certificate.Temporal
 }
 
 func decodeSplitPhaseRequest(raw []byte) (request, error) {

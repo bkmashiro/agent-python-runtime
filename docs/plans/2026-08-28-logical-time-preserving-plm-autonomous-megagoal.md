@@ -418,16 +418,19 @@ Tasks:
 
 Tasks:
 
-- [ ] Version the predecessor `issue_or_reuse` contract into explicit candidate preparation.
-- [ ] Add candidate states: prepared/running/ready/failed/cancelled/discarded.
-- [ ] Add job states created only by successful original-point linearization.
-- [ ] Make Broker logical admission occur exactly once at linearization.
-- [ ] Adopt an exact immutable candidate without a second physical start.
-- [ ] On candidate mismatch or invalidity, discard/detach it and start the canonical operation at linearization.
-- [ ] Keep result/exception materialization at the same original point.
-- [ ] Preserve permission denial, logical order and receipt identity.
-- [ ] Preserve physical failure hiding until linearization and no logical receipt for unlinearized candidates.
+- [x] Version the predecessor `issue_or_reuse` contract into explicit candidate preparation.
+- [x] Add candidate states: prepared/running/ready/failed/cancelled/discarded.
+- [x] Add job states created only by successful original-point linearization.
+- [x] Make Broker logical admission occur exactly once at linearization.
+- [x] Adopt an exact immutable candidate without a second physical start.
+- [x] On candidate mismatch or invalidity, discard/detach it and start the canonical operation at linearization.
+- [x] Keep result/exception materialization at the same original point.
+- [x] Preserve permission denial, logical order and receipt identity.
+- [x] Preserve physical failure hiding until linearization and no logical receipt for unlinearized candidates.
 - [ ] Delete or version-replace predecessor APIs after the new path is integrated; do not retain two product tables.
+
+The final retirement item closes in Gate 5 after compiler/Guest parity. Until then the old names
+remain isolated from PLM candidates and are not described as the new product contract.
 
 **Gate G3:** One real immutable operation proves prepare-before-source-call, original-point linearization, one physical start on valid adoption, canonical restart on invalid candidate, ordinary Python value/exception and exact Broker evidence.
 
@@ -598,8 +601,8 @@ Tasks:
 
 ## Current execution pointer
 
-**Current:** Gates 0 through 2 are complete. Every split-phase table is created by and atomically attached to one Run Broker; arbitrary-Broker materialisation is removed, legacy constructors fail closed, setup failures finalize source-time work and reuse evidence is bounded.
+**Current:** Gates 0 through 2 and the Gate 3 Host behavior gate are complete. The existing Run table now supports immutable PLM candidates, explicit candidate/job state, original-point folded `L=M`, valid adoption and invalid/failure canonical restart through one Broker logical call. Compiler/Guest production execution still uses the isolated predecessor bridge.
 
-**Next:** Execute Gate 3: version predecessor issue/collect into explicit immutable candidate preparation and original-point `linearize + materialize` with separate candidate/job state.
+**Next:** Execute Gate 4: bind PLM contracts and operation-specific temporal/provider validators to Host-authored capability specs, then cover snapshot, versioned, leased, current, wallclock and stable-failure rows.
 
 **Blocked:** No blocker.

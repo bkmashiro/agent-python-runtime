@@ -276,9 +276,12 @@ type plmFakeWorld struct {
 
 func TestPLMCandidateAndJobStateMachinesHaveExplicitTerminalDisposition(t *testing.T) {
 	candidateTransitions := [][2]capability.CandidateState{
-		{capability.CandidatePreparing, capability.CandidateReady},
-		{capability.CandidatePreparing, capability.CandidateFailed},
-		{capability.CandidatePreparing, capability.CandidateDiscarded},
+		{capability.CandidatePrepared, capability.CandidateRunning},
+		{capability.CandidatePrepared, capability.CandidateCancelled},
+		{capability.CandidatePrepared, capability.CandidateDiscarded},
+		{capability.CandidateRunning, capability.CandidateReady},
+		{capability.CandidateRunning, capability.CandidateFailed},
+		{capability.CandidateRunning, capability.CandidateCancelled},
 		{capability.CandidateReady, capability.CandidateAdopted},
 		{capability.CandidateReady, capability.CandidateDiscarded},
 		{capability.CandidateFailed, capability.CandidateAdopted},
@@ -289,7 +292,7 @@ func TestPLMCandidateAndJobStateMachinesHaveExplicitTerminalDisposition(t *testi
 			t.Fatalf("candidate transition rejected: %q -> %q", transition[0], transition[1])
 		}
 	}
-	for _, terminal := range []capability.CandidateState{capability.CandidateAdopted, capability.CandidateDiscarded} {
+	for _, terminal := range []capability.CandidateState{capability.CandidateAdopted, capability.CandidateDiscarded, capability.CandidateCancelled} {
 		if capability.ValidCandidateTransition(terminal, capability.CandidateReady) {
 			t.Fatalf("candidate terminal state reopened: %q", terminal)
 		}

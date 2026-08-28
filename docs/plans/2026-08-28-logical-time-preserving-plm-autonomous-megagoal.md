@@ -548,20 +548,20 @@ Tasks:
 
 Tasks:
 
-- [ ] Define a small baseline calculus with assignment, sequence, condition, Host call and exception.
-- [ ] Define PLM candidate/job states and small-step labelled transitions.
-- [ ] Define logical-visible, provider/economic and internal labels.
-- [ ] State exactly when internal labels may be hidden.
-- [ ] Prove or carefully sketch prepare stuttering under non-interference.
-- [ ] Prove sound candidate adoption from validator soundness.
-- [ ] Prove invalid-candidate canonical restart at linearization.
-- [ ] Prove `L=M` original-site exception/order preservation for V1.
-- [ ] Prove untaken admitted speculation is invisible only under silent-discard and provider non-interference assumptions.
-- [ ] Prove a forward simulation for the implemented direct-assignment subset.
-- [ ] Label all unmechanised obligations and do not claim full CPython proof.
-- [ ] Replace the predecessor report's unconditional “already formally proven” sentence with conditional wording.
+- [x] Define a small baseline calculus with assignment, sequence, condition, Host call and exception.
+- [x] Define PLM candidate/job states and small-step labelled transitions.
+- [x] Define logical-visible, provider/economic and internal labels.
+- [x] State exactly when internal labels may be hidden.
+- [x] Prove or carefully sketch prepare stuttering under non-interference.
+- [x] Prove sound candidate adoption from validator soundness.
+- [x] Prove invalid-candidate canonical restart at linearization.
+- [x] Prove `L=M` original-site exception/order preservation for V1.
+- [x] Prove untaken admitted speculation is invisible only under silent-discard and provider non-interference assumptions.
+- [x] Prove a forward simulation for the implemented direct-assignment subset.
+- [x] Label all unmechanised obligations and do not claim full CPython proof.
+- [x] Replace the predecessor report's unconditional “already formally proven” sentence with conditional wording.
 
-**Gate G8:** Every theorem assumption maps to a versioned runtime/tool/compiler check or is explicitly identified as an external adapter obligation.
+**Gate G8 result:** Every theorem assumption maps to a versioned runtime/tool/compiler check or is identified as an external adapter obligation in `plm-v1-small-core.md`.
 
 ## Gate 9: Optional research reserves
 
@@ -600,8 +600,8 @@ Tasks:
 
 ## Current execution pointer
 
-**Current:** Gates 0 through 7 are complete. PLM uses one final Guest, stays default-off after the negative controlled economics result, and passes deterministic temporal/fault evidence including typed uncertain-provider no-replay.
+**Current:** Gates 0 through 8 are complete. The implemented V1 has deterministic temporal/fault evidence and a bounded conditional refinement sketch; external validator soundness and provider semantics remain explicit obligations.
 
-**Next:** Execute Gate 8 formal core and claim calibration, then close the optional reserve decision and documentation.
+**Next:** Close Gate 9 without activating a reserve, then execute Gate 10 documentation and independent review.
 
 **Blocked:** No blocker.

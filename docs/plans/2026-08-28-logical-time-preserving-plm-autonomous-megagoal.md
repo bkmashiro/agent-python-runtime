@@ -354,26 +354,26 @@ When a stop fires, do not weaken the gate or continue into materialize sinking. 
 Primary files:
 
 - `docs/research/logical-time-preserving-split-phase-execution.md`
-- a new versioned PLM contract under `docs/research/`
+- `docs/research/logical-time-plm-v1-contract.md`
 - `runtime/capability/` contract tests
 - bounded fake-world/oracle fixtures under `runtime/` or `research/`
 
 Tasks:
 
-- [ ] Freeze versioned candidate, job and terminal-state schemas.
-- [ ] Freeze logical-visible, provider/economic and Host-private evidence projections.
-- [ ] Define the baseline operation relation over a deterministic fake world with version, snapshot, lease, authority epoch, quota and provider session state.
-- [ ] Define strict temporal modes and reject unknown/missing metadata.
-- [ ] Define operation-specific validator soundness and explicit fallback.
-- [ ] Define prepared-failure policy: canonical restart by default; adopt only a sound
+- [x] Freeze versioned candidate, job and terminal-state schemas.
+- [x] Freeze logical-visible, provider/economic and Host-private evidence projections.
+- [x] Define the baseline operation relation over a deterministic fake world with version, snapshot, lease, authority epoch, quota and provider session state.
+- [x] Define strict temporal modes and reject unknown/missing metadata.
+- [x] Define operation-specific validator soundness and explicit fallback.
+- [x] Define prepared-failure policy: canonical restart by default; adopt only a sound
   operation-specific stable-failure certificate.
-- [ ] Require authority recheck at every linearization even when preparation bound an
+- [x] Require authority recheck at every linearization even when preparation bound an
   earlier authority epoch.
-- [ ] Define one linearization per reached dynamic occurrence.
-- [ ] Define source-order constraints for non-commuting temporal reads.
-- [ ] Define exception and cancellation placement with `L=M` at the original call.
-- [ ] Freeze RED matrix identities before behavior changes.
-- [ ] Include immutable, snapshot, valid/invalid version, valid/expired lease, current, wallclock-observing, authority revocation, request mismatch and provider-visible quota cases.
+- [x] Define one linearization per reached dynamic occurrence.
+- [x] Define source-order constraints for non-commuting temporal reads.
+- [x] Define exception and cancellation placement with `L=M` at the original call.
+- [x] Freeze RED matrix identities before behavior changes.
+- [x] Include immutable, snapshot, valid/invalid version, valid/expired lease, current, wallclock-observing, authority revocation, request mismatch and provider-visible quota cases.
 
 **Gate G1:** Every admitted row has a complete temporal/authority/non-interference explanation. Unknown evidence falls back or rejects; no heuristic TTL passes as strict validity.
 
@@ -598,8 +598,8 @@ Tasks:
 
 ## Current execution pointer
 
-**Current:** Gate 0 is complete. PLM architecture and autonomous megagoal are active; runtime implementation is intentionally paused at the owner's request. The predecessor implementation remains current code, default-off, with known Host ownership blockers and negative cold economics.
+**Current:** Gates 0 and 1 are complete. The versioned PLM contract, pure linearization oracle, deterministic fake world and RED identity/temporal matrix are frozen. Production execution is not yet connected to PLM.
 
-**Next:** On the owner's later execution signal, start Gate 1. Do not resume the predecessor roadmap pointer.
+**Next:** Execute Gate 2: make Run identity, Plan, Broker and candidate table one owner and close the constructor-gate, foreign-Broker, setup-cleanup and bounded-event findings.
 
-**Blocked:** No design blocker. Runtime mutation is deliberately deferred until the owner starts the evening execution run.
+**Blocked:** No blocker.

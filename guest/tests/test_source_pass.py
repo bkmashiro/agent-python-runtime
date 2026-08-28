@@ -274,6 +274,17 @@ class SourcePassTests(unittest.TestCase):
                 patch = json.loads(emit_source_pass_patch_request_json(capability_request(source, CAPABILITY_PROJECTIONS)))
                 self.assertEqual("not_applicable", patch["status"])
 
+    def test_plm_common_path_does_not_walk_the_whole_tree(self):
+        original_walk = plm_source_pass.ast.walk
+        plm_source_pass.ast.walk = lambda tree: (_ for _ in ()).throw(AssertionError("full AST walk"))
+        try:
+            patch = json.loads(emit_source_pass_patch_request_json(capability_request(
+                'value = tools.get("alpha")\nresult = value\n', CAPABILITY_PROJECTIONS,
+            )))
+        finally:
+            plm_source_pass.ast.walk = original_walk
+        self.assertEqual("applied", patch["status"])
+
     def test_data_local_numpy_sum_emits_one_value_slot_materialization(self):
         source = "import io\nimport numpy as np\ndataset = np.load(io.BytesIO(open('/workspace/input.npy', 'rb').read()), allow_pickle=False)\nresult = int(dataset.sum())\n"
         raw = request(source, "data_local_numpy_sum", "pysolate.data-local-numpy-sum-pass.v2")

@@ -522,7 +522,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(7, response["result"])
         self.assertEqual(1, compile_calls)
 
-    def test_patch_selection_rejects_user_runtime_helpers(self):
+    def test_patch_fallback_rejects_user_runtime_helpers(self):
         source = (
             "ignored = _pysolate_plm_prepare('slot', 'call', 'tools.get', {})\n"
             'value = tools.get("alpha")\n'
@@ -544,9 +544,9 @@ class BootstrapTests(unittest.TestCase):
         }, sort_keys=True, separators=(",", ":"))
 
         self.assertEqual(0, self.runtime._validate_request_source_for_patch(raw))
-        patch = self.runtime._transform_source_pass(patch_request)
-        with self.assertRaisesRegex(SyntaxError, "reserved runtime"):
-            self.runtime._prepare_source_pass_execution(patch)
+        patch = json.loads(self.runtime._transform_source_pass(patch_request))
+        self.assertEqual("not_applicable", patch["status"])
+        self.assertEqual(self.runtime._SOURCE_CONTRACT_INVALID, self.runtime._validate_request_source(raw))
 
     def test_rejects_non_static_agent_import_forms_before_execution(self):
         cases = {

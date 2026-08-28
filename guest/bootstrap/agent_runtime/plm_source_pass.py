@@ -65,43 +65,32 @@ def _projected_call(node, projections):
     return projections.get((node.func.value.id, node.func.attr))
 
 
-def _observes_transformed_code(node):
-    if isinstance(node, ast.Attribute):
-        return node.attr.startswith("co_") or node.attr in {
-            "__code__", "__traceback__", "tb_frame", "tb_next", "tb_lineno",
-            "f_code", "f_back", "gi_code", "cr_code", "ag_code", "_getframe",
-            "settrace", "gettrace", "setprofile", "getprofile", "call_tracing", "monitoring",
-        }
-    if isinstance(node, ast.Name):
-        return node.id in {
-            "__import__", "breakpoint", "compile", "dir", "eval", "exec", "getattr", "globals",
-            "hasattr", "locals", "vars",
-        }
-    if isinstance(node, ast.Import):
-        return any(alias.name.partition(".")[0] in {"dis", "inspect", "traceback"} for alias in node.names)
-    if isinstance(node, ast.ImportFrom) and node.module is not None:
-        return node.module.partition(".")[0] in {"dis", "inspect", "traceback"}
-    return False
+_OBSERVATION_NAMES = {
+    "__import__", "breakpoint", "compile", "dir", "dis", "eval", "exec", "getattr",
+    "globals", "hasattr", "inspect", "locals", "traceback", "vars", "__code__",
+    "__traceback__", "tb_frame", "tb_next", "tb_lineno", "f_code", "f_back", "gi_code",
+    "cr_code", "ag_code", "_getframe", "settrace", "gettrace", "setprofile", "getprofile",
+    "call_tracing", "monitoring",
+}
 
 
-def _mutates_projection_receiver(node, modules):
-    if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
-        return node.id in modules
-    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-        return node.name in modules
-    if isinstance(node, ast.arg):
-        return node.arg in modules
-    if isinstance(node, ast.Attribute) and isinstance(node.ctx, (ast.Store, ast.Del)):
-        return isinstance(node.value, ast.Name) and node.value.id in modules
-    if isinstance(node, ast.Attribute) and node.attr == "__dict__":
-        return isinstance(node.value, ast.Name) and node.value.id in modules
-    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {"setattr", "delattr"}:
-        return bool(node.args) and isinstance(node.args[0], ast.Name) and node.args[0].id in modules
-    if isinstance(node, ast.alias) and node.asname in modules:
-        return node.name.partition(".")[0] != node.asname
-    if isinstance(node, ast.ImportFrom):
-        return any((alias.asname or alias.name) in modules for alias in node.names)
-    return False
+def _identifier_count(source, name):
+    count = 0
+    start = 0
+    while True:
+        position = source.find(name, start)
+        if position < 0:
+            return count
+        before = source[position - 1] if position else ""
+        after_at = position + len(name)
+        after = source[after_at] if after_at < len(source) else ""
+        if not (before == "_" or before.isalnum()) and not (after == "_" or after.isalnum()):
+            count += 1
+        start = position + len(name)
+
+
+def _observes_transformed_code(source):
+    return "co_" in source or any(_identifier_count(source, name) for name in _OBSERVATION_NAMES)
 
 
 def _isolated_physical_line(node, lines):
@@ -239,17 +228,12 @@ def _transform(source, projections, prepared_tree=None):
         source, filename="<agent-run>", mode="exec"
     )
     lines = source.splitlines()
-    projected_calls = set()
-    for node in ast.walk(tree):
-        if _observes_transformed_code(node) or _mutates_projection_receiver(node, projection_modules):
-            return tree, 0, None
-        if _projected_call(node, projection_index) is not None:
-            projected_calls.add(id(node))
-    if not projected_calls:
+    if _observes_transformed_code(source):
         return tree, 0, None
 
     edits = {}
     supported_calls = set()
+    supported_modules = {module: 0 for module in projection_modules}
 
     def edit(statement):
         return edits.setdefault(id(statement), {"before": [], "after": [], "replacement": None})
@@ -272,6 +256,7 @@ def _transform(source, projections, prepared_tree=None):
                 name, call, projection, loaded_names, values = parsed
                 if loaded_names.issubset(visible_names):
                     supported_calls.add(id(call))
+                    supported_modules[projection["module"]] += 1
                     issue_after = max(
                         barrier,
                         max((definitions.get(loaded_name, -1) for loaded_name in loaded_names), default=-1),
@@ -311,7 +296,10 @@ def _transform(source, projections, prepared_tree=None):
         statements[:] = rewritten
 
     process_block(tree.body, {"inputs"})
-    if supported_calls != projected_calls:
+    if not supported_calls or any(
+        _identifier_count(source, module) != supported_modules[module]
+        for module in projection_modules
+    ):
         return tree, 0, None
     return tree, len(supported_calls), tree
 

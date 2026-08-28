@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed verifier for bounded gpu31 Host-test evidence."""
+"""Fail-closed verifier for bounded workstation Host-test evidence."""
 
 from __future__ import annotations
 
@@ -14,7 +14,9 @@ HEX40 = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 IDENTIFIER = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 SUM_LINE = re.compile(r"^([0-9a-f]{64})  ([^\n]+)$")
-SUITES = {"baseline", "prepared-family", "evaluation"}
+SUITES = {"baseline", "prepared-family", "evaluation", "evaluation-sweeps"}
+BUILDERS = {f"gpu{number}.doc.ic.ac.uk" for number in range(31, 36)}
+HOSTS = {"gpu31", "gpu32", "gpu33", "gpu34", "gpu35"}
 
 
 def file_digest(path: pathlib.Path) -> str:
@@ -99,7 +101,7 @@ def verify_acceptance_report(path: pathlib.Path, source_commit: str, source_tree
         raise ValueError("prepared-family selected root was not observed")
 
 
-def verify(root: pathlib.Path, source_commit: str | None = None, source_tree: str | None = None, suite: str | None = None) -> dict[str, object]:
+def verify(root: pathlib.Path, source_commit: str | None = None, source_tree: str | None = None, suite: str | None = None, target: str | None = None) -> dict[str, object]:
     if root.is_symlink():
         raise ValueError("evidence root must be a real directory")
     root = root.resolve()
@@ -152,8 +154,12 @@ def verify(root: pathlib.Path, source_commit: str | None = None, source_tree: st
         raise ValueError("source commit mismatch")
     if source_tree is not None and result["source_tree"] != source_tree:
         raise ValueError("source tree mismatch")
-    if result.get("builder") != "gpu31.doc.ic.ac.uk" or result.get("target") != "linux/amd64":
+    builder = result.get("builder")
+    if builder not in BUILDERS or result.get("target") != "linux/amd64":
         raise ValueError("unexpected builder or target")
+    if target is not None:
+        if target not in HOSTS or builder != f"{target}.doc.ic.ac.uk":
+            raise ValueError("unexpected builder or target")
     if result.get("suite") not in SUITES or (suite is not None and result["suite"] != suite):
         raise ValueError("suite mismatch")
 
@@ -181,8 +187,9 @@ def main() -> int:
     parser.add_argument("--source-commit")
     parser.add_argument("--source-tree")
     parser.add_argument("--suite", choices=sorted(SUITES))
+    parser.add_argument("--target", choices=sorted(HOSTS))
     args = parser.parse_args()
-    print(json.dumps(verify(args.root, args.source_commit, args.source_tree, args.suite), sort_keys=True, separators=(",", ":")))
+    print(json.dumps(verify(args.root, args.source_commit, args.source_tree, args.suite, args.target), sort_keys=True, separators=(",", ":")))
     return 0
 
 

@@ -22,24 +22,25 @@ def load_verifier():
 class HostWorkstationScriptContractTests(unittest.TestCase):
     def test_wrapper_is_clean_head_and_enum_only(self) -> None:
         text = WRAPPER.read_text()
-        self.assertIn('case "$suite" in baseline|prepared-family|evaluation)', text)
+        self.assertIn('case "$suite" in baseline|prepared-family|evaluation|evaluation-sweeps)', text)
         self.assertIn("git status --porcelain", text)
         self.assertIn("git archive --format=tar HEAD", text)
         self.assertIn('case "$gateway" in shell2|shell3)', text)
         self.assertNotIn("eval ", text)
         self.assertNotIn("bash -c", text)
 
-    def test_worker_is_gpu31_bounded_and_uses_shared_go(self) -> None:
+    def test_worker_is_target_bounded_and_uses_shared_go(self) -> None:
         text = WORKER.read_text()
-        self.assertIn("gpu31.doc.ic.ac.uk", text)
-        self.assertIn("/vol/bitbucket/ys25/pysolate/toolchains/go", text)
+        self.assertIn("gpu31|gpu32|gpu33|gpu34|gpu35", text)
+        self.assertIn("expected_hostname", text)
+        self.assertIn("toolchains/go", text)
         self.assertIn('case "$suite" in', text)
         self.assertIn("./runtime/prepareddataset", text)
         self.assertIn("./runtime/engine/...", text)
         self.assertIn("run-linux-evaluation-suite.sh", text)
         self.assertIn("./scripts/run-linux-evaluation-suite.sh", text)
         self.assertNotIn('$stage/scripts/run-linux-evaluation-suite.sh', text)
-        self.assertIn('pathlib.Path("evaluation").rglob("*")', text)
+        self.assertIn("rglob(\"*\")", text)
         self.assertNotIn("eval ", text)
         self.assertNotIn("$command", text)
 
@@ -81,18 +82,18 @@ class HostWorkstationScriptContractTests(unittest.TestCase):
                 "source_tree": tree,
                 "builder": "gpu31.doc.ic.ac.uk",
                 "target": "linux/amd64",
-                "suite": "evaluation",
+                "suite": "evaluation-sweeps",
                 "passed": True,
                 "go_version": "go1.25.0",
                 "duration_millis": 1,
             }
             (root / "RESULT.READY").write_text(json.dumps(result, sort_keys=True, separators=(",", ":")) + "\n")
             (root / "test.log").write_text("ok\n")
-            evidence = root / "evaluation"
+            evidence = root / "evaluation-sweeps"
             evidence.mkdir()
             (evidence / "suite-manifest.json").write_text("{}\n")
             verifier.write_checksums(root)
-            verified = verifier.verify(root, commit, tree, "evaluation")
+            verified = verifier.verify(root, commit, tree, "evaluation-sweeps")
             self.assertTrue(verified["passed"])
 
     def test_verifier_accepts_prepared_family_report_and_rejects_source_drift(self) -> None:

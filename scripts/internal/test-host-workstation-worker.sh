@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 6 ]]; then
-  echo "usage: test-host-workstation-worker.sh STAGE OUTPUT SOURCE_COMMIT SOURCE_TREE SOURCE_EPOCH SUITE" >&2
+if [[ $# -ne 11 ]]; then
+  echo "usage: test-host-workstation-worker.sh STAGE OUTPUT SOURCE_COMMIT SOURCE_TREE SOURCE_EPOCH SUITE TARGET ORDER_OFFSET PLM_RUNS COW_RUNS BUILD_CACHE_ROOT" >&2
   exit 2
 fi
 stage=$1
@@ -11,16 +11,28 @@ source_commit=$3
 source_tree=$4
 source_epoch=$5
 suite=$6
+target=$7
+order_offset=$8
+plm_crossover_runs=$9
+cow_fanout_runs=${10}
+build_cache_root=${11}
 
-if [[ $(hostname) != gpu31.doc.ic.ac.uk || $(uname -s) != Linux || $(uname -m) != x86_64 ]]; then
-  echo "worker requires gpu31 Linux x86_64" >&2
+case "$target" in gpu31|gpu32|gpu33|gpu34|gpu35) ;; *) echo "invalid target" >&2; exit 3 ;; esac
+expected_hostname="${target}.doc.ic.ac.uk"
+if [[ $(hostname) != "$expected_hostname" || $(uname -s) != Linux || $(uname -m) != x86_64 ]]; then
+  echo "worker requires expected hostname $expected_hostname on Linux x86_64" >&2
   exit 3
 fi
 if [[ ! $source_commit =~ ^[0-9a-f]{40}$ || ! $source_tree =~ ^[0-9a-f]{40}$ || ! $source_epoch =~ ^[1-9][0-9]*$ ]]; then
   echo "invalid source identity" >&2
   exit 4
 fi
-case "$suite" in baseline|prepared-family|evaluation) ;; *) echo "invalid suite" >&2; exit 5 ;; esac
+case "$suite" in baseline|prepared-family|evaluation|evaluation-sweeps) ;; *) echo "invalid suite" >&2; exit 5 ;; esac
+if [[ ! $order_offset =~ ^[0-9]+$ || ! $plm_crossover_runs =~ ^[0-9]+$ || ! $cow_fanout_runs =~ ^[0-9]+$ ||
+  $plm_crossover_runs -lt 3 || $plm_crossover_runs -gt 20 || $cow_fanout_runs -lt 3 || $cow_fanout_runs -gt 20 ]]; then
+  echo "invalid sweep parameters" >&2
+  exit 5
+fi
 
 approved_root=$(realpath -e /vol/bitbucket/ys25/pysolate)
 stage_real=$(realpath -e "$stage")
@@ -34,6 +46,7 @@ if [[ $approved_root != /vol/bitbucket/ys25/pysolate || $stage_real != "$stage" 
   echo "worker path escaped the approved shared root" >&2
   exit 6
 fi
+case "$build_cache_root" in "$approved_root"/*) ;; *) echo "build cache escaped approved root" >&2; exit 6 ;; esac
 
 temporary=$(mktemp -d /tmp/ys25-pysolate-host-test.XXXXXXXX)
 repository="$temporary/agent-python-runtime"
@@ -42,11 +55,11 @@ cleanup() {
   rm -rf "$temporary"
 }
 trap cleanup EXIT
-mkdir -p "$repository" "$output" "$approved_root/go/pkg/mod" "$approved_root/go-build-cache" "$approved_root/config"
+mkdir -p "$repository" "$output" "$approved_root/go/pkg/mod" "$approved_root/go-build-cache" "$approved_root/config" "$build_cache_root"
 cp -a "$stage"/. "$repository"/
 cd "$repository"
 
-export GOROOT="/vol/bitbucket/ys25/pysolate/toolchains/go"
+export GOROOT="$approved_root/toolchains/go"
 export PATH="$GOROOT/bin:/usr/bin:/bin"
 export GOPATH="$approved_root/go"
 export GOMODCACHE="$approved_root/go/pkg/mod"
@@ -58,7 +71,7 @@ export SOURCE_DATE_EPOCH="$source_epoch"
 started_ns=$(date +%s%N)
 set +e
 {
-  printf 'source_commit=%s\nsource_tree=%s\nsuite=%s\n' "$source_commit" "$source_tree" "$suite"
+  printf 'source_commit=%s\nsource_tree=%s\nsuite=%s\ntarget=%s\n' "$source_commit" "$source_tree" "$suite" "$target"
   "$GOROOT/bin/go" version
   case "$suite" in
     baseline)
@@ -66,7 +79,7 @@ set +e
       "$GOROOT/bin/go" vet ./runtime/prepareddataset ./runtime/preparedregion ./runtime/workspace ./runtime/subagent
       ;;
     prepared-family)
-      AGENT_RUNTIME_BUILD_CACHE_ROOT="$approved_root/cache/guest-layers" \
+      AGENT_RUNTIME_BUILD_CACHE_ROOT="$build_cache_root" \
       AGENT_RUNTIME_BUILD_CACHE_MODE=auto \
       AGENT_RUNTIME_ARTIFACT_PROFILE=numpy-core \
       GITHUB_SHA="$source_commit" \
@@ -88,7 +101,19 @@ set +e
         --source-epoch "$source_epoch" \
         --runs 5 \
         --fanout 4 \
-        --build-cache-root "$approved_root/cache/guest-layers"
+        --build-cache-root "$build_cache_root"
+      ;;
+    evaluation-sweeps)
+      ./scripts/run-linux-evaluation-sweeps.sh \
+        --output "$output/evaluation-sweeps" \
+        --source-commit "$source_commit" \
+        --source-tree "$source_tree" \
+        --source-epoch "$source_epoch" \
+        --host-id "$target" \
+        --order-offset "$order_offset" \
+        --plm-crossover-runs "$plm_crossover_runs" \
+        --cow-fanout-runs "$cow_fanout_runs" \
+        --build-cache-root "$build_cache_root"
       ;;
   esac
 } >"$output/test.log" 2>&1
@@ -126,16 +151,20 @@ PY
   cd "$output"
   evidence=(RESULT.READY test.log)
   if [[ -f acceptance-report.json ]]; then evidence+=(acceptance-report.json); fi
-  if [[ $suite == evaluation ]]; then
-    mapfile -d '' evaluation_files < <(python3 - <<'PY'
+  evidence_dir=""
+  if [[ $suite == evaluation ]]; then evidence_dir=evaluation; fi
+  if [[ $suite == evaluation-sweeps ]]; then evidence_dir=evaluation-sweeps; fi
+  if [[ -n $evidence_dir ]]; then
+    mapfile -d '' nested_files < <(python3 - "$evidence_dir" <<'PY'
 import pathlib
 import sys
 
-for path in sorted(p for p in pathlib.Path("evaluation").rglob("*") if p.is_file()):
+root = pathlib.Path(sys.argv[1])
+for path in sorted(p for p in root.rglob("*") if p.is_file()):
     sys.stdout.buffer.write(path.as_posix().encode() + b"\0")
 PY
     )
-    evidence+=("${evaluation_files[@]}")
+    evidence+=("${nested_files[@]}")
   fi
   sha256sum "${evidence[@]}" > SHA256SUMS
 )

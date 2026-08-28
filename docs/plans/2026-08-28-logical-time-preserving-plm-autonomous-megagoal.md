@@ -591,7 +591,7 @@ Tasks:
 - [x] Report logical and provider/economic traces separately.
 - [x] Keep predecessor `+151.40%` result unchanged and report the new matched result independently.
 - [x] Do not update thesis/report/deck current-system claims until implementation, exact Guest and evidence gates pass.
-- [ ] Run focused, full, race, vet, Python and exact Guest gates.
+- [x] Run focused, full, race, vet, Python and exact Guest gates.
 - [ ] Run bounded independent Host ownership, compiler lowering, temporal contract and evidence reviews.
 - [ ] Fix every High/Medium causal defect or record a named stop decision.
 - [ ] Sign final commits, push, verify upstream and leave a clean worktree.

@@ -191,7 +191,7 @@ func (broker *Broker) AttachCallLifecycleObserver(observer CallLifecycleObserver
 
 // AttachStagedClaimer installs one Run-private physical/logical join before the
 // first Broker call. Semantic pre-dispatch still binds its claimer at Broker
-// construction; split-phase derived execution uses this late Host-only join.
+// construction; PLM derived execution uses this late Host-only join.
 func (broker *Broker) AttachStagedClaimer(claimer StagedObservationClaimer) error {
 	if broker == nil || claimer == nil {
 		return ErrInvalidBroker

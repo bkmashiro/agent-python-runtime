@@ -48,7 +48,7 @@ type Factory struct {
 	Passes           *passplugin.Registry
 	// LegacyResearchExecution is the single explicit gate for replaying the
 	// retained-prefix Guest and independent semantic pre-dispatch comparators.
-	// Product execution and the unified split-phase path leave it false.
+	// Product execution and the PLM path leave it false.
 	LegacyResearchExecution bool
 }
 

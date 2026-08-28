@@ -82,41 +82,15 @@ func TestPureScalarFoldIsAStaticWholeProgramPlugin(t *testing.T) {
 	}
 }
 
-func TestSplitPhaseCapabilityCallsBindsHostProjectionManifest(t *testing.T) {
-	pass, err := NewSplitPhaseCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
-	if err != nil {
-		t.Fatal(err)
-	}
-	registration := pass.Registration()
-	if registration.Name() != SplitPhaseCapabilityCallsName || registration.Stage() != passregistration.StageWholeProgramPatch ||
-		registration.Consumer() != passregistration.ExecutionPatch || !pass.HostScheduled() {
-		t.Fatalf("registration=%+v", registration)
-	}
-	projections := []CapabilityProjection{
-		{Capability: "tools.get", Module: "tools", Method: "get", Arguments: []string{"key"}, ResultField: "value"},
-		{Capability: "tools.price", Module: "tools", Method: "price", Arguments: []string{"value"}, ResultField: "quote"},
-	}
-	transformer := &capabilityTransformer{}
-	patch, err := pass.Transform(context.Background(), transformer, "value = tools.get('a')\nresult = value\n", projections)
-	if err != nil || patch.ReplacementCount != 1 || len(patch.CapabilityProjections) != 2 ||
-		len(transformer.request.CapabilityProjections) != 2 {
-		t.Fatalf("request=%+v patch=%+v err=%v", transformer.request, patch, err)
-	}
-}
-
 func TestPLMCapabilityCallsHasDistinctVersionedProjectionManifest(t *testing.T) {
 	pass, err := NewPLMCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacy, err := NewSplitPhaseCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
-	if err != nil {
-		t.Fatal(err)
-	}
 	registration := pass.Registration()
 	if registration.Name() != PLMCapabilityCallsName || registration.Version() != PLMCapabilityCallsVersion ||
-		registration.IdentitySHA256() == legacy.Registration().IdentitySHA256() || !pass.HostScheduled() {
-		t.Fatalf("registration=%+v legacy=%+v", registration, legacy.Registration())
+		registration.Stage() != passregistration.StageWholeProgramPatch || registration.Consumer() != passregistration.ExecutionPatch || !pass.HostScheduled() {
+		t.Fatalf("registration=%+v", registration)
 	}
 	projections := []CapabilityProjection{{Capability: "tools.get", Module: "tools", Method: "get", Arguments: []string{"key"}, ResultField: "value"}}
 	transformer := &capabilityTransformer{}

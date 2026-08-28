@@ -52,8 +52,6 @@ class ArtifactVerifierTests(unittest.TestCase):
                     {"module": "wasi_snapshot_preview1", "name": "fd_write"},
                     {"module": "agent_runtime_v2", "name": "host_call"},
                     {"module": "agent_runtime_v2", "name": "materialize_value"},
-                    {"module": "agent_runtime_v2", "name": "submit_call"},
-                    {"module": "agent_runtime_v2", "name": "materialize_call"},
                     {"module": "agent_runtime_v2", "name": "prepare_plm_call"},
                     {"module": "agent_runtime_v2", "name": "linearize_plm_call"},
                     {"module": "agent_runtime_v2", "name": "materialize_slot"},

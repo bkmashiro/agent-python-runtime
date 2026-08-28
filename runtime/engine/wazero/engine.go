@@ -1087,7 +1087,7 @@ func (engine *Engine) RunHostScheduledSourcePatchDerived(ctx context.Context, re
 	if err != nil {
 		return nil, err
 	}
-	if (registration.Name() != sourcepatch.SplitPhaseCapabilityCallsName && registration.Name() != sourcepatch.PLMCapabilityCallsName) || registration.Stage() != passregistration.StageWholeProgramPatch ||
+	if registration.Name() != sourcepatch.PLMCapabilityCallsName || registration.Stage() != passregistration.StageWholeProgramPatch ||
 		!patch.Applied() || patch.Validate(runRequest.Code, registration) != nil {
 		return nil, sourcepatch.ErrInvalidPatch
 	}
@@ -1573,12 +1573,6 @@ func instantiateCapabilityHost(ctx context.Context, runtime wazerort.Runtime) er
 		WithFunc(hostMaterializeValue).
 		Export("materialize_value").
 		NewFunctionBuilder().
-		WithFunc(hostSubmitCall).
-		Export("submit_call").
-		NewFunctionBuilder().
-		WithFunc(hostMaterializeCall).
-		Export("materialize_call").
-		NewFunctionBuilder().
 		WithFunc(hostPreparePLMCall).
 		Export("prepare_plm_call").
 		NewFunctionBuilder().
@@ -1611,51 +1605,6 @@ func hostMaterializeValue(ctx context.Context, module api.Module, decisionPointe
 		return -1
 	}
 	return int32(len(payload))
-}
-
-func hostSubmitCall(ctx context.Context, module api.Module, slotPointer, slotLength, requestPointer, requestLength uint32) int32 {
-	enginecontract.MarkHostCallAttempt(ctx)
-	if slotLength == 0 || slotLength > 96 || requestLength == 0 || requestLength > hostCallPayloadMax {
-		return -1
-	}
-	table, ok := ctx.Value(splitPhaseContextKey{}).(*capability.SplitPhaseTable)
-	if !ok || table == nil {
-		return -1
-	}
-	slotView, ok := module.Memory().Read(slotPointer, slotLength)
-	if !ok {
-		return -1
-	}
-	requestView, ok := module.Memory().Read(requestPointer, requestLength)
-	if !ok {
-		return -1
-	}
-	if err := table.IssueOrReuse(ctx, string(append([]byte(nil), slotView...)), append([]byte(nil), requestView...)); err != nil {
-		return -1
-	}
-	return 0
-}
-
-func hostMaterializeCall(ctx context.Context, module api.Module, slotPointer, slotLength, responsePointer, responseCapacity uint32) int32 {
-	if slotLength == 0 || slotLength > 96 || responseCapacity == 0 || responseCapacity > hostCallPayloadMax {
-		return -1
-	}
-	table, tableOK := ctx.Value(splitPhaseContextKey{}).(*capability.SplitPhaseTable)
-	if !tableOK || table == nil {
-		return -1
-	}
-	slotView, ok := module.Memory().Read(slotPointer, slotLength)
-	if !ok {
-		return -1
-	}
-	response, err := table.Materialize(ctx, string(append([]byte(nil), slotView...)))
-	if err != nil || len(response) == 0 || len(response) > int(responseCapacity) {
-		return -1
-	}
-	if !module.Memory().Write(responsePointer, response) {
-		return -1
-	}
-	return int32(len(response))
 }
 
 func hostPreparePLMCall(ctx context.Context, module api.Module, slotPointer, slotLength, requestPointer, requestLength uint32) int32 {

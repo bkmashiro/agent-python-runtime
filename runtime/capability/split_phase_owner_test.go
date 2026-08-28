@@ -11,9 +11,8 @@ import (
 )
 
 func TestSplitPhaseTableIsAtomicallyOwnedByOneRunBroker(t *testing.T) {
-	plan := splitPhasePlan(t, 2, func(context.Context, json.RawMessage) (json.RawMessage, error) {
-		return json.RawMessage(`{"text":"ready"}`), nil
-	})
+	adapter := plmOwnerAdapter()
+	plan, _ := plmVerticalPlan(t, capability.TemporalImmutable, adapter)
 	owner, err := capability.NewBroker(capability.Config{RunIdentity: "owner-run", Plan: plan})
 	if err != nil {
 		t.Fatal(err)
@@ -39,9 +38,8 @@ func TestSplitPhaseTableIsAtomicallyOwnedByOneRunBroker(t *testing.T) {
 }
 
 func TestSplitPhaseTableRejectsNilDuplicateAndLateOwners(t *testing.T) {
-	plan := splitPhasePlan(t, 2, func(context.Context, json.RawMessage) (json.RawMessage, error) {
-		return json.RawMessage(`{"text":"ready"}`), nil
-	})
+	adapter := plmOwnerAdapter()
+	plan, _ := plmVerticalPlan(t, capability.TemporalImmutable, adapter)
 	if _, err := capability.NewSplitPhaseTable(nil, ownerLimits()); !errors.Is(err, capability.ErrSplitPhaseUnavailable) {
 		t.Fatalf("nil owner err=%v", err)
 	}
@@ -72,10 +70,11 @@ func TestSplitPhaseTableRejectsNilDuplicateAndLateOwners(t *testing.T) {
 
 func TestSplitPhaseReuseEventsAreBoundedSeparatelyFromAttempts(t *testing.T) {
 	var physical atomic.Uint32
-	plan := splitPhasePlan(t, 1, func(context.Context, json.RawMessage) (json.RawMessage, error) {
+	adapter := &plmVerticalAdapter{handler: capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
 		physical.Add(1)
 		return json.RawMessage(`{"text":"ready"}`), nil
-	})
+	}), temporal: capability.TemporalEvidence{Mode: capability.TemporalImmutable}, temporalValid: true, providerValid: true}
+	plan, _ := plmVerticalPlan(t, capability.TemporalImmutable, adapter)
 	owner, err := capability.NewBroker(capability.Config{RunIdentity: "event-run", Plan: plan})
 	if err != nil {
 		t.Fatal(err)
@@ -84,13 +83,17 @@ func TestSplitPhaseReuseEventsAreBoundedSeparatelyFromAttempts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := []byte(`{"call_id":"event-call","capability":"workspace.read_text","arguments":{"path":"a.txt"}}`)
+	sourceSeal := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	slot := "slot-s1c0-e1c29-1"
+	request := []byte(`{"call_id":"plm-s1c0-e1c29-1","capability":"workspace.read_text","arguments":{"path":"a.txt"}}`)
 	for index := 0; index < 10_000; index++ {
-		if err := table.IssueOrReuse(context.Background(), "event-slot", request); err != nil {
+		if err := table.PrepareRuntimePLM(context.Background(), slot, request, sourceSeal); err != nil {
 			t.Fatalf("reuse %d: %v", index, err)
 		}
 	}
-	response, err := table.Materialize(context.Background(), "event-slot")
+	resourceIdentity, _ := plan.PLMResourceIdentity("workspace.read_text", json.RawMessage(`{"path":"a.txt"}`))
+	adapter.temporal.ResourceIdentity = resourceIdentity
+	response, err := table.LinearizeRuntimePLM(context.Background(), slot, request, sourceSeal)
 	if err != nil || !containsResult(response, "ready") {
 		t.Fatalf("response=%s err=%v", response, err)
 	}
@@ -104,6 +107,12 @@ func TestSplitPhaseReuseEventsAreBoundedSeparatelyFromAttempts(t *testing.T) {
 	if len(snapshot.Events) > 16 || snapshot.EventsDropped == 0 {
 		t.Fatalf("events=%d dropped=%d", len(snapshot.Events), snapshot.EventsDropped)
 	}
+}
+
+func plmOwnerAdapter() *plmVerticalAdapter {
+	return &plmVerticalAdapter{handler: capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		return json.RawMessage(`{"text":"ready"}`), nil
+	}), temporal: capability.TemporalEvidence{Mode: capability.TemporalImmutable}, temporalValid: true, providerValid: true}
 }
 
 func ownerLimits() capability.SplitPhaseLimits {

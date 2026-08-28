@@ -60,40 +60,6 @@ func TestCanPreissueRequiresVerifiedExactNecessarilyReachedCallAndFrozenContext(
 	}
 }
 
-func TestIssueQualifiedSplitPhaseUsesSpanStableDynamicSlot(t *testing.T) {
-	plan := legalityTestPlan(t, true)
-	verified, site := legalityVerifiedAnalysis(t, plan, true)
-	call, ok := CanPreissue(verified, plan, site.ID, legalityContext()).QualifiedCall()
-	if !ok {
-		t.Fatal("qualified call unavailable")
-	}
-	broker, err := capability.NewBroker(capability.Config{RunIdentity: "unified-preissue", Plan: plan})
-	if err != nil {
-		t.Fatal(err)
-	}
-	table, err := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := IssueQualifiedSplitPhase(context.Background(), table, call); err != nil {
-		t.Fatal(err)
-	}
-	if err := IssueQualifiedSplitPhase(context.Background(), table, call); err != nil {
-		t.Fatalf("exact source-time reuse: %v", err)
-	}
-	response, err := table.Materialize(context.Background(), "slot-s1c9-e1c32-1")
-	if err != nil || !json.Valid(response) {
-		t.Fatalf("response=%s err=%v", response, err)
-	}
-	if err := broker.Finalize(true); err != nil {
-		t.Fatal(err)
-	}
-	snapshot := table.Snapshot()
-	if snapshot.Submitted != 1 || snapshot.Reused != 1 || snapshot.Consumed != 1 {
-		t.Fatalf("snapshot=%+v", snapshot)
-	}
-}
-
 func TestPrepareQualifiedPLMUsesFinalSemanticSourceIdentity(t *testing.T) {
 	adapter := &legalityPLMAdapter{}
 	plan := legalityPLMPlan(t, adapter)

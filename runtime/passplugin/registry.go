@@ -185,10 +185,6 @@ func NewUnifiedCatalog(config UnifiedCatalogConfig) (*Registry, error) {
 	if err != nil {
 		return nil, err
 	}
-	splitCapabilities, err := sourcepatch.NewSplitPhaseCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
-	if err != nil {
-		return nil, err
-	}
 	plmCapabilities, err := sourcepatch.NewPLMCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
 	if err != nil {
 		return nil, err
@@ -199,7 +195,7 @@ func NewUnifiedCatalog(config UnifiedCatalogConfig) (*Registry, error) {
 	}
 	plugins := []Plugin{
 		semanticAdapter, preparedPureAdapter, preparedNumpyAdapter, preparedValue,
-		cse, fold, splitCapabilities, plmCapabilities, dataLocal,
+		cse, fold, plmCapabilities, dataLocal,
 	}
 	for _, definition := range passregistration.RuntimeOptimizationDefinitions() {
 		registration, registerErr := definition.Register("", runtimeOptimizationConfigSHA256(definition))
@@ -302,28 +298,6 @@ func directOptimizationSelected(mechanisms runtimeconfig.MechanismSet) bool {
 		mechanisms.SemanticPreDispatch || mechanisms.SemanticReuse || mechanisms.SplitPhaseCalls || mechanisms.ValueSlots
 }
 
-func CapabilityProjections(plan *capability.Plan) []sourcepatch.CapabilityProjection {
-	if plan == nil {
-		return nil
-	}
-	projections := make([]sourcepatch.CapabilityProjection, 0)
-	for _, spec := range plan.Specs() {
-		if !plan.PreDispatchEligible(spec.Name) || spec.Python == nil {
-			continue
-		}
-		projections = append(projections, sourcepatch.CapabilityProjection{
-			Capability: spec.Name, Module: spec.Python.Module, Method: spec.Python.Method,
-			Arguments: append([]string(nil), spec.Python.Arguments...), ResultField: spec.Python.ResultField,
-		})
-	}
-	sort.Slice(projections, func(left, right int) bool {
-		leftName := projections[left].Module + "." + projections[left].Method
-		rightName := projections[right].Module + "." + projections[right].Method
-		return leftName < rightName
-	})
-	return projections
-}
-
 func PLMCapabilityProjections(plan *capability.Plan) []sourcepatch.CapabilityProjection {
 	if plan == nil {
 		return nil
@@ -364,7 +338,6 @@ func unifiedRequirements() map[passregistration.Name]runtimeconfig.MechanismSet 
 		passregistration.PreparedValueBinding:         {ValueSlots: true},
 		sourcepatch.PureScalarCSEName:                 {SemanticAnalysis: true},
 		sourcepatch.PureScalarFoldName:                {SemanticAnalysis: true},
-		sourcepatch.SplitPhaseCapabilityCallsName:     {SplitPhaseCalls: true},
 		sourcepatch.PLMCapabilityCallsName:            {SplitPhaseCalls: true},
 		sourcepatch.DataLocalNumpySumName:             {ValueSlots: true},
 		passregistration.SourceStreamingExecution:     {Streaming: true, PrivateWorkspace: true},

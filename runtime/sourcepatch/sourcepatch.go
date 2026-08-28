@@ -13,22 +13,19 @@ import (
 )
 
 const (
-	SchemaVersion                                               = "pysolate.source-pass-patch.v1"
-	PureScalarCSEName                     passregistration.Name = "pure_scalar_cse"
-	PureScalarCSEVersion                                        = "pysolate.pure-scalar-cse-pass.v1"
-	PureScalarCSEConfigSHA256                                   = "sha256:48884671a1121cfb21c2b19f79faec1530342a6175ab515c0011ce2074e3057f"
-	PureScalarFoldName                    passregistration.Name = "pure_scalar_fold"
-	PureScalarFoldVersion                                       = "pysolate.pure-scalar-fold-pass.v1"
-	PureScalarFoldConfigSHA256                                  = "sha256:ebd1a5f88e49f6170044cc146ad394b9967aa5aad5443f9d2734c86c98b130c6"
-	SplitPhaseCapabilityCallsName         passregistration.Name = "split_phase_capability_calls"
-	SplitPhaseCapabilityCallsVersion                            = "pysolate.split-phase-capability-calls-pass.v1"
-	SplitPhaseCapabilityCallsConfigSHA256                       = "sha256:d89ffaccc0315d3fb8f24036e693a778c13565f6a8cdb7c31799e8559c89cc63"
-	PLMCapabilityCallsName                passregistration.Name = "plm_capability_calls"
-	PLMCapabilityCallsVersion                                   = "pysolate.plm-capability-calls-pass.v1"
-	PLMCapabilityCallsConfigSHA256                              = "sha256:18861b30178031a491a1728dbb37d5476ffaff5f3f915934b8a338d4542da0fb"
-	DataLocalNumpySumName                 passregistration.Name = "data_local_numpy_sum"
-	DataLocalNumpySumVersion                                    = "pysolate.data-local-numpy-sum-pass.v2"
-	DataLocalNumpySumConfigSHA256                               = "sha256:391f84660ff12c489c3275ae9073622d1baf4ea6b54a629b51804b331a1b4c7b"
+	SchemaVersion                                        = "pysolate.source-pass-patch.v1"
+	PureScalarCSEName              passregistration.Name = "pure_scalar_cse"
+	PureScalarCSEVersion                                 = "pysolate.pure-scalar-cse-pass.v1"
+	PureScalarCSEConfigSHA256                            = "sha256:48884671a1121cfb21c2b19f79faec1530342a6175ab515c0011ce2074e3057f"
+	PureScalarFoldName             passregistration.Name = "pure_scalar_fold"
+	PureScalarFoldVersion                                = "pysolate.pure-scalar-fold-pass.v1"
+	PureScalarFoldConfigSHA256                           = "sha256:ebd1a5f88e49f6170044cc146ad394b9967aa5aad5443f9d2734c86c98b130c6"
+	PLMCapabilityCallsName         passregistration.Name = "plm_capability_calls"
+	PLMCapabilityCallsVersion                            = "pysolate.plm-capability-calls-pass.v1"
+	PLMCapabilityCallsConfigSHA256                       = "sha256:18861b30178031a491a1728dbb37d5476ffaff5f3f915934b8a338d4542da0fb"
+	DataLocalNumpySumName          passregistration.Name = "data_local_numpy_sum"
+	DataLocalNumpySumVersion                             = "pysolate.data-local-numpy-sum-pass.v2"
+	DataLocalNumpySumConfigSHA256                        = "sha256:391f84660ff12c489c3275ae9073622d1baf4ea6b54a629b51804b331a1b4c7b"
 )
 
 var (
@@ -80,10 +77,6 @@ type PureScalarFold struct {
 	registration passregistration.Registration
 }
 
-type SplitPhaseCapabilityCalls struct {
-	registration passregistration.Registration
-}
-
 type PLMCapabilityCalls struct {
 	registration passregistration.Registration
 }
@@ -130,27 +123,6 @@ func (pass PureScalarFold) Registration() passregistration.Registration {
 	return pass.registration
 }
 
-func NewSplitPhaseCapabilityCalls(analyzerSHA256 string) (SplitPhaseCapabilityCalls, error) {
-	definition, err := passregistration.Define(
-		SplitPhaseCapabilityCallsName, SplitPhaseCapabilityCallsVersion, passregistration.StageWholeProgramPatch,
-		passregistration.ExecutionPatch, passregistration.PatchBindings(),
-	)
-	if err != nil {
-		return SplitPhaseCapabilityCalls{}, err
-	}
-	registration, err := definition.Register(analyzerSHA256, SplitPhaseCapabilityCallsConfigSHA256)
-	if err != nil {
-		return SplitPhaseCapabilityCalls{}, err
-	}
-	return SplitPhaseCapabilityCalls{registration: registration}, nil
-}
-
-func (pass SplitPhaseCapabilityCalls) Registration() passregistration.Registration {
-	return pass.registration
-}
-
-func (pass SplitPhaseCapabilityCalls) HostScheduled() bool { return true }
-
 func NewPLMCapabilityCalls(analyzerSHA256 string) (PLMCapabilityCalls, error) {
 	definition, err := passregistration.Define(
 		PLMCapabilityCallsName, PLMCapabilityCallsVersion, passregistration.StageWholeProgramPatch,
@@ -196,13 +168,6 @@ func (pass PureScalarFold) Transform(ctx context.Context, transformer Transforme
 
 func (pass PureScalarCSE) Transform(ctx context.Context, transformer Transformer, source string) (Patch, error) {
 	return transform(ctx, transformer, source, pass.registration, PureScalarCSEName, nil)
-}
-
-func (pass SplitPhaseCapabilityCalls) Transform(ctx context.Context, transformer Transformer, source string, projections []CapabilityProjection) (Patch, error) {
-	if !validCapabilityProjections(projections) {
-		return Patch{}, ErrInvalidPatch
-	}
-	return transform(ctx, transformer, source, pass.registration, SplitPhaseCapabilityCallsName, projections)
 }
 
 func (pass PLMCapabilityCalls) Transform(ctx context.Context, transformer Transformer, source string, projections []CapabilityProjection) (Patch, error) {
@@ -255,7 +220,7 @@ func (patch Patch) Validate(source string, registration passregistration.Registr
 		patch.OriginalSourceSHA256 != digest([]byte(source)) || !digestPattern.MatchString(patch.OriginalASTSHA256) {
 		return ErrInvalidPatch
 	}
-	if registration.Name() == SplitPhaseCapabilityCallsName || registration.Name() == PLMCapabilityCallsName {
+	if registration.Name() == PLMCapabilityCallsName {
 		if !validCapabilityProjections(patch.CapabilityProjections) {
 			return ErrInvalidPatch
 		}

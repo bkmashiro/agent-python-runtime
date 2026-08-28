@@ -12,8 +12,6 @@ PURE_SCALAR_CSE = "pure_scalar_cse"
 PURE_SCALAR_CSE_VERSION = "pysolate.pure-scalar-cse-pass.v1"
 PURE_SCALAR_FOLD = "pure_scalar_fold"
 PURE_SCALAR_FOLD_VERSION = "pysolate.pure-scalar-fold-pass.v1"
-SPLIT_PHASE_CAPABILITY_CALLS = "split_phase_capability_calls"
-SPLIT_PHASE_CAPABILITY_CALLS_VERSION = "pysolate.split-phase-capability-calls-pass.v1"
 PLM_CAPABILITY_CALLS = "plm_capability_calls"
 PLM_CAPABILITY_CALLS_VERSION = "pysolate.plm-capability-calls-pass.v1"
 DATA_LOCAL_NUMPY_SUM = "data_local_numpy_sum"
@@ -353,7 +351,7 @@ def _split_phase_site(call):
     return "s%dc%d-e%dc%d" % (call.lineno, call.col_offset, call.end_lineno, call.end_col_offset)
 
 
-def _split_phase_capability_calls(source, projections, plm=False):
+def _plm_capability_calls(source, projections):
     if (
         not isinstance(source, str)
         or not source
@@ -412,19 +410,13 @@ def _split_phase_capability_calls(source, projections, plm=False):
                     issue_after = candidate
             site = _split_phase_site(call)
             base_slot = "slot-" + site
-            base_call = ("plm-" if plm else "split-") + site
-            if plm:
-                issue = "_pysolate_plm_prepare(%r, %r, %r, %s)" % (
-                    base_slot, base_call, projection["capability"], arguments_source,
-                )
-                collected = "_pysolate_plm_linearize(%r, %r, %s)" % (
-                    base_slot, projection["capability"], arguments_source,
-                )
-            else:
-                issue = "_pysolate_call_issue(%r, %r, %r, %s)" % (
-                    base_slot, base_call, projection["capability"], arguments_source,
-                )
-                collected = "_pysolate_call_collect(%r)" % base_slot
+            base_call = "plm-" + site
+            issue = "_pysolate_plm_prepare(%r, %r, %r, %s)" % (
+                base_slot, base_call, projection["capability"], arguments_source,
+            )
+            collected = "_pysolate_plm_linearize(%r, %r, %s)" % (
+                base_slot, projection["capability"], arguments_source,
+            )
             if projection["result_field"]:
                 collected += "[" + repr(projection["result_field"]) + "]"
             materialize = name + " = " + collected
@@ -466,10 +458,6 @@ def _split_phase_capability_calls(source, projections, plm=False):
     derived_source = "".join(derived)
     ast.parse(derived_source, filename="<agent-run>", mode="exec")
     return tree, derived_source, len(supported_calls)
-
-
-def _plm_capability_calls(source, projections):
-    return _split_phase_capability_calls(source, projections, plm=True)
 
 
 def _data_local_numpy_sum(source):
@@ -582,7 +570,6 @@ def _data_local_numpy_sum(source):
 _TRANSFORMS = {
     (PURE_SCALAR_CSE, PURE_SCALAR_CSE_VERSION): _pure_scalar_cse,
     (PURE_SCALAR_FOLD, PURE_SCALAR_FOLD_VERSION): _pure_scalar_fold,
-    (SPLIT_PHASE_CAPABILITY_CALLS, SPLIT_PHASE_CAPABILITY_CALLS_VERSION): _split_phase_capability_calls,
     (PLM_CAPABILITY_CALLS, PLM_CAPABILITY_CALLS_VERSION): _plm_capability_calls,
     (DATA_LOCAL_NUMPY_SUM, DATA_LOCAL_NUMPY_SUM_VERSION): _data_local_numpy_sum,
 }
@@ -593,7 +580,6 @@ def emit_source_pass_patch_request_json(request_json):
     capability_pass = (
         isinstance(probe, dict)
         and (probe.get("pass_name"), probe.get("pass_version")) in {
-            (SPLIT_PHASE_CAPABILITY_CALLS, SPLIT_PHASE_CAPABILITY_CALLS_VERSION),
             (PLM_CAPABILITY_CALLS, PLM_CAPABILITY_CALLS_VERSION),
         }
     )
@@ -637,7 +623,6 @@ def validate_source_pass_execution_request(final_source, patch_json):
     capability_pass = (
         isinstance(probe, dict)
         and (probe.get("pass_name"), probe.get("pass_version")) in {
-            (SPLIT_PHASE_CAPABILITY_CALLS, SPLIT_PHASE_CAPABILITY_CALLS_VERSION),
             (PLM_CAPABILITY_CALLS, PLM_CAPABILITY_CALLS_VERSION),
         }
     )

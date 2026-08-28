@@ -37,19 +37,6 @@ class BootstrapTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     self.runtime._materialize_value_slot("slot-invalid")
 
-    def test_split_phase_helpers_bind_repeated_dynamic_occurrences_without_exposing_tokens(self):
-        submitted = []
-        self.native_stub.submit_call = lambda slot, request: submitted.append((slot, json.loads(request)))  # type: ignore[attr-defined]
-        self.native_stub.materialize_call = lambda slot: json.dumps({"status": "ok", "result": {"body": slot}})  # type: ignore[attr-defined]
-        self.assertIsNone(self.runtime._issue_split_phase_capability("slot-s1c0-e1c20", "split-s1c0-e1c20", "sources.read", {"path": "alpha"}))
-        self.assertIsNone(self.runtime._issue_split_phase_capability("slot-s1c0-e1c20", "split-s1c0-e1c20", "sources.read", {"path": "alpha"}))
-        self.assertEqual(["slot-s1c0-e1c20-1", "slot-s1c0-e1c20-2"], [item[0] for item in submitted])
-        self.assertEqual(["split-s1c0-e1c20-1", "split-s1c0-e1c20-2"], [item[1]["call_id"] for item in submitted])
-        self.assertEqual("slot-s1c0-e1c20-1", self.runtime._collect_split_phase_capability("slot-s1c0-e1c20")["body"])
-        self.assertEqual("slot-s1c0-e1c20-2", self.runtime._collect_split_phase_capability("slot-s1c0-e1c20")["body"])
-        with self.assertRaises(RuntimeError):
-            self.runtime._collect_split_phase_capability("slot-s1c0-e1c20")
-
     def test_plm_helpers_recompute_actual_request_at_original_linearization_point(self):
         prepared = []
         linearized = []
@@ -375,10 +362,8 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual("ok", response["status"])
         self.assertEqual(1, response["result"])
 
-    def test_agent_source_cannot_name_split_phase_runtime_helpers(self):
+    def test_agent_source_cannot_name_host_runtime_helpers(self):
         for helper in (
-            "_pysolate_call_issue",
-            "_pysolate_call_collect",
             "_pysolate_plm_prepare",
             "_pysolate_plm_linearize",
             "_pysolate_materialize_slot",

@@ -350,6 +350,42 @@ func plmE2EPlan(t *testing.T, maxCalls uint32, adapter *e2ePLMAdapter) *capabili
 	return plan
 }
 
+func splitPhaseAnalysisSession(t *testing.T, artifact []byte, maxRequests uint32) (sourcepatch.Transformer, func()) {
+	t.Helper()
+	config := runtimeconfig.DefaultRunConfig()
+	config.Timeout = 90 * time.Second
+	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
+	runner, err := (wazeroengine.Factory{}).New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := trustedSemanticRunner(t, runner)
+	session, err := engine.NewSemanticAnalysisSession(context.Background(), wazeroengine.SemanticAnalysisSessionLimits{
+		MaxRequests: maxRequests, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
+	})
+	if err != nil {
+		_ = runner.Close(context.Background())
+		t.Fatal(err)
+	}
+	return session, func() {
+		if closeErr := session.Close(context.Background()); closeErr != nil {
+			t.Fatalf("close analysis session: %v", closeErr)
+		}
+		if closeErr := runner.Close(context.Background()); closeErr != nil {
+			t.Fatalf("close analysis runner: %v", closeErr)
+		}
+	}
+}
+
+func unifiedPassCatalog(t *testing.T) *passplugin.Registry {
+	t.Helper()
+	registry, err := passplugin.NewDefaultUnifiedCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return registry
+}
+
 func osReadGuestArtifact(t *testing.T) ([]byte, error) {
 	t.Helper()
 	return os.ReadFile(guestArtifact(t))

@@ -94,7 +94,6 @@ func TestUnifiedCatalogRegistersEveryOptimizationDefaultOff(t *testing.T) {
 		passregistration.PreparedValueBinding:         passregistration.StageRunBinding,
 		sourcepatch.PureScalarCSEName:                 passregistration.StageWholeProgramPatch,
 		sourcepatch.PureScalarFoldName:                passregistration.StageWholeProgramPatch,
-		sourcepatch.SplitPhaseCapabilityCallsName:     passregistration.StageWholeProgramPatch,
 		sourcepatch.PLMCapabilityCallsName:            passregistration.StageWholeProgramPatch,
 		sourcepatch.DataLocalNumpySumName:             passregistration.StageWholeProgramPatch,
 		passregistration.SourceStreamingExecution:     passregistration.StageRuntimeLowering,
@@ -233,7 +232,7 @@ func TestUnifiedCatalogRejectsConflictingSchedulingPasses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = registry.Enable(passregistration.SemanticPreDispatch, sourcepatch.SplitPhaseCapabilityCallsName); !errors.Is(err, ErrPassConflict) {
+	if _, err = registry.Enable(passregistration.SemanticPreDispatch, sourcepatch.PLMCapabilityCallsName); !errors.Is(err, ErrPassConflict) {
 		t.Fatalf("duplicate scheduling owners error=%v", err)
 	}
 }

@@ -26,13 +26,7 @@ def request(source, pass_name="pure_scalar_cse", pass_version="pysolate.pure-sca
 
 
 def capability_request(source, projections):
-    value = json.loads(request(
-        source,
-        "split_phase_capability_calls",
-        "pysolate.split-phase-capability-calls-pass.v1",
-    ))
-    value["capability_projections"] = projections
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+    return plm_capability_request(source, projections)
 
 
 def plm_capability_request(source, projections):
@@ -102,7 +96,7 @@ class SourcePassTests(unittest.TestCase):
         self.assertEqual("not_applicable", patch["status"])
         self.assertEqual("", patch["derived_source"])
 
-    def test_split_phase_capability_calls_issues_runtime_dependency_after_value_is_ready(self):
+    def test_plm_capability_calls_issues_runtime_dependency_after_value_is_ready(self):
         source = (
             'a = tools.get("alpha")\n'
             'x = a + 1\n'
@@ -115,15 +109,15 @@ class SourcePassTests(unittest.TestCase):
         self.assertEqual("applied", patch["status"])
         self.assertEqual(2, patch["replacement_count"])
         lines = patch["derived_source"].splitlines()
-        self.assertLess(lines[0].index("_pysolate_call_issue"), lines[0].index("_pysolate_call_collect"))
-        self.assertIn("_pysolate_call_issue", lines[1])
-        self.assertNotIn("_pysolate_call_collect", lines[1])
-        self.assertNotIn("_pysolate_call_issue", lines[2])
-        self.assertIn("_pysolate_call_collect", lines[3])
+        self.assertLess(lines[0].index("_pysolate_plm_prepare"), lines[0].index("_pysolate_plm_linearize"))
+        self.assertIn("_pysolate_plm_prepare", lines[1])
+        self.assertNotIn("_pysolate_plm_linearize", lines[1])
+        self.assertNotIn("_pysolate_plm_prepare", lines[2])
+        self.assertIn("_pysolate_plm_linearize", lines[3])
         self.assertEqual(source.count("\n"), patch["derived_source"].count("\n"))
         validate_source_pass_execution_request(source, raw)
 
-    def test_split_phase_capability_calls_stage_independent_literals_before_collect(self):
+    def test_plm_capability_calls_stage_independent_literals_before_linearize(self):
         source = (
             'a = tools.get("alpha")\n'
             'b = tools.get("beta")\n'
@@ -132,11 +126,11 @@ class SourcePassTests(unittest.TestCase):
         patch = json.loads(emit_source_pass_patch_request_json(capability_request(source, CAPABILITY_PROJECTIONS)))
         lines = patch["derived_source"].splitlines()
         self.assertEqual("applied", patch["status"])
-        self.assertEqual(2, lines[0].count("_pysolate_call_issue"))
-        self.assertEqual(1, lines[0].count("_pysolate_call_collect"))
-        self.assertEqual(1, lines[1].count("_pysolate_call_collect"))
+        self.assertEqual(2, lines[0].count("_pysolate_plm_prepare"))
+        self.assertEqual(1, lines[0].count("_pysolate_plm_linearize"))
+        self.assertEqual(1, lines[1].count("_pysolate_plm_linearize"))
 
-    def test_split_phase_capability_calls_preserves_branch_and_loop_activation(self):
+    def test_plm_capability_calls_preserves_branch_and_loop_activation(self):
         branch = (
             'if inputs["take"]:\n'
             '    value = tools.get("alpha")\n'
@@ -159,7 +153,7 @@ class SourcePassTests(unittest.TestCase):
                 self.assertEqual(source.count("\n"), patch["derived_source"].count("\n"))
                 validate_source_pass_execution_request(source, raw)
 
-    def test_split_phase_capability_calls_rejects_opaque_argument_evaluation(self):
+    def test_plm_capability_calls_rejects_opaque_argument_evaluation(self):
         source = 'value = tools.get(make_key())\nresult = value\n'
         patch = json.loads(emit_source_pass_patch_request_json(capability_request(source, CAPABILITY_PROJECTIONS)))
         self.assertEqual("not_applicable", patch["status"])

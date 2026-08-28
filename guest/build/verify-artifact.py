@@ -38,8 +38,6 @@ ALLOWED_IMPORT_MODULES = {"wasi_snapshot_preview1", "agent_runtime_v2"}
 REQUIRED_CUSTOM_IMPORTS = {
     ("agent_runtime_v2", "host_call"),
     ("agent_runtime_v2", "materialize_value"),
-    ("agent_runtime_v2", "submit_call"),
-    ("agent_runtime_v2", "materialize_call"),
     ("agent_runtime_v2", "prepare_plm_call"),
     ("agent_runtime_v2", "linearize_plm_call"),
     ("agent_runtime_v2", "materialize_slot"),

@@ -82,13 +82,13 @@ func TestFactoryRequiresBrokerForSplitPhaseCalls(t *testing.T) {
 
 func TestFactoryLowersEnabledPassesBeforeArtifactParsing(t *testing.T) {
 	catalog := unifiedCatalog(t)
-	enabled, err := catalog.Enable(sourcepatch.SplitPhaseCapabilityCallsName)
+	enabled, err := catalog.Enable(sourcepatch.PLMCapabilityCallsName)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = (wazeroengine.Factory{Passes: enabled}).New(context.Background(), []byte("not wasm"), runtimeconfig.DefaultRunConfig())
 	if err == nil || !strings.Contains(err.Error(), "requires a capability Broker factory") {
-		t.Fatalf("pass lowering did not select Future runtime: %v", err)
+		t.Fatalf("pass lowering did not select the PLM runtime: %v", err)
 	}
 }
 
@@ -315,11 +315,12 @@ func TestSplitPhaseSetupFailureFinalizesSourceTimeCandidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	started := make(chan struct{})
-	plan := splitPhaseCleanupPlan(t, capability.HandlerFunc(func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+	adapter := &splitPhaseCleanupAdapter{handler: capability.HandlerFunc(func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
 		close(started)
 		<-ctx.Done()
 		return nil, ctx.Err()
-	}))
+	})}
+	plan := splitPhaseCleanupPlan(t, adapter)
 	broker, err := capability.NewBroker(capability.Config{RunIdentity: "setup-failure", Plan: plan})
 	if err != nil {
 		t.Fatal(err)
@@ -328,8 +329,8 @@ func TestSplitPhaseSetupFailureFinalizesSourceTimeCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := []byte(`{"call_id":"setup-failure-read","capability":"workspace.read_text","arguments":{"path":"a.txt"}}`)
-	if err := table.IssueOrReuse(context.Background(), "slot-setup-failure", request); err != nil {
+	request := []byte(`{"call_id":"plm-s1c0-e1c19-1","capability":"workspace.read_text","arguments":{"path":"a.txt"}}`)
+	if err := table.PrepareRuntimePLM(context.Background(), "slot-s1c0-e1c19-1", request, "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); err != nil {
 		t.Fatal(err)
 	}
 	<-started
@@ -352,7 +353,27 @@ func TestSplitPhaseSetupFailureFinalizesSourceTimeCandidate(t *testing.T) {
 	}
 }
 
-func splitPhaseCleanupPlan(t *testing.T, handler capability.HandlerFunc) *capability.Plan {
+type splitPhaseCleanupAdapter struct {
+	handler capability.Handler
+}
+
+func (adapter *splitPhaseCleanupAdapter) Call(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
+	return adapter.handler.Call(ctx, raw)
+}
+
+func (*splitPhaseCleanupAdapter) PLMValidatorIdentities() capability.PLMValidatorIdentities {
+	return capability.PLMValidatorIdentities{Temporal: "cleanup-temporal.v1", ProviderNonInterference: "cleanup-provider.v1"}
+}
+
+func (*splitPhaseCleanupAdapter) ValidatePLM(_ context.Context, request capability.PLMValidationRequest) (capability.PLMValidationResult, error) {
+	return capability.PLMValidationResult{Temporal: request.Certificate.Temporal, TemporalValid: true, ProviderNonInterferenceValid: true}, nil
+}
+
+func (*splitPhaseCleanupAdapter) PLMProviderSessionIdentity(context.Context) string {
+	return "cleanup-provider-session.v1"
+}
+
+func splitPhaseCleanupPlan(t *testing.T, handler *splitPhaseCleanupAdapter) *capability.Plan {
 	t.Helper()
 	registry := capability.NewRegistry()
 	grant, err := capability.NewGrant(json.RawMessage(`{"scope":"setup-failure"}`))
@@ -366,10 +387,12 @@ func splitPhaseCleanupPlan(t *testing.T, handler capability.HandlerFunc) *capabi
 		OutputSchema: json.RawMessage(`{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false}`),
 		Python:       &capability.PythonProjection{Module: "workspace", Method: "read_text", Arguments: []string{"path"}},
 		ReadOnly:     true, Idempotent: true,
-		PreDispatch: &capability.PreDispatchContract{
-			Resource: capability.ResourceReference{Namespace: "workspace", Argument: "path"}, Freshness: capability.FreshnessPlanEpoch,
-			Unclaimed: capability.UnclaimedDiscardWithDisposition, Privacy: capability.PreDispatchPrivacyExactPartition,
-			Coalescing: capability.PreDispatchCoalescingForbidden, MaxResultBytes: 1 << 20, CostUnits: 1,
+		PLM: &capability.PLMContract{
+			Version: capability.PLMContractVersionV1, Temporal: capability.TemporalImmutable, PrepareEffect: capability.PrepareSilentRead,
+			Speculation: capability.SpeculationBudgeted, Failure: capability.FailureRetryAtLinearize, Authority: capability.AuthorityRecheckAtLinearize,
+			Resource:          capability.ResourceReference{Namespace: "workspace", Argument: "path"},
+			TemporalValidator: "cleanup-temporal.v1", ProviderNonInterferenceValidator: "cleanup-provider.v1",
+			MaxResultBytes: 1 << 20, CostUnits: 1,
 		},
 	}
 	if err := registry.Register(spec, grant, handler); err != nil {

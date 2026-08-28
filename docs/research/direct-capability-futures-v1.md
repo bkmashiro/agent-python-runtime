@@ -1,6 +1,6 @@
 # Direct Capability Futures v1
 
-> **Historical result.** The direct Future lane and `_CapabilityFuture` projection were removed by the unified split-phase refactor. Its measurements remain attached to this exact mechanism and are not current-runtime claims. The retained model is [`split_phase_capability_calls`](../source-pass-plugins.md), which exposes only concrete Python values.
+> **Historical result.** The direct Future lane and `_CapabilityFuture` projection were removed by the predecessor refactor; the predecessor issue/collect bridge was later Removed by PLM. These measurements remain attached to the exact Future mechanism and are not current-runtime claims. Current Experimental PLM is [`plm_capability_calls`](../source-pass-plugins.md), which exposes only concrete Python values or allowed exceptions.
 
 ## Decision
 

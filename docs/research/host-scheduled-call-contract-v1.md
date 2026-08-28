@@ -2,11 +2,12 @@
 
 Status: **Historical exact-Guest contract; analyzer-driven overlap source pass rejected on cost**
 
-> **Superseded implementation; retained lifecycle evidence:** the hard-coded source pass and
-> later direct Future successor were both removed. The retained model is the plan-bound
-> [`split_phase_capability_calls`](../source-pass-plugins.md) pass over one source-time/runtime
-> attempt table. The lifecycle evidence below remains relevant; pass names and performance
-> conclusions remain historical.
+> **Superseded implementation; retained lifecycle evidence:** the hard-coded source pass,
+> direct Future successor and predecessor `split_phase_capability_calls` bridge are Removed.
+> The active Experimental model is versioned
+> [`plm_capability_calls`](../source-pass-plugins.md) over one Run-owned candidate/job table.
+> The lifecycle evidence below remains historical; its pass names and performance result are
+> not PLM evidence.
 
 Baseline source: `fde07939f3d1865a83bfb59b16a3ac16abf46e8f`
 
@@ -212,7 +213,7 @@ It keeps the v1 straight-line lane and adds only two source-shaped dynamic forms
 - a top-level result-list loop over a bounded `inputs` iterable with one literal-path read
   and one append per iteration.
 
-The submit helper owns a fresh per-Run occurrence counter and a private queue from each
+For each Run, the Guest submit helper creates an occurrence counter and a private queue from each
 static source slot to its dynamic Host slot. Generated source still receives no token.
 An unselected branch and a zero-iteration loop submit nothing; a repeated loop occurrence
 gets a distinct call identity; `try`, dynamic paths, unknown calls, and arbitrary nested

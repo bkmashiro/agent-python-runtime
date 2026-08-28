@@ -1,12 +1,14 @@
 # Logical-Time-Preserving Split-Phase Execution
 
-Status: **Proposed successor architecture; implementation has not started.**
+Status: **Implemented Experimental V1; default-off after negative matched economics.**
 
-This document records the architecture decision behind the active
+This document records the architecture implemented by the active
 [PLM autonomous megagoal](../plans/2026-08-28-logical-time-preserving-plm-autonomous-megagoal.md).
-It supersedes `issue/collect` as the complete semantic model, while retaining the
-verified unified split-phase implementation as a predecessor prototype and evidence
-source.
+The versioned contract, body-safe evidence and conditional small core are
+[`logical-time-plm-v1-contract.md`](logical-time-plm-v1-contract.md),
+[`plm-v1-economics.json`](../evidence/plm-v1-economics.json),
+[`plm-v1-fault-matrix.json`](../evidence/plm-v1-fault-matrix.json) and
+[`plm-v1-small-core.md`](plm-v1-small-core.md).
 
 ## Decision
 
@@ -25,6 +27,8 @@ linearize at the original logical call
 materialize at the latest proven-safe demand point
 ```
 
+This is the general normal form. Implemented V1 fixes `tM = tL` at the original call; materialization sinking remains Deferred.
+
 The reason is temporal semantics. A read-only operation can still depend on a changing
 external world. Starting it before the source call and later returning that value is not
 strictly equivalent unless the Host can prove that the candidate still denotes an
@@ -32,37 +36,26 @@ outcome allowed at the source call's logical point.
 
 ## Migration relationship
 
-The current implementation is a useful degenerate PLM slice:
+The implemented V1 uses:
 
 ```text
-current issue_or_reuse       ~= prepare
-current Broker materialize   ~= linearize + materialize
-current collect position     =  original logical call
+PrepareOrReuse              = Host-private candidate preparation
+LinearizeAndMaterialize     = original-point validation plus adopt/restart
+V1 materialization          = original logical call
 ```
 
-It already proves several substrate properties:
+It establishes the following bounded properties:
 
-- source-time and runtime preparation can share one physical-attempt mechanism;
-- sealed source can be lowered without exposing a Python Future;
-- ordinary synchronous CPython retains control flow and argument computation;
-- dynamic branch and loop occurrences can be identified without a Host dependency graph;
-- Broker admission, logical order and receipts can remain distinct from physical starts;
-- unsupported programs can execute unchanged.
+- source-time and original-point preparation share one Run-owned candidate/job table;
+- the compiler lowers sealed source without exposing a Python Future;
+- one exact final Guest performs lowering and ordinary synchronous CPython execution;
+- branch and loop occurrences remain ordinary CPython control flow;
+- Broker logical calls, receipts and provider starts remain separate evidence;
+- strict temporal modes require Host validation; `CURRENT` cannot adopt an early read;
+- setup failure, cancellation, late completion and typed uncertain provider outcomes have bounded Run-owned dispositions;
+- unsupported source and a disabled pass execute unchanged.
 
-It does not yet establish PLM semantics because:
-
-- `FreshnessPlanEpoch` binds Plan configuration, not the external resource state;
-- a prepared result is claimed without an operation-specific temporal certificate;
-- candidate and logically adopted job are not distinct states;
-- the split-phase table is Plan-bound but not immutably Run/Broker-bound;
-- lower-level constructors can bypass the research-only legacy gate;
-- setup failure can precede cleanup ownership for already-running work;
-- duplicate reuse telemetry is not bounded;
-- the current exact lowering path adds one cold analyzer/lowering Guest and was slower in
-  the bounded matched fixture.
-
-The predecessor evidence remains valid for the exact immutable-read fixture. It must not
-be generalized to `CURRENT` operations such as an unversioned market-price read.
+The predecessor `issue_or_reuse`/`collect` bridge is Removed. Its immutable-read evidence and `+151.40%` cold result remain historical facts. PLM's separate controlled result is also negative: `+32.01%` cold and `+48.27%` with engines precompiled on the V1 fixture. Neither result supports a broad speedup claim.
 
 ## Two time domains
 
@@ -314,16 +307,18 @@ unified median    9.441244409 s
 change            +151.40%
 ```
 
-That result is permanent negative evidence for the measured implementation. PLM does not
-turn it into a success. The implementation megagoal must separately reduce or avoid the
-extra cold analysis/lowering Guest and repeat matched measurements.
+That result remains permanent negative evidence for the predecessor. The implemented PLM path removed the extra analysis Guest and measured separately:
 
-Correctness and economics remain separate gates. A correct PLM mechanism may remain
-default-off if its end-to-end cost is negative.
+```text
+cold end-to-end        4.018 s -> 5.305 s   +32.01%
+engines precompiled    2.690 s -> 3.989 s   +48.27%
+```
+
+The residual cost is final-Guest AST lowering and derived-tree selection, not a hidden second execution. Correctness and economics remain separate; PLM stays default-off because both controlled profiles are negative.
 
 ## V1 scope
 
-Implement first:
+Implemented in V1:
 
 ```text
 source-time or runtime prepare

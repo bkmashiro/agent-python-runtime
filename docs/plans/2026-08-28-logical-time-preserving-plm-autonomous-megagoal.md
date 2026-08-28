@@ -1,6 +1,6 @@
 # Logical-Time-Preserving PLM Autonomous Mega-Goal
 
-> **Status (2026-08-28): active successor architecture; implementation intentionally not started.** The owner requested design review and a ready-to-run megagoal now, followed by execution later. This file is the only active execution pointer for the migration.
+> **Status (2026-08-28): active implemented architecture; Gate 10 closeout in progress.** Gates 0 through 9 are complete. This file remains the only active execution pointer until signed upstream-clean closeout.
 
 **Goal:** Replace the predecessor `issue/collect` interpretation with a Run-owned, logical-time-preserving Prepare/Linearize/Materialize model that preserves original Host-call semantics for temporally changing external worlds, fixes the independently reported lifecycle/authority defects, and earns any latency claim through matched end-to-end evidence.
 
@@ -22,15 +22,15 @@
 
 Migrate the semantic architecture, but reuse the verified substrate.
 
-The current implementation is the predecessor PLM slice:
+The current implementation is PLM V1:
 
 ```text
-issue_or_reuse                 -> prepare
-Broker-routed Materialize      -> linearize + materialize
-collect at original call       -> L=M at the original logical point
+PrepareOrReuse                 -> Host-private candidate
+LinearizeAndMaterialize        -> validate, adopt or canonical start
+original compiler call site    -> L=M in V1
 ```
 
-Retain:
+Retained:
 
 - incremental source analysis without Agent-source execution;
 - exact sealed-source AST lowering;
@@ -43,7 +43,7 @@ Retain:
 - exact Guest, race and differential test infrastructure;
 - negative economics evidence.
 
-Replace or version deliberately:
+Replaced or versioned:
 
 - `issue_or_reuse` as the complete semantic model;
 - Plan-only `SplitPhaseTable` ownership;
@@ -574,6 +574,8 @@ These are not required for PLM V1 closeout. Admit each only through a separate o
 - multi-level transport/auth/request preparation;
 - prepare/commit external writes.
 
+**Gate G9 result:** No reserve is activated. The controlled economics result is negative and no reserve has independent correctness plus cost evidence. All six items remain Deferred; any future owner decision must create a separate successor plan.
+
 Do not leave unchecked tasks for these in the active closeout queue. If approved later, create a separate successor plan with its own evidence identity.
 
 ## Gate 10: Documentation and closeout
@@ -582,13 +584,13 @@ Do not leave unchecked tasks for these in the active closeout queue. If approved
 
 Tasks:
 
-- [ ] Update README, architecture, product direction, pass catalog and development commands.
-- [ ] Mark predecessor paths Historical/Removed/Research-only accurately.
-- [ ] Link exact contract, Guest artifact and body-safe evidence.
-- [ ] Report strict temporal modes separately from current/approximate operations.
-- [ ] Report logical and provider/economic traces separately.
-- [ ] Keep predecessor `+151.40%` result unchanged and report the new matched result independently.
-- [ ] Do not update thesis/report/deck current-system claims until implementation, exact Guest and evidence gates pass.
+- [x] Update README, architecture, product direction, pass catalog and development commands.
+- [x] Mark predecessor paths Historical/Removed/Research-only accurately.
+- [x] Link exact contract, Guest artifact and body-safe evidence.
+- [x] Report strict temporal modes separately from current/approximate operations.
+- [x] Report logical and provider/economic traces separately.
+- [x] Keep predecessor `+151.40%` result unchanged and report the new matched result independently.
+- [x] Do not update thesis/report/deck current-system claims until implementation, exact Guest and evidence gates pass.
 - [ ] Run focused, full, race, vet, Python and exact Guest gates.
 - [ ] Run bounded independent Host ownership, compiler lowering, temporal contract and evidence reviews.
 - [ ] Fix every High/Medium causal defect or record a named stop decision.
@@ -600,8 +602,8 @@ Tasks:
 
 ## Current execution pointer
 
-**Current:** Gates 0 through 8 are complete. The implemented V1 has deterministic temporal/fault evidence and a bounded conditional refinement sketch; external validator soundness and provider semantics remain explicit obligations.
+**Current:** Gates 0 through 9 are complete. No optional reserve is active; PLM V1 remains the one bounded implementation and stays default-off after the negative economics result.
 
-**Next:** Close Gate 9 without activating a reserve, then execute Gate 10 documentation and independent review.
+**Next:** Execute Gate 10 documentation, full verification, independent Host/compiler review and closeout.
 
 **Blocked:** No blocker.

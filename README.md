@@ -40,17 +40,13 @@ external-effect, and evidence dispositions. CPython/WASI is the current
 substrate, not the intended differentiator. See the
 [authority-lifecycle positioning decision](docs/authority-lifecycle-positioning.md),
 the [Cloudflare comparison reset](docs/research/cloudflare-code-mode-comparison.md),
-and the [proof-first roadmap](docs/proof-first-authority-roadmap.md). The active proposed
-successor is the
-[Logical-Time-Preserving PLM Autonomous Mega-Goal](docs/plans/2026-08-28-logical-time-preserving-plm-autonomous-megagoal.md).
-The implemented predecessor may prepare reads admitted by its plan-epoch contract before
-the original call and then claim them through Broker materialisation; its verified
-end-to-end fixture uses immutable reads. PLM keeps that substrate
-but adds original-point temporal validation: prepare may move earlier, linearization stays
-at the source call, and V1 materialization stays there as well. PLM is not yet implemented.
+and the [proof-first roadmap](docs/proof-first-authority-roadmap.md). The active
+experimental execution architecture is
+[Logical-Time-Preserving PLM](docs/plans/2026-08-28-logical-time-preserving-plm-autonomous-megagoal.md). It uses one Run-owned Broker/table and one exact final Guest. A versioned compiler pass may prepare a Host-private read candidate early, but temporal validation, logical admission, receipt order and V1 materialization remain at the original source call. Strict `IMMUTABLE`, `SNAPSHOT`, `VERSIONED` and `LEASED` candidates require matching Host evidence; `CURRENT` prepares transport only and `WALLCLOCK_OBSERVING` is not staged.
 
-The Python Future projection and the hard-coded `split_phase_sources_read` pass have been removed. Retained-prefix Guest execution and the earlier independent semantic pre-dispatch controller are intended to remain research-only. Independent review found lower-level constructor and Run/Broker ownership defects, so the predecessor is not considered closed; PLM Gate 2 owns those repairs. The direct prepared-value lane remains an independent default-off mechanism. The current
-[stage-aware pass catalog](docs/source-pass-plugins.md) exposes 17 default-off entries; one bounded pipeline instance selects at most 16. Prior measurements remain attached to their original mechanisms and are not relabelled as PLM speedups. Predecessor correctness and negative cold exact-Guest economics are recorded in [unified split-phase evidence v1](docs/research/unified-split-phase-evidence-v1.md).
+PLM is implemented and exact-Guest tested, but remains default-off. The controlled V1 fixture was negative: cold median `4.018 s -> 5.305 s` (`+32.01%`) and precompiled median `2.690 s -> 3.989 s` (`+48.27%`). These results are fixture-scoped. The contract, body-safe evidence and bounded conditional model are in [PLM V1 contract](docs/research/logical-time-plm-v1-contract.md), [economics evidence](docs/evidence/plm-v1-economics.json), [fault evidence](docs/evidence/plm-v1-fault-matrix.json) and [small core](docs/research/plm-v1-small-core.md).
+
+The Python Future projection, hard-coded `split_phase_sources_read` pass and predecessor `split_phase_capability_calls` issue/collect bridge have been removed. Retained-prefix Guest execution and semantic pre-dispatch remain Historical/Research-only behind `LegacyResearchExecution`. The current [stage-aware pass catalog](docs/source-pass-plugins.md) exposes 17 default-off entries, including `plm_capability_calls`; one bounded pipeline instance selects at most 16. The predecessor correctness record and its unchanged `+151.40%` cold result remain in [unified split-phase evidence v1](docs/research/unified-split-phase-evidence-v1.md).
 The completed foundation records bounded Experimental target-Guest AST planning,
 exact whole-Run single-flight/retention, continuation-preserving cold-I/O evidence and a
 small static source-pass seam while keeping every mechanism off by default.

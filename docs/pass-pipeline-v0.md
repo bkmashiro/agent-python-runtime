@@ -15,9 +15,9 @@ and prepared-region contracts.
 | `prepared_pure_region` | `execution_patch` | `whole_program_patch` |
 | `pure_scalar_cse` | `execution_patch` | `whole_program_patch` |
 | `pure_scalar_fold` | `execution_patch` | `whole_program_patch` |
-| `split_phase_capability_calls` | plan-bound Host-scheduled execution patch | `whole_program_patch` |
+| `plm_capability_calls` | Plan-bound Host-scheduled PLM patch | `whole_program_patch` |
 
-`semantic_pre_dispatch` remains registered only so frozen research campaigns can decode and replay their original evidence; Wazero requires `LegacyResearchExecution` for that path. Product execution uses `split_phase_capability_calls`, whose source-time preissue and runtime issue share one `SplitPhaseTable`.
+`semantic_pre_dispatch` remains registered only so frozen research campaigns can decode and replay their original evidence; Wazero requires `LegacyResearchExecution` for that path. Product PLM uses `plm_capability_calls`: final sealed-source preparation and original-point linearization share one Run-owned `SplitPhaseTable`, and lowering runs inside the one final Guest.
 
 The registration definition owns its stage. `CurrentEntry` projects that stage into
 the outcome shell, and `New` rejects a caller-supplied stage that differs from the

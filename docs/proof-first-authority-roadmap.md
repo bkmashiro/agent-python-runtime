@@ -26,7 +26,7 @@ Related decisions:
 - [authority-lifecycle positioning](authority-lifecycle-positioning.md)
 - [content-addressed Agent Functions](content-addressed-agent-functions.md)
 - [streaming authority-staged execution](streaming-authority-staged-execution.md)
-- [active Unified Effect-Aware Runtime Megagoal](plans/2026-08-14-unified-effect-aware-runtime-autonomous-megagoal.md)
+- [active Logical-Time-Preserving PLM megagoal](plans/2026-08-28-logical-time-preserving-plm-autonomous-megagoal.md)
 - [completed Semantic Execution Experimental Megagoal](plans/2026-08-14-semantic-execution-autonomous-megagoal.md)
 - [completed Full Composable Runtime megagoal](megagoal-full-composable-agent-runtime.md)
 - [completed streaming execution megagoal](megagoal-streaming-authority-staged-execution.md)
@@ -40,8 +40,8 @@ or density behavior:
 
 ```text
 stable minimal Run contract
-├─ optional incremental source analysis and admitted split-phase preissue
-├─ one seal-time issue/collect lowering and one synchronous Guest execution
+├─ optional sealed-source PLM preparation and original-point linearization
+├─ one final-Guest lowering path and one synchronous Guest execution
 ├─ optional streamed subagent fan-out
 ├─ optional immutable workspace roots / branches
 ├─ optional local content-addressed result reuse

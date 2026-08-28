@@ -35,34 +35,16 @@ remain typed Host effects. This does not replace the authority-lifecycle
 direction; fresh execution prevents hidden interpreter state from becoming
 workflow continuation state.
 
-The active proposed execution direction is the
-[Logical-Time-Preserving PLM megagoal](plans/2026-08-28-logical-time-preserving-plm-autonomous-megagoal.md).
-The current predecessor performs incremental source analysis, may start a read admitted
-by its plan-epoch contract and emits `issue_or_reuse` plus original-position `collect`
-sites. Its verified end-to-end fixture uses immutable reads.
-PLM retains synchronous CPython but distinguishes physical preparation from logical
-linearization. At the original source call, an operation-specific temporal validator
-adopts a candidate or starts the canonical operation. V1 materializes there as well.
-This successor is Proposed, not current implementation.
+The active experimental execution architecture is
+[Logical-Time-Preserving PLM](plans/2026-08-28-logical-time-preserving-plm-autonomous-megagoal.md). It keeps synchronous CPython and separates physical preparation from logical linearization. One Run-owned table may hold a Host-private candidate; the original source call revalidates binding, authority, provider/session and temporal evidence, then adopts that candidate or starts the canonical operation. V1 materializes at that same logical point.
 
-Retained-prefix Guest execution and the independent semantic pre-dispatch controller are
-intended to remain historical comparators. Independent review found a lower-level
-constructor bypass and Run/Broker ownership defects; PLM Gate 2 must close them before the
-research-only claim is complete. The Python Future projection and hard-coded
-`split_phase_sources_read` pass were removed. Unsupported or unproved cases use unchanged
-sequential execution.
+PLM is implemented, exact-Guest tested and default-off. Strict `IMMUTABLE`, `SNAPSHOT`, `VERSIONED` and `LEASED` modes can adopt only matching evidence. `CURRENT` may prepare transport/session state but always performs the read at the original call. `WALLCLOCK_OBSERVING` is not staged. Unsupported or unproved source executes unchanged synchronous code. The controlled cold and precompiled fixtures were both slower, so the repository makes no latency-improvement claim.
+
+The predecessor `issue_or_reuse`/`collect` bridge, Python Future projection and hard-coded `split_phase_sources_read` pass are Removed. Retained-prefix Guest execution and semantic pre-dispatch are Historical/Research-only behind `LegacyResearchExecution`. The direct prepared-value lane remains independent and default-off. The current [stage-aware pass catalog](source-pass-plugins.md) exposes 17 default-off entries, while one bounded pipeline instance selects at most 16. Historical measurements remain attached to their original mechanism; the predecessor `+151.40%` result is not relabelled as PLM evidence. Current PLM evidence is linked from the [V1 contract](research/logical-time-plm-v1-contract.md).
 
 Other bounded Experimental mechanisms include portable immutable roots, structured recursive child orchestration, exact AST-qualified whole-Run Agent Function reuse/single-flight, explicit single-wait fresh re-evaluation, one never-served single-use prepared module, bounded Linux private-memory COW, and continuation-preserving cold-I/O. General arbitrary-Python purity, production fan-out scheduling, automatic cold/reuse policy, generalized write commit/reconciliation, collect sinking and broad performance claims remain Deferred or Proposed.
 
-The [direct prepared-value lane](research/direct-prepared-values-v1.md) remains an independent default-off mechanism and retains its fixed NumPy evidence. Historical Future and analyzer-driven source-pass measurements remain attached to those removed mechanisms; they are not PLM speedups. The current [stage-aware pass catalog](source-pass-plugins.md) exposes 17 default-off entries, while one bounded pipeline instance selects at most 16. Selection remains static, with no generic IR, automatic order solver, Host dependency graph or cost model.
-
-Optional mechanisms must remain orthogonal at their public contract boundaries.
-Result caching, single-flight, workflow re-evaluation, immutable workspace
-branching, private attempts, playback, external-write lifecycle, prepared
-runtime, memory COW, verification, and Lab projection each require an explicit
-off-state and tested fallback. Historical dependency and composition records remain
-in the [composable mechanism roadmap](proof-first-authority-roadmap.md); current
-status and future evaluation decisions come only from the active source of truth.
+Each optional mechanism has its own public configuration switch and a tested off path. This applies to result caching, single-flight, workflow re-evaluation, immutable workspace branches, private attempts, playback, external writes, prepared runtimes, memory COW, verification and Lab projection. Historical dependencies remain in the [composable mechanism roadmap](proof-first-authority-roadmap.md); the active source of truth governs current status and future evaluation.
 
 Generic code execution is necessary infrastructure, not the differentiator.
 Sandboxed code, mediated connectors, ledgers, approval replay, and compensation

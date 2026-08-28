@@ -7,10 +7,9 @@ go test ./...
 go vet ./...
 ```
 
-The active proposed execution queue is the
+The active PLM implementation and closeout record is the
 [Logical-Time-Preserving PLM Mega-Goal](plans/2026-08-28-logical-time-preserving-plm-autonomous-megagoal.md).
-It reuses the predecessor's dedicated wrapper instead of reconstructing focused, race,
-full or exact-Guest commands:
+The historical wrapper name remains for command compatibility:
 
 ```bash
 scripts/unified-split-phase-gate.sh focused
@@ -27,6 +26,18 @@ installing into the system Python:
 ```bash
 PYTHON_BIN=/path/to/python-with-numpy scripts/unified-split-phase-gate.sh full
 ```
+
+PLM's controlled economics and body-safe temporal/fault gates require an exact Guest:
+
+```bash
+AGENT_RUNTIME_GUEST=/absolute/path/to/agent-python-runtime.wasm \
+  scripts/plm-economics-gate.sh docs/evidence/plm-v1-economics.json
+PLM_ARTIFACT_SOURCE_COMMIT=$(git rev-parse HEAD) \
+AGENT_RUNTIME_GUEST=/absolute/path/to/agent-python-runtime.wasm \
+  scripts/plm-fault-gate.py docs/evidence/plm-v1-fault-matrix.json
+```
+
+The economics gate is a measurement command, not a positive-performance assertion. It overwrites its named output only when the full fixture completes.
 
 For Track F semantic-region and Lab work, use the repository gate wrapper instead of
 reconstructing long commands by hand:

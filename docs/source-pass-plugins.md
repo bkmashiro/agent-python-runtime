@@ -36,22 +36,21 @@ type SourcePatchPlugin interface {
 }
 ```
 
-Analyzer-free Run bindings and plan-bound Host scheduling use separate narrow dispatch surfaces:
+Analyzer-free Run bindings and the PLM Host-scheduled path use separate narrow dispatch surfaces:
 
 ```go
 registry.BindRunValue("prepared_value_binding", slotID)
 registry.ExecuteCapabilityHostScheduled(
     ctx,
-    "split_phase_capability_calls",
-    transformer,
+    sourcepatch.PLMCapabilityCallsName,
     runner,
     request,
     plan.PythonPrelude(),
-    passplugin.CapabilityProjections(plan),
+    passplugin.PLMCapabilityProjections(plan),
 )
 ```
 
-The prepared-value binding is analyzer-free. The capability-call pass uses one exact target-Guest whole-program transform and a Host-authored projection allowlist derived from the sealed Plan. Neither surface exposes grants or handlers to Guest code.
+The prepared-value binding is analyzer-free. PLM asks the final exact Guest to transform sealed source before that same module executes it; the Host supplies and validates the Plan-derived projection allowlist. Neither surface exposes grants or handlers to Guest code.
 
 ## Unified optimization catalog
 
@@ -61,7 +60,7 @@ the pipeline's bounded 16 entries:
 
 - the retained stage adapters for semantic analysis, prepared regions and Run bindings;
 - `prepared_pure_region`, `pure_scalar_cse`, `pure_scalar_fold`,
-  `split_phase_capability_calls` and `data_local_numpy_sum`;
+  `plm_capability_calls` and `data_local_numpy_sum`;
 - nine `runtime_lowering` passes for historical research streaming, child fanout, Agent Function retention,
   single-flight, fresh workflow re-evaluation, prepared Runtime instantiation, private-memory COW,
   cold-I/O residency and semantic whole-Run reuse.
@@ -90,11 +89,7 @@ central pass-name switch. The registry dispatches explicitly enabled source patc
 `Execute` method runs unchanged source when a pass is disabled, fails before execution or
 returns not-applicable.
 
-Runnable source-patch plugins ask an authority-free exact Guest to transform the complete
-source. The Guest returns a patch containing original and derived source/AST identities and
-the derived source body. Final execution receives the unchanged original `RunRequest`; after
-normal validation, a fresh Guest re-derives and selects the patch through
-`runtime_select_source_pass_execution`.
+Runnable authority-free source-patch plugins ask an exact analysis Guest to transform the complete source. The Guest returns a patch containing original and derived source/AST identities and the derived source body. Final execution receives the unchanged original `RunRequest`; after normal validation, a fresh Guest re-derives and selects the patch through `runtime_select_source_pass_execution`. PLM is the deliberate exception: its effect-owning typed entry point transforms and selects inside the same final Guest, with Host validation between those steps.
 
 The generic source-patch seam intentionally admits no capability Broker or mounted workspace.
 A pass that owns external effects, batching, parallel calls or workspace projection uses its
@@ -108,14 +103,14 @@ after derived execution begins.
 | `prepared_pure_region` | `whole_program_patch` | adapter to the existing prepared-region owner |
 | `pure_scalar_cse` | `whole_program_patch` | runnable source-patch plugin |
 | `pure_scalar_fold` | `whole_program_patch` | runnable source-patch plugin |
-| `split_phase_capability_calls` | `whole_program_patch` | plan-bound issue/collect lowering over admitted typed Host projections |
+| `plm_capability_calls` | `whole_program_patch` | Plan-bound Prepare/Linearize/Materialize lowering in the final Guest |
 | `data_local_numpy_sum` | `whole_program_patch` | historical analyzer-driven ValueSlot route; superseded by direct binding |
 
-## `split_phase_capability_calls` v1
+## `plm_capability_calls` v1
 
-The retained Host-scheduled pass accepts only direct typed capability assignments whose sealed Plan entry has a positive pre-dispatch contract. Its Host-authored descriptor binds capability, Python module/method, ordered argument names and result field. The exact Guest inserts an internal issue at the earliest admitted statement-level point and a synchronous collect at the original logical call. Static source span plus runtime occurrence distinguishes loops and repeated sites. Unsupported wrappers, unsafe argument evaluation, writes and ambiguous source return `not_applicable` and execute the unchanged synchronous projection.
+The Host-scheduled PLM pass accepts only direct typed capability assignments whose sealed Plan entry has a positive `pysolate.plm-contract.v1`. Its Host-authored descriptor binds capability, Python module/method, ordered argument names and result field. The final exact Guest inserts an internal prepare at the earliest admitted statement-level point and a synchronous linearize/materialize call at the original logical call. Static source span plus runtime occurrence distinguishes loops and repeated sites. Unsupported wrappers, unsafe argument evaluation, writes and ambiguous source return `not_applicable` and execute unchanged synchronous source.
 
-Source-time analysis may populate the same dynamic slot before seal. Final execution calls `IssueOrReuse`; an exact request reuses that attempt, while a miss starts the admitted operation when CPython reaches the fixed issue site. Broker materialisation still owns logical permission, order, validation and receipts. Ordinary Python never receives a Future object, and the Host stores no Python dependency graph. Exact correctness and the negative cold-fixture economics are recorded in [`unified-split-phase-evidence-v1.md`](research/unified-split-phase-evidence-v1.md).
+Source-time preparation requires the final sealed source identity and the same Run-owned candidate table used at the original call. The Host rechecks call/source/arguments, authority, provider/session and temporal evidence before adoption. `CURRENT` prepares transport only; `WALLCLOCK_OBSERVING` is not staged. Ordinary Python never receives a Future or candidate handle, and the Host stores no Python dependency graph. The predecessor `split_phase_capability_calls` issue/collect pass is Removed; its exact correctness and `+151.40%` cold result remain unchanged in [`unified-split-phase-evidence-v1.md`](research/unified-split-phase-evidence-v1.md). Current PLM economics and temporal/fault results are [`plm-v1-economics.json`](evidence/plm-v1-economics.json) and [`plm-v1-fault-matrix.json`](evidence/plm-v1-fault-matrix.json).
 
 ## `pure_scalar_cse` v1
 

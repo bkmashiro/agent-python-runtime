@@ -1,10 +1,17 @@
 # Logical-time PLM V1 contract
 
-Status: **Frozen and implemented through Gate 5. Gate 6 economics measurement is in progress.**
+Status: **Frozen, implemented, exact-Guest verified and default-off after negative economics.**
 
 Architecture source: [Logical-Time-Preserving Split-Phase Execution](logical-time-preserving-split-phase-execution.md)
 
 Execution source: [PLM Autonomous Mega-Goal](../plans/2026-08-28-logical-time-preserving-plm-autonomous-megagoal.md)
+
+Exact evidence:
+
+- Guest artifact SHA-256: `sha256:e9e2416f0cd34b397222267ec18637b6973597a2ec9ec4bb9e9bb526eca40585`
+- [matched economics](../evidence/plm-v1-economics.json)
+- [body-safe temporal/fault matrix](../evidence/plm-v1-fault-matrix.json)
+- [bounded conditional small core](plm-v1-small-core.md)
 
 Executable schema and oracle:
 

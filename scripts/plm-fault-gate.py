@@ -47,12 +47,14 @@ def run_json(name: str, command: list[str], env: dict[str, str] | None = None) -
             packages.append(package)
     if process.returncode != 0 or failed:
         raise SystemExit(f"{name} failed: returncode={process.returncode} tests={failed}")
+    top_level_tests = sorted({row["name"] for row in passed if "/" not in row["name"]})
     return {
         "name": name,
         "command": command,
         "returncode": process.returncode,
         "test_pass_events": len(passed),
-        "unique_tests": sorted({row["name"] for row in passed}),
+        "unique_tests": top_level_tests,
+        "subtest_pass_events": sum(1 for row in passed if "/" in row["name"]),
         "package_passes": sorted(set(packages)),
     }
 

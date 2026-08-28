@@ -81,7 +81,7 @@ func TestRealGuestSemanticPreDispatchClaimsAtUnchangedPythonCall(t *testing.T) {
 	analysisConfig := runtimeconfig.DefaultRunConfig()
 	analysisConfig.ExecutionProfile = &profile
 	analysisConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
-	analysisRunner, err := (wazeroengine.Factory{}).New(context.Background(), artifact, analysisConfig)
+	analysisRunner, err := (wazeroengine.Factory{LegacyResearchExecution: true}).New(context.Background(), artifact, analysisConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestRealGuestSemanticPreDispatchClaimsAtUnchangedPythonCall(t *testing.T) {
 	}
 	executionConfig := runtimeconfig.DefaultRunConfig()
 	executionConfig.ExecutionProfile = &profile
-	factory := wazeroengine.Factory{Passes: passes, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	factory := wazeroengine.Factory{LegacyResearchExecution: true, Passes: passes, BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		return capability.NewBroker(capability.Config{RunIdentity: "semantic-pre-dispatch-e2e", Plan: plan, StagedClaimer: controller, SemanticPreDispatch: true})
 	}}
 	executionRunner, err := factory.New(context.Background(), artifact, executionConfig)

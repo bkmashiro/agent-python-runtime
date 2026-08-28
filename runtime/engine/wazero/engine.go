@@ -46,6 +46,10 @@ type Factory struct {
 	PreparedRegions  *preparedregion.PreparedRegionTable
 	ValueSlots       *valueslot.Table
 	Passes           *passplugin.Registry
+	// LegacyResearchExecution is the single explicit gate for replaying the
+	// retained-prefix Guest and independent semantic pre-dispatch comparators.
+	// Product execution and the unified split-phase path leave it false.
+	LegacyResearchExecution bool
 }
 
 func (Factory) Name() string { return "wazero" }
@@ -78,6 +82,9 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 func (factory Factory) validatedBinding(config runtimeconfig.RunConfig) (*workspaceBinding, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
+	}
+	if !factory.LegacyResearchExecution && (config.Mechanisms.Streaming || config.Mechanisms.SemanticPreDispatch) {
+		return nil, runtimeconfig.ErrMechanismDisabled
 	}
 	if (config.Mechanisms.SemanticPreDispatch || config.Mechanisms.SplitPhaseCalls) && factory.BrokerFactory == nil {
 		return nil, errors.New("Host scheduling requires a capability Broker factory")

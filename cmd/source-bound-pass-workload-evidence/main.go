@@ -113,7 +113,7 @@ func run(ctx context.Context, artifactPath, manifestPath, preregistrationPath st
 	config := runtimeconfig.DefaultRunConfig()
 	config.ExecutionProfile = &profile
 	config.Mechanisms.SemanticAnalysis = true
-	runner, err := (wazeroengine.Factory{}).New(ctx, artifact, config)
+	runner, err := (wazeroengine.Factory{LegacyResearchExecution: true}).New(ctx, artifact, config)
 	if err != nil {
 		return nil, err
 	}

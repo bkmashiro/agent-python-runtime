@@ -69,7 +69,7 @@ func TestRealGuestFullComposableRuntimeNorthStar(t *testing.T) {
 	completedChildren := make(chan string, 2)
 	childRunner := subagent.FreshRunnerExecutor{
 		Factory: subagent.RunnerFactoryFunc(func(ctx context.Context, descriptor subagent.Descriptor, ref workspace.Ref) (engine.Runner, error) {
-			factory := wazeroengine.Factory{WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "child-" + descriptor.ChildID}
+			factory := wazeroengine.Factory{LegacyResearchExecution: true, WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "child-" + descriptor.ChildID}
 			return factory.New(ctx, artifact, runtimeconfig.DefaultRunConfig())
 		}),
 		Builder: subagent.ProgramBuilderFunc(func(descriptor subagent.Descriptor) (subagent.ChildProgram, error) {
@@ -98,7 +98,7 @@ func TestRealGuestFullComposableRuntimeNorthStar(t *testing.T) {
 		t.Fatal(err)
 	}
 	parentConfig := runtimeconfig.DefaultRunConfig()
-	parentRunner, err := (wazeroengine.Factory{
+	parentRunner, err := (wazeroengine.Factory{LegacyResearchExecution: true,
 		Passes: runtimePasses, WorkspaceManager: manager, WorkspaceRef: parentAttempt.Ref(), WorkspaceOwner: "composable-parent",
 	}).New(context.Background(), artifact, parentConfig)
 	if err != nil {
@@ -281,7 +281,7 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 	}
 	request := plainRequest(t, "from pathlib import Path\nPath('/tmp/prepared-only').write_text('private')\nresult = {'parity': 'same'}")
 	manager, base := newComposableWorkspace(t)
-	baselineFactory := wazeroengine.Factory{WorkspaceManager: manager, WorkspaceRef: base, WorkspaceOwner: "prepared-parity"}
+	baselineFactory := wazeroengine.Factory{LegacyResearchExecution: true, WorkspaceManager: manager, WorkspaceRef: base, WorkspaceOwner: "prepared-parity"}
 	baselineRunner, err := baselineFactory.New(context.Background(), artifact, runtimeconfig.DefaultRunConfig())
 	if err != nil {
 		t.Fatal(err)
@@ -475,7 +475,7 @@ func TestComposableParentInvalidDiscardsRealChildBranches(t *testing.T) {
 	runnerExecutor := subagent.FreshRunnerExecutor{
 		Factory: subagent.RunnerFactoryFunc(func(ctx context.Context, descriptor subagent.Descriptor, ref workspace.Ref) (engine.Runner, error) {
 			started <- struct{}{}
-			return (wazeroengine.Factory{WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "invalid-child"}).New(ctx, artifact, runtimeconfig.DefaultRunConfig())
+			return (wazeroengine.Factory{LegacyResearchExecution: true, WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "invalid-child"}).New(ctx, artifact, runtimeconfig.DefaultRunConfig())
 		}),
 		Builder: subagent.ProgramBuilderFunc(func(descriptor subagent.Descriptor) (subagent.ChildProgram, error) {
 			request := []byte(`{"run_id":"invalid-child","code":"result = 'private'","inputs":{}}`)
@@ -571,7 +571,7 @@ func (factory *realWorkflowGuestFactory) NewGuest(ctx context.Context) (workflow
 		return nil, err
 	}
 	factory.created++
-	runner, err := (wazeroengine.Factory{
+	runner, err := (wazeroengine.Factory{LegacyResearchExecution: true,
 		WorkspaceManager: factory.manager, WorkspaceRef: branch.Ref(), WorkspaceOwner: "workflow-guest",
 	}).New(ctx, factory.artifact, runtimeconfig.DefaultRunConfig())
 	if err != nil {
@@ -615,7 +615,7 @@ func TestRealGuestCOWSingleUseOutcomeIsolation(t *testing.T) {
 	}
 	config := runtimeconfig.DefaultRunConfig()
 
-	factory := wazeroengine.Factory{Passes: passes, WorkspaceManager: manager, WorkspaceRef: base, WorkspaceOwner: "cow-outcome"}
+	factory := wazeroengine.Factory{LegacyResearchExecution: true, Passes: passes, WorkspaceManager: manager, WorkspaceRef: base, WorkspaceOwner: "cow-outcome"}
 	runner, err := factory.New(context.Background(), artifact, config)
 	if err != nil {
 		if goruntime.GOOS != "linux" || errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
@@ -714,7 +714,7 @@ func TestRealGuestColdIOContinuationPreservesPythonState(t *testing.T) {
 	config.ColdIO = &runtimeconfig.ColdIOPolicy{
 		ColdAfter: 10 * time.Millisecond, PageOutAfter: 20 * time.Millisecond,
 	}
-	factory := wazeroengine.Factory{Passes: passes, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	factory := wazeroengine.Factory{LegacyResearchExecution: true, Passes: passes, BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		return capability.NewBroker(capability.Config{RunIdentity: "cold-python", Plan: plan})
 	}}
 	runner, err := factory.New(context.Background(), artifact, config)

@@ -147,7 +147,7 @@ func TestWholeFileOracleSeparatesParseReachabilityAndRuntimeFailure(t *testing.T
 				return json.RawMessage(`{"value":"weather"}`), nil
 			}))
 			var broker *capability.Broker
-			runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+			runner, err := (wazeroengine.Factory{LegacyResearchExecution: true, BrokerFactory: func(context.Context) (*capability.Broker, error) {
 				created, createErr := capability.NewBroker(capability.Config{RunIdentity: "whole-file-oracle", Plan: plan})
 				broker = created
 				return created, createErr

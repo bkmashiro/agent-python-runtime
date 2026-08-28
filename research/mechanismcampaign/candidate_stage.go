@@ -316,7 +316,7 @@ func executeCandidate(ctx context.Context, candidateID string, artifact []byte, 
 		_ = attempt.Discard()
 		return CandidateStageOutput{}, err
 	}
-	runnerContract, err := (wazeroengine.Factory{
+	runnerContract, err := (wazeroengine.Factory{LegacyResearchExecution: true,
 		Passes:           passes,
 		WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: "candidate-" + candidateID,
 		BrokerFactory: func(context.Context) (*capability.Broker, error) {

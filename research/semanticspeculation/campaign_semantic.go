@@ -238,7 +238,7 @@ func (t *SemanticPreDispatchTreatment) Begin(ctx context.Context, inputs json.Ra
 	executionConfig := t.config.RunConfig
 	executionConfig.Mechanisms = runtimeconfig.MechanismSet{PrivateWorkspace: true}
 	formalEngineStarted := time.Now()
-	runner, err := (wazeroengine.Factory{
+	runner, err := (wazeroengine.Factory{LegacyResearchExecution: true,
 		Passes:           t.config.Passes,
 		WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: t.config.WorkspaceOwner,
 		BrokerFactory: func(context.Context) (*capability.Broker, error) {

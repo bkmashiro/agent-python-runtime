@@ -111,7 +111,7 @@ func (t *EagerGuestTreatment) Begin(ctx context.Context, inputs json.RawMessage)
 		return err
 	}
 	t.manager, t.attempt = manager, attempt
-	factory := wazeroengine.Factory{Passes: t.config.Passes, WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: t.config.WorkspaceOwner, BrokerFactory: func(inner context.Context) (*capability.Broker, error) {
+	factory := wazeroengine.Factory{LegacyResearchExecution: true, Passes: t.config.Passes, WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: t.config.WorkspaceOwner, BrokerFactory: func(inner context.Context) (*capability.Broker, error) {
 		broker, err := t.config.BrokerFactory(inner)
 		if err == nil {
 			t.broker = broker

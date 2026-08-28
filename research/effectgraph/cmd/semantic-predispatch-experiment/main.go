@@ -185,7 +185,7 @@ func analyze(artifact []byte, profile runtimeconfig.ExecutionProfile, artifactSH
 	config := runtimeconfig.DefaultRunConfig()
 	config.ExecutionProfile = &profile
 	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
-	runner, err := (wazeroengine.Factory{}).New(context.Background(), artifact, config)
+	runner, err := (wazeroengine.Factory{LegacyResearchExecution: true}).New(context.Background(), artifact, config)
 	if err != nil {
 		fatal(err)
 	}
@@ -246,7 +246,7 @@ func runTrial(artifact []byte, profile runtimeconfig.ExecutionProfile, source st
 			return trial{}, err
 		}
 	}
-	factory := wazeroengine.Factory{Passes: passes, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	factory := wazeroengine.Factory{LegacyResearchExecution: true, Passes: passes, BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		var err error
 		brokerConfig := capability.Config{RunIdentity: fmt.Sprintf("experiment-%s-%d", condition, index), Plan: plan}
 		if controller != nil {

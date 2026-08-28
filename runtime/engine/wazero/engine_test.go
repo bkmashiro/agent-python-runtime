@@ -49,12 +49,24 @@ func TestFactoryRequiresBrokerForProgrammaticToolsAndApproval(t *testing.T) {
 	}
 }
 
-func TestFactoryRequiresBrokerForSemanticPreDispatch(t *testing.T) {
+func TestFactoryQuarantinesLegacyEarlyExecutionBehindResearchGate(t *testing.T) {
+	for name, mechanisms := range map[string]runtimeconfig.MechanismSet{
+		"semantic pre-dispatch": {SemanticAnalysis: true, SemanticPreDispatch: true, StagedObservation: true},
+		"retained-prefix Guest": {Streaming: true, PrivateWorkspace: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			config := runtimeconfig.DefaultRunConfig()
+			config.Mechanisms = mechanisms
+			if _, err := (wazeroengine.Factory{}).New(context.Background(), []byte("not wasm"), config); !errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
+				t.Fatalf("default factory error=%v", err)
+			}
+		})
+	}
 	config := runtimeconfig.DefaultRunConfig()
 	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, SemanticPreDispatch: true, StagedObservation: true}
-	_, err := (wazeroengine.Factory{}).New(context.Background(), []byte("not wasm"), config)
+	_, err := (wazeroengine.Factory{LegacyResearchExecution: true}).New(context.Background(), []byte("not wasm"), config)
 	if err == nil || !strings.Contains(err.Error(), "requires a capability Broker factory") {
-		t.Fatalf("factory error = %v", err)
+		t.Fatalf("research-gated factory error=%v", err)
 	}
 }
 

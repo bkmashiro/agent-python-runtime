@@ -492,7 +492,7 @@ func runScenarioGuestExecution(t *testing.T, artifact []byte, scenario composabl
 	}
 	manager, base := newComposableWorkspace(t)
 	defer manager.Close()
-	factory := wazeroengine.Factory{WorkspaceManager: manager, WorkspaceRef: base, WorkspaceOwner: "spark-" + scenario.ID}
+	factory := wazeroengine.Factory{LegacyResearchExecution: true, WorkspaceManager: manager, WorkspaceRef: base, WorkspaceOwner: "spark-" + scenario.ID}
 	runner, err := factory.New(context.Background(), artifact, config)
 	if err != nil {
 		if treatment == composableacceptance.TreatmentCOW && runtime.GOOS != "linux" {
@@ -589,7 +589,7 @@ func runScenarioStreamingExecution(t *testing.T, artifact []byte, artifactSHA st
 	if err != nil {
 		t.Fatal(err)
 	}
-	factory := wazeroengine.Factory{
+	factory := wazeroengine.Factory{LegacyResearchExecution: true,
 		Passes:           passes,
 		WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: "streaming-spark-" + scenario.ID,
 	}
@@ -893,7 +893,7 @@ func runScenarioFanoutExecution(t *testing.T, artifact []byte, scenario composab
 	}
 	childRunner := subagent.FreshRunnerExecutor{
 		Factory: subagent.RunnerFactoryFunc(func(ctx context.Context, descriptor subagent.Descriptor, ref workspace.Ref) (engine.Runner, error) {
-			factory := wazeroengine.Factory{
+			factory := wazeroengine.Factory{LegacyResearchExecution: true,
 				WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "fanout-child-" + safeIdentifier(descriptor.ChildID),
 			}
 			return factory.New(ctx, artifact, runtimeconfig.DefaultRunConfig())
@@ -1133,7 +1133,7 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 	}
 	recorder.append(composableacceptance.TraceEventTypeWorkspace, "workspace.fork", composableacceptance.TraceEventOutcomeOK, nil, nil, nil, "", "", 1)
 	config := runtimeconfig.DefaultRunConfig()
-	factory := wazeroengine.Factory{Passes: passes, WorkspaceManager: manager, WorkspaceRef: parentAttempt.Ref(), WorkspaceOwner: "all-spark-parent-" + scenario.ID}
+	factory := wazeroengine.Factory{LegacyResearchExecution: true, Passes: passes, WorkspaceManager: manager, WorkspaceRef: parentAttempt.Ref(), WorkspaceOwner: "all-spark-parent-" + scenario.ID}
 	parentRunner, err := factory.New(context.Background(), artifact, config)
 	if err != nil {
 		if errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
@@ -1180,7 +1180,7 @@ func runScenarioAllExecution(t *testing.T, artifact []byte, artifactSHA string, 
 	childRunner := subagent.FreshRunnerExecutor{
 		Factory: subagent.RunnerFactoryFunc(func(_ context.Context, descriptor subagent.Descriptor, ref workspace.Ref) (engine.Runner, error) {
 			childGuests.Add(1)
-			factory := wazeroengine.Factory{WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "all-spark-child-" + safeIdentifier(descriptor.ChildID)}
+			factory := wazeroengine.Factory{LegacyResearchExecution: true, WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "all-spark-child-" + safeIdentifier(descriptor.ChildID)}
 			return factory.New(context.Background(), artifact, runtimeconfig.DefaultRunConfig())
 		}),
 		Builder: subagent.ProgramBuilderFunc(func(descriptor subagent.Descriptor) (subagent.ChildProgram, error) {
@@ -1552,7 +1552,7 @@ func runScenarioInvalidParentExecution(t *testing.T, artifact []byte, scenario c
 	childRunner := subagent.FreshRunnerExecutor{
 		Factory: subagent.RunnerFactoryFunc(func(_ context.Context, descriptor subagent.Descriptor, ref workspace.Ref) (engine.Runner, error) {
 			childGuests.Add(1)
-			factory := wazeroengine.Factory{WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "invalid-parent-child-" + safeIdentifier(descriptor.ChildID)}
+			factory := wazeroengine.Factory{LegacyResearchExecution: true, WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "invalid-parent-child-" + safeIdentifier(descriptor.ChildID)}
 			return factory.New(context.Background(), artifact, runtimeconfig.DefaultRunConfig())
 		}),
 		Builder: subagent.ProgramBuilderFunc(func(descriptor subagent.Descriptor) (subagent.ChildProgram, error) {
@@ -1639,7 +1639,7 @@ func runScenarioInvalidChildExecution(t *testing.T, artifact []byte, scenario co
 	childRunner := subagent.FreshRunnerExecutor{
 		Factory: subagent.RunnerFactoryFunc(func(_ context.Context, descriptor subagent.Descriptor, ref workspace.Ref) (engine.Runner, error) {
 			childGuests.Add(1)
-			factory := wazeroengine.Factory{WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "invalid-child-" + safeIdentifier(descriptor.ChildID)}
+			factory := wazeroengine.Factory{LegacyResearchExecution: true, WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "invalid-child-" + safeIdentifier(descriptor.ChildID)}
 			return factory.New(context.Background(), artifact, runtimeconfig.DefaultRunConfig())
 		}),
 		Builder: subagent.ProgramBuilderFunc(func(descriptor subagent.Descriptor) (subagent.ChildProgram, error) {
@@ -1915,7 +1915,7 @@ func runScenarioCancellationExecution(t *testing.T, artifact []byte, scenario co
 	if err != nil {
 		t.Fatal(err)
 	}
-	factory := wazeroengine.Factory{WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: "cancellation-spark-" + scenario.ID}
+	factory := wazeroengine.Factory{LegacyResearchExecution: true, WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: "cancellation-spark-" + scenario.ID}
 	runner, err := factory.New(context.Background(), artifact, runtimeconfig.DefaultRunConfig())
 	if err != nil {
 		t.Fatal(err)
@@ -1955,7 +1955,7 @@ func runScenarioCancellationExecution(t *testing.T, artifact []byte, scenario co
 	if err != nil {
 		t.Fatal(err)
 	}
-	recoveryFactory := wazeroengine.Factory{WorkspaceManager: manager, WorkspaceRef: recoveryAttempt.Ref(), WorkspaceOwner: "cancellation-recovery-" + scenario.ID}
+	recoveryFactory := wazeroengine.Factory{LegacyResearchExecution: true, WorkspaceManager: manager, WorkspaceRef: recoveryAttempt.Ref(), WorkspaceOwner: "cancellation-recovery-" + scenario.ID}
 	recoveryRunner, err := recoveryFactory.New(context.Background(), artifact, runtimeconfig.DefaultRunConfig())
 	if err != nil {
 		t.Fatal(err)
@@ -1999,7 +1999,7 @@ func (factory *scenarioReevaluationWorkflowGuestFactory) NewGuest(ctx context.Co
 		return nil, err
 	}
 	factory.created++
-	runner, err := (wazeroengine.Factory{
+	runner, err := (wazeroengine.Factory{LegacyResearchExecution: true,
 		WorkspaceManager: factory.manager, WorkspaceRef: branch.Ref(), WorkspaceOwner: "reeval-workflow",
 	}).New(ctx, factory.artifact, runtimeconfig.DefaultRunConfig())
 	if err != nil {

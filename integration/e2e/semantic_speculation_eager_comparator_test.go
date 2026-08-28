@@ -185,7 +185,7 @@ func runExactGuestEagerComparator(
 	if err != nil {
 		t.Fatal(err)
 	}
-	factory := wazeroengine.Factory{
+	factory := wazeroengine.Factory{LegacyResearchExecution: true,
 		Passes:           passes,
 		WorkspaceManager: binding.manager,
 		WorkspaceRef:     attempt.Ref(),

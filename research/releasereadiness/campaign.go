@@ -355,7 +355,7 @@ func runLane(ctx context.Context, lane string, artifact []byte, profile runtimec
 	runConfig := runtimeconfig.DefaultRunConfig()
 	runConfig.ExecutionProfile = &profile
 	runConfig.Mechanisms = runtimeconfig.MechanismSet{PrivateWorkspace: true}
-	factory := wazeroengine.Factory{
+	factory := wazeroengine.Factory{LegacyResearchExecution: true,
 		WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: "checkout-" + lane,
 		BrokerFactory: func(context.Context) (*capability.Broker, error) {
 			brokerConfig := capability.Config{RunIdentity: "checkout-" + lane, Plan: plan}

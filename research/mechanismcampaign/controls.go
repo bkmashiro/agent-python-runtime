@@ -114,7 +114,7 @@ func RunFailClosedControls(ctx context.Context, config ControlStageConfig) (Cont
 		_ = controller.Finalize(false)
 		return ControlStageResult{}, err
 	}
-	runner, err := (wazeroengine.Factory{}).New(ctx, artifact, runtimeconfig.DefaultRunConfig())
+	runner, err := (wazeroengine.Factory{LegacyResearchExecution: true}).New(ctx, artifact, runtimeconfig.DefaultRunConfig())
 	if err != nil {
 		_ = attempt.Discard()
 		_ = controller.Finalize(false)

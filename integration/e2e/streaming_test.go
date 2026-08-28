@@ -89,7 +89,7 @@ func TestRealGuestStreamingAuthorityStagedExecution(t *testing.T) {
 			return streaming.RunResult{}, attempt.Ref(), nil, err
 		}
 		var broker *capability.Broker
-		factory := wazeroengine.Factory{
+		factory := wazeroengine.Factory{LegacyResearchExecution: true,
 			Passes:           passes,
 			WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: "stream-e2e",
 			BrokerFactory: func(context.Context) (*capability.Broker, error) {

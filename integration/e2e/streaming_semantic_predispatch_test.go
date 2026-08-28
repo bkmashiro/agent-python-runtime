@@ -164,7 +164,7 @@ func TestRealGuestStreamingPrefixesPreDispatchThreeReadsBeforeSourceFeedComplete
 	executionConfig := runtimeconfig.DefaultRunConfig()
 	executionConfig.ExecutionProfile = &profile
 	executionConfig.Mechanisms = runtimeconfig.MechanismSet{PrivateWorkspace: true}
-	runner, err := (wazeroengine.Factory{
+	runner, err := (wazeroengine.Factory{LegacyResearchExecution: true,
 		Passes: passes, WorkspaceManager: manager, WorkspaceRef: attempt.Ref(), WorkspaceOwner: "streaming-day-trip",
 		BrokerFactory: func(context.Context) (*capability.Broker, error) {
 			return capability.NewBroker(capability.Config{

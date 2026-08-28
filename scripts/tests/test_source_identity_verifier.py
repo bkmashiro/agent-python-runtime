@@ -1,3 +1,4 @@
+import os
 import pathlib
 import subprocess
 import tarfile
@@ -14,8 +15,11 @@ class SourceIdentityVerifierTests(unittest.TestCase):
         subprocess.run(["git", "init", "-q", root], check=True)
         subprocess.run(["git", "-C", root, "config", "user.email", "test@example.com"], check=True)
         subprocess.run(["git", "-C", root, "config", "user.name", "Test"], check=True)
-        (root / "source.txt").write_text("bound source\n")
-        subprocess.run(["git", "-C", root, "add", "source.txt"], check=True)
+        (root / "source.txt").write_text("original source\n")
+        ignored = root / ".hermes/plans/tracked.md"
+        ignored.parent.mkdir(parents=True)
+        ignored.write_text("tracked despite global ignore\n")
+        subprocess.run(["git", "-C", root, "add", "-Af", "source.txt", ".hermes/plans/tracked.md"], check=True)
         subprocess.run(["git", "-C", root, "commit", "-q", "-m", "fixture"], check=True)
         commit = subprocess.check_output(["git", "-C", root, "rev-parse", "HEAD"], text=True).strip()
         tree = subprocess.check_output(["git", "-C", root, "rev-parse", "HEAD^{tree}"], text=True).strip()
@@ -35,10 +39,15 @@ class SourceIdentityVerifierTests(unittest.TestCase):
                 subprocess.run(["git", "-C", repository, "archive", "--format=tar", "HEAD"], check=True, stdout=output)
             with tarfile.open(archive) as source:
                 source.extractall(extracted)
-            accepted = subprocess.run([VERIFIER, commit, tree, epoch], cwd=extracted, text=True, capture_output=True)
+            excludes = pathlib.Path(raw) / "global-excludes"
+            excludes.write_text(".hermes/\n")
+            gitconfig = pathlib.Path(raw) / "global-gitconfig"
+            subprocess.run(["git", "config", "--file", gitconfig, "core.excludesfile", excludes], check=True)
+            environment = os.environ | {"GIT_CONFIG_GLOBAL": str(gitconfig)}
+            accepted = subprocess.run([VERIFIER, commit, tree, epoch], cwd=extracted, text=True, capture_output=True, env=environment)
             self.assertEqual(accepted.returncode, 0, accepted.stderr)
             (extracted / "source.txt").write_text("mutated source\n")
-            rejected = subprocess.run([VERIFIER, commit, tree, epoch], cwd=extracted, text=True, capture_output=True)
+            rejected = subprocess.run([VERIFIER, commit, tree, epoch], cwd=extracted, text=True, capture_output=True, env=environment)
             self.assertNotEqual(rejected.returncode, 0)
             self.assertIn("source tree mismatch", rejected.stderr)
 

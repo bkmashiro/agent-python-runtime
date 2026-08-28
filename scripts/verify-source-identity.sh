@@ -30,7 +30,7 @@ else
   temporary=$(mktemp -d)
   trap 'rm -rf "$temporary"' EXIT
   git --git-dir="$temporary/repository.git" init --bare -q
-  GIT_DIR="$temporary/repository.git" GIT_WORK_TREE="$root" GIT_INDEX_FILE="$temporary/index" git add -A
+  GIT_DIR="$temporary/repository.git" GIT_WORK_TREE="$root" GIT_INDEX_FILE="$temporary/index" git add -Af
   actual_tree=$(GIT_DIR="$temporary/repository.git" GIT_WORK_TREE="$root" GIT_INDEX_FILE="$temporary/index" git write-tree)
 fi
 

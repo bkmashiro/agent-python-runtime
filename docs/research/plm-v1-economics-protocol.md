@@ -1,6 +1,8 @@
 # PLM V1 economics protocol
 
-Status: frozen before the Gate 6 measurement.
+Status: frozen before the Gate 6 measurement. The checked-in result is attributed to target
+`5bc36725f13034fa5418d6396d1c503820b513d4` and artifact
+`sha256:e9e2416f0cd34b397222267ec18637b6973597a2ec9ec4bb9e9bb526eca40585`; it is not evidence for a later code target.
 
 ## Question
 

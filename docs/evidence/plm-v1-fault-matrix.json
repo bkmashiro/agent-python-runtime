@@ -1,6 +1,6 @@
 {
-  "artifact_sha256": "sha256:da31fd00896f9a5fb013bac9807556c94c7ebdf7fa32bfc5b99716230b52217f",
-  "artifact_source_commit": "c4bab4bd4c559ab0066fad2ee3775e1e11fea517",
+  "artifact_sha256": "sha256:f89f10170a6a2d4c412ed29db320b3b019b9efde09c135429e81845a3e9bda43",
+  "artifact_source_commit": "cfa8f4a0fe494a318619c7d05bd1030f92416873",
   "economics_recalculated": [
     {
       "baseline_median_nanos": 4018421375,
@@ -90,8 +90,8 @@
         "github.com/bkmashiro/agent-python-runtime/runtime/capability"
       ],
       "returncode": 0,
-      "subtest_pass_events": 236,
-      "test_pass_events": 266,
+      "subtest_pass_events": 172,
+      "test_pass_events": 202,
       "unique_tests": [
         "TestPLMCancellationAndLateCompletionRemainRunOwned",
         "TestPLMCandidateAndJobStateMachinesHaveExplicitTerminalDisposition",
@@ -141,8 +141,8 @@
         "github.com/bkmashiro/agent-python-runtime/runtime/capability"
       ],
       "returncode": 0,
-      "subtest_pass_events": 2360,
-      "test_pass_events": 2660,
+      "subtest_pass_events": 1720,
+      "test_pass_events": 2020,
       "unique_tests": [
         "TestPLMCancellationAndLateCompletionRemainRunOwned",
         "TestPLMCandidateAndJobStateMachinesHaveExplicitTerminalDisposition",
@@ -212,8 +212,8 @@
         "github.com/bkmashiro/agent-python-runtime/integration/e2e"
       ],
       "returncode": 0,
-      "subtest_pass_events": 3,
-      "test_pass_events": 9,
+      "subtest_pass_events": 4,
+      "test_pass_events": 10,
       "unique_tests": [
         "TestRealGuestPLMEarlierExceptionDiscardsUnclaimedCandidate",
         "TestRealGuestPLMPassDisabledExecutesUnchangedSource",
@@ -230,7 +230,7 @@
     "first": 0,
     "last": 15
   },
-  "target_commit": "123a01859e3cb997eca4dcb336bc7fbdd508547b",
+  "target_commit": "cfa8f4a0fe494a318619c7d05bd1030f92416873",
   "visible_projection": [
     "return_or_exception",
     "logical_call_count",

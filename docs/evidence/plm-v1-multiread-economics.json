@@ -1,6 +1,6 @@
 {
   "schema_version": "pysolate.plm-multiread-economics.v1",
-  "target_commit": "30e2383250a6e40727245823a547097000d1ca80",
+  "target_commit": "49f10768012443b84832680f24104e2a3d25e3b4",
   "artifact_source_commit": "5d13d5c5ce8e6bfdb3bf2dde77ad4003b948fe4a",
   "artifact_sha256": "sha256:02825c67cd1cd3bd8cfe333965e248c7b6ef41684bca73f42be25f5274b1bc9b",
   "source_sha256": "sha256:7840d43cf2d08c8fef269194609463fb736c1e9c6f457f2949e08173b5e58546",
@@ -10,18 +10,18 @@
   "profiles": [
     {
       "name": "cold_end_to_end",
-      "baseline_median_nanos": 3949757417,
-      "plm_median_nanos": 3808364333,
-      "delta_percent": -3.5797915940719656,
+      "baseline_median_nanos": 4056363125,
+      "plm_median_nanos": 3887042709,
+      "delta_percent": -4.1741927628828845,
       "samples": [
         {
           "mode": "baseline",
           "profile": "cold_end_to_end",
           "iteration": 0,
-          "total_nanos": 3887636416,
-          "engine_setup_nanos": 1373172166,
-          "allocated_bytes": 443853640,
-          "provider_nanos": 306266332,
+          "total_nanos": 4056363125,
+          "engine_setup_nanos": 1410386792,
+          "allocated_bytes": 443853888,
+          "provider_nanos": 307316666,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 0,
@@ -77,10 +77,10 @@
           "mode": "plm",
           "profile": "cold_end_to_end",
           "iteration": 0,
-          "total_nanos": 3808364333,
-          "engine_setup_nanos": 1395501583,
-          "allocated_bytes": 444270200,
-          "provider_nanos": 307901376,
+          "total_nanos": 3887569500,
+          "engine_setup_nanos": 1417191417,
+          "allocated_bytes": 444273208,
+          "provider_nanos": 307858457,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -92,15 +92,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 7995583,
-            "initialize_nanos": 104584,
-            "runtime_init_nanos": 2242233041,
-            "source_validation_nanos": 363875,
-            "lowering_nanos": 73457250,
-            "selection_nanos": 9164166,
-            "prepare_nanos": 1051000,
-            "execute_nanos": 78059458,
-            "total_nanos": 2412753541
+            "instantiate_nanos": 7165041,
+            "initialize_nanos": 100833,
+            "runtime_init_nanos": 2298714458,
+            "source_validation_nanos": 384125,
+            "lowering_nanos": 75242083,
+            "selection_nanos": 9234500,
+            "prepare_nanos": 1041291,
+            "execute_nanos": 77998583,
+            "total_nanos": 2470259459
           },
           "candidates": {
             "Submitted": 4,
@@ -125,226 +125,226 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 4,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 308227458,
-            "ValidationNanos": 1250,
-            "LinearizationNanos": 22666,
-            "MaterializationNanos": 76972417,
+            "ProviderNanos": 308078750,
+            "ValidationNanos": 1000,
+            "LinearizationNanos": 21874,
+            "MaterializationNanos": 76952042,
             "Events": [
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "submitted",
-                "AtNanos": 2334632125
+                "AtNanos": 2392154541
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "running",
-                "AtNanos": 2334685209
+                "AtNanos": 2392203541
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "submitted",
-                "AtNanos": 2334716084
+                "AtNanos": 2392237083
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "running",
-                "AtNanos": 2334753125
+                "AtNanos": 2392272833
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "submitted",
-                "AtNanos": 2334780709
+                "AtNanos": 2392299625
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "running",
-                "AtNanos": 2334819792
+                "AtNanos": 2392335416
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "submitted",
-                "AtNanos": 2334842292
+                "AtNanos": 2392358958
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "running",
-                "AtNanos": 2334878375
+                "AtNanos": 2392394083
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "linearized",
-                "AtNanos": 2334899542
+                "AtNanos": 2392413833
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2334904459
-              },
-              {
-                "SlotID": "slot-s4c9-e4c31-1",
-                "CallID": "plm-s4c9-e4c31-1",
-                "Disposition": "ready",
-                "AtNanos": 2411831292
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "ready",
-                "AtNanos": 2411833000
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "candidate_adopted",
-                "AtNanos": 2411833875
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "consumed",
-                "AtNanos": 2411833959
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "job_completed",
-                "AtNanos": 2411847792
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "materialized",
-                "AtNanos": 2411847792
+                "AtNanos": 2392417666
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "ready",
-                "AtNanos": 2411849792
+                "AtNanos": 2469319458
+              },
+              {
+                "SlotID": "slot-s4c9-e4c31-1",
+                "CallID": "plm-s4c9-e4c31-1",
+                "Disposition": "ready",
+                "AtNanos": 2469319833
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "ready",
-                "AtNanos": 2411851125
+                "AtNanos": 2469321958
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "ready",
+                "AtNanos": 2469325166
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "candidate_adopted",
+                "AtNanos": 2469326291
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "consumed",
+                "AtNanos": 2469326333
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "job_completed",
+                "AtNanos": 2469339750
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "materialized",
+                "AtNanos": 2469339791
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "linearized",
-                "AtNanos": 2411953542
+                "AtNanos": 2469440875
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2411961750
+                "AtNanos": 2469449375
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2411969709
+                "AtNanos": 2469457666
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "consumed",
-                "AtNanos": 2411969750
+                "AtNanos": 2469457666
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2411976084
+                "AtNanos": 2469462958
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "materialized",
-                "AtNanos": 2411976084
+                "AtNanos": 2469463000
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "linearized",
-                "AtNanos": 2412055917
+                "AtNanos": 2469541333
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2412060792
+                "AtNanos": 2469546333
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2412067042
+                "AtNanos": 2469553083
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "consumed",
-                "AtNanos": 2412067042
+                "AtNanos": 2469553083
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2412071959
+                "AtNanos": 2469557958
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "materialized",
-                "AtNanos": 2412071959
+                "AtNanos": 2469558000
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "linearized",
-                "AtNanos": 2412145334
+                "AtNanos": 2469628458
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2412149209
+                "AtNanos": 2469632250
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2412155542
+                "AtNanos": 2469638875
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "consumed",
-                "AtNanos": 2412155584
+                "AtNanos": 2469638916
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2412159584
+                "AtNanos": 2469643583
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "materialized",
-                "AtNanos": 2412159625
+                "AtNanos": 2469643625
               }
             ]
           }
@@ -353,10 +353,10 @@
           "mode": "plm",
           "profile": "cold_end_to_end",
           "iteration": 1,
-          "total_nanos": 3775399666,
-          "engine_setup_nanos": 1364810833,
-          "allocated_bytes": 444249080,
-          "provider_nanos": 307831291,
+          "total_nanos": 3876386708,
+          "engine_setup_nanos": 1394544125,
+          "allocated_bytes": 444249056,
+          "provider_nanos": 307815624,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -368,15 +368,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 7998542,
-            "initialize_nanos": 128041,
-            "runtime_init_nanos": 2241785833,
-            "source_validation_nanos": 365000,
-            "lowering_nanos": 71736375,
-            "selection_nanos": 9159834,
-            "prepare_nanos": 1046458,
-            "execute_nanos": 77951209,
-            "total_nanos": 2410499583
+            "instantiate_nanos": 5474833,
+            "initialize_nanos": 106792,
+            "runtime_init_nanos": 2312059834,
+            "source_validation_nanos": 379334,
+            "lowering_nanos": 74936625,
+            "selection_nanos": 9405292,
+            "prepare_nanos": 1066209,
+            "execute_nanos": 78013292,
+            "total_nanos": 2481757041
           },
           "candidates": {
             "Submitted": 4,
@@ -401,226 +401,226 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 4,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 307979374,
-            "ValidationNanos": 1167,
-            "LinearizationNanos": 19418,
-            "MaterializationNanos": 76930334,
+            "ProviderNanos": 307976834,
+            "ValidationNanos": 1334,
+            "LinearizationNanos": 22834,
+            "MaterializationNanos": 76931166,
             "Events": [
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "submitted",
-                "AtNanos": 2332426292
+                "AtNanos": 2403657458
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "running",
-                "AtNanos": 2332462459
+                "AtNanos": 2403696792
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "submitted",
-                "AtNanos": 2332493500
+                "AtNanos": 2403742417
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "running",
-                "AtNanos": 2332530500
+                "AtNanos": 2403778917
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "submitted",
-                "AtNanos": 2332556125
+                "AtNanos": 2403807292
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "running",
-                "AtNanos": 2332595000
+                "AtNanos": 2403844708
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "submitted",
-                "AtNanos": 2332619042
+                "AtNanos": 2403874792
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "running",
-                "AtNanos": 2332655709
+                "AtNanos": 2403909667
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "linearized",
-                "AtNanos": 2332672000
+                "AtNanos": 2403925500
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2332677542
-              },
-              {
-                "SlotID": "slot-s2c7-e2c27-1",
-                "CallID": "plm-s2c7-e2c27-1",
-                "Disposition": "ready",
-                "AtNanos": 2409541250
-              },
-              {
-                "SlotID": "slot-s3c13-e3c39-1",
-                "CallID": "plm-s3c13-e3c39-1",
-                "Disposition": "ready",
-                "AtNanos": 2409549709
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "ready",
-                "AtNanos": 2409554792
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "candidate_adopted",
-                "AtNanos": 2409557042
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "consumed",
-                "AtNanos": 2409557042
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "job_completed",
-                "AtNanos": 2409579334
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "materialized",
-                "AtNanos": 2409579459
+                "AtNanos": 2403930125
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "ready",
-                "AtNanos": 2409580125
+                "AtNanos": 2480785042
+              },
+              {
+                "SlotID": "slot-s3c13-e3c39-1",
+                "CallID": "plm-s3c13-e3c39-1",
+                "Disposition": "ready",
+                "AtNanos": 2480791958
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "ready",
+                "AtNanos": 2480813000
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "candidate_adopted",
+                "AtNanos": 2480816083
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "consumed",
+                "AtNanos": 2480816125
+              },
+              {
+                "SlotID": "slot-s2c7-e2c27-1",
+                "CallID": "plm-s2c7-e2c27-1",
+                "Disposition": "ready",
+                "AtNanos": 2480818542
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "job_completed",
+                "AtNanos": 2480830625
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "materialized",
+                "AtNanos": 2480830667
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "linearized",
-                "AtNanos": 2409673834
+                "AtNanos": 2480937792
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2409679917
+                "AtNanos": 2480946750
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2409687084
+                "AtNanos": 2480954958
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "consumed",
-                "AtNanos": 2409687084
+                "AtNanos": 2480954958
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2409691959
+                "AtNanos": 2480961042
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "materialized",
-                "AtNanos": 2409692000
+                "AtNanos": 2480961042
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "linearized",
-                "AtNanos": 2409769750
+                "AtNanos": 2481044042
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2409773459
+                "AtNanos": 2481048708
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2409780125
+                "AtNanos": 2481056042
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "consumed",
-                "AtNanos": 2409780125
+                "AtNanos": 2481056083
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2409785084
+                "AtNanos": 2481061375
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "materialized",
-                "AtNanos": 2409785084
+                "AtNanos": 2481061375
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "linearized",
-                "AtNanos": 2409857542
+                "AtNanos": 2481136083
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2409861167
+                "AtNanos": 2481140125
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2409867834
+                "AtNanos": 2481146875
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "consumed",
-                "AtNanos": 2409867875
+                "AtNanos": 2481146875
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2409871959
+                "AtNanos": 2481151167
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "materialized",
-                "AtNanos": 2409872000
+                "AtNanos": 2481151208
               }
             ]
           }
@@ -629,10 +629,10 @@
           "mode": "baseline",
           "profile": "cold_end_to_end",
           "iteration": 1,
-          "total_nanos": 3967557209,
-          "engine_setup_nanos": 1366214959,
-          "allocated_bytes": 443783848,
-          "provider_nanos": 308163334,
+          "total_nanos": 4020174458,
+          "engine_setup_nanos": 1393302500,
+          "allocated_bytes": 443784120,
+          "provider_nanos": 307344666,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 0,
@@ -688,10 +688,10 @@
           "mode": "baseline",
           "profile": "cold_end_to_end",
           "iteration": 2,
-          "total_nanos": 3949757417,
-          "engine_setup_nanos": 1399332500,
-          "allocated_bytes": 443783656,
-          "provider_nanos": 308141709,
+          "total_nanos": 4075912792,
+          "engine_setup_nanos": 1426821375,
+          "allocated_bytes": 443783448,
+          "provider_nanos": 306442668,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 0,
@@ -747,10 +747,10 @@
           "mode": "plm",
           "profile": "cold_end_to_end",
           "iteration": 2,
-          "total_nanos": 3811816167,
-          "engine_setup_nanos": 1397718250,
-          "allocated_bytes": 444256984,
-          "provider_nanos": 307847374,
+          "total_nanos": 3887042709,
+          "engine_setup_nanos": 1422924042,
+          "allocated_bytes": 444253400,
+          "provider_nanos": 307852542,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -762,15 +762,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 3243458,
-            "initialize_nanos": 104166,
-            "runtime_init_nanos": 2250206042,
-            "source_validation_nanos": 364041,
-            "lowering_nanos": 71575917,
-            "selection_nanos": 9204042,
-            "prepare_nanos": 1003667,
-            "execute_nanos": 77988500,
-            "total_nanos": 2414005042
+            "instantiate_nanos": 4521375,
+            "initialize_nanos": 92417,
+            "runtime_init_nanos": 2295317666,
+            "source_validation_nanos": 389917,
+            "lowering_nanos": 75193084,
+            "selection_nanos": 9208333,
+            "prepare_nanos": 1021834,
+            "execute_nanos": 77972459,
+            "total_nanos": 2464032875
           },
           "candidates": {
             "Submitted": 4,
@@ -795,226 +795,226 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 4,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 308009084,
-            "ValidationNanos": 1333,
-            "LinearizationNanos": 24668,
-            "MaterializationNanos": 76942458,
+            "ProviderNanos": 308030043,
+            "ValidationNanos": 957,
+            "LinearizationNanos": 20082,
+            "MaterializationNanos": 76961791,
             "Events": [
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "submitted",
-                "AtNanos": 2335900500
+                "AtNanos": 2385955709
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "running",
-                "AtNanos": 2335938042
+                "AtNanos": 2385992917
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "submitted",
-                "AtNanos": 2335967375
+                "AtNanos": 2386026084
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "running",
-                "AtNanos": 2336006500
+                "AtNanos": 2386063917
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "submitted",
-                "AtNanos": 2336031584
+                "AtNanos": 2386086917
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "running",
-                "AtNanos": 2336070167
+                "AtNanos": 2386124417
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "submitted",
-                "AtNanos": 2336093542
+                "AtNanos": 2386145209
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "running",
-                "AtNanos": 2336130917
+                "AtNanos": 2386183375
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "linearized",
-                "AtNanos": 2336145917
+                "AtNanos": 2386193584
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2336151250
-              },
-              {
-                "SlotID": "slot-s4c9-e4c31-1",
-                "CallID": "plm-s4c9-e4c31-1",
-                "Disposition": "ready",
-                "AtNanos": 2413028209
-              },
-              {
-                "SlotID": "slot-s3c13-e3c39-1",
-                "CallID": "plm-s3c13-e3c39-1",
-                "Disposition": "ready",
-                "AtNanos": 2413031834
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "ready",
-                "AtNanos": 2413040834
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "candidate_adopted",
-                "AtNanos": 2413044125
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "consumed",
-                "AtNanos": 2413044125
+                "AtNanos": 2386199167
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "ready",
-                "AtNanos": 2413055084
+                "AtNanos": 2463079709
+              },
+              {
+                "SlotID": "slot-s3c13-e3c39-1",
+                "CallID": "plm-s3c13-e3c39-1",
+                "Disposition": "ready",
+                "AtNanos": 2463087209
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "ready",
+                "AtNanos": 2463112417
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "candidate_adopted",
+                "AtNanos": 2463114500
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "consumed",
+                "AtNanos": 2463114500
+              },
+              {
+                "SlotID": "slot-s4c9-e4c31-1",
+                "CallID": "plm-s4c9-e4c31-1",
+                "Disposition": "ready",
+                "AtNanos": 2463117084
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2413061750
+                "AtNanos": 2463126875
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "materialized",
-                "AtNanos": 2413061792
+                "AtNanos": 2463126917
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "linearized",
-                "AtNanos": 2413182584
+                "AtNanos": 2463221875
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2413192167
+                "AtNanos": 2463228334
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2413200459
+                "AtNanos": 2463235292
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "consumed",
-                "AtNanos": 2413200500
+                "AtNanos": 2463235334
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2413206959
+                "AtNanos": 2463242625
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "materialized",
-                "AtNanos": 2413207000
+                "AtNanos": 2463242667
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "linearized",
-                "AtNanos": 2413292042
+                "AtNanos": 2463321709
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2413297292
+                "AtNanos": 2463325417
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2413304500
+                "AtNanos": 2463332500
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "consumed",
-                "AtNanos": 2413304500
+                "AtNanos": 2463332500
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2413310125
+                "AtNanos": 2463338792
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "materialized",
-                "AtNanos": 2413310125
+                "AtNanos": 2463338792
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "linearized",
-                "AtNanos": 2413385834
+                "AtNanos": 2463413875
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2413389709
+                "AtNanos": 2463417459
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2413396959
+                "AtNanos": 2463424709
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "consumed",
-                "AtNanos": 2413396959
+                "AtNanos": 2463424709
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2413401167
+                "AtNanos": 2463429250
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "materialized",
-                "AtNanos": 2413401209
+                "AtNanos": 2463429292
               }
             ]
           }
@@ -1023,10 +1023,10 @@
           "mode": "plm",
           "profile": "cold_end_to_end",
           "iteration": 3,
-          "total_nanos": 3771346375,
-          "engine_setup_nanos": 1369322416,
-          "allocated_bytes": 444252056,
-          "provider_nanos": 307785792,
+          "total_nanos": 3881940834,
+          "engine_setup_nanos": 1392940584,
+          "allocated_bytes": 444252880,
+          "provider_nanos": 307842292,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -1038,15 +1038,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 2872666,
-            "initialize_nanos": 129417,
-            "runtime_init_nanos": 2237701000,
-            "source_validation_nanos": 351833,
-            "lowering_nanos": 72528792,
-            "selection_nanos": 9027042,
-            "prepare_nanos": 1011791,
-            "execute_nanos": 77998875,
-            "total_nanos": 2401934666
+            "instantiate_nanos": 5071958,
+            "initialize_nanos": 98333,
+            "runtime_init_nanos": 2321708875,
+            "source_validation_nanos": 375667,
+            "lowering_nanos": 73244833,
+            "selection_nanos": 9120959,
+            "prepare_nanos": 1018125,
+            "execute_nanos": 77964375,
+            "total_nanos": 2488912584
           },
           "candidates": {
             "Submitted": 4,
@@ -1071,620 +1071,620 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 4,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 307907501,
+            "ProviderNanos": 307993208,
+            "ValidationNanos": 1001,
+            "LinearizationNanos": 19749,
+            "MaterializationNanos": 77002458,
+            "Events": [
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "submitted",
+                "AtNanos": 2410836000
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "running",
+                "AtNanos": 2410873041
+              },
+              {
+                "SlotID": "slot-s2c7-e2c27-1",
+                "CallID": "plm-s2c7-e2c27-1",
+                "Disposition": "submitted",
+                "AtNanos": 2410903583
+              },
+              {
+                "SlotID": "slot-s2c7-e2c27-1",
+                "CallID": "plm-s2c7-e2c27-1",
+                "Disposition": "running",
+                "AtNanos": 2410941000
+              },
+              {
+                "SlotID": "slot-s3c13-e3c39-1",
+                "CallID": "plm-s3c13-e3c39-1",
+                "Disposition": "submitted",
+                "AtNanos": 2410964791
+              },
+              {
+                "SlotID": "slot-s3c13-e3c39-1",
+                "CallID": "plm-s3c13-e3c39-1",
+                "Disposition": "running",
+                "AtNanos": 2411001208
+              },
+              {
+                "SlotID": "slot-s4c9-e4c31-1",
+                "CallID": "plm-s4c9-e4c31-1",
+                "Disposition": "submitted",
+                "AtNanos": 2411022458
+              },
+              {
+                "SlotID": "slot-s4c9-e4c31-1",
+                "CallID": "plm-s4c9-e4c31-1",
+                "Disposition": "running",
+                "AtNanos": 2411058250
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "linearized",
+                "AtNanos": 2411070625
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "candidate_validated",
+                "AtNanos": 2411075041
+              },
+              {
+                "SlotID": "slot-s4c9-e4c31-1",
+                "CallID": "plm-s4c9-e4c31-1",
+                "Disposition": "ready",
+                "AtNanos": 2487957958
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "ready",
+                "AtNanos": 2487967166
+              },
+              {
+                "SlotID": "slot-s3c13-e3c39-1",
+                "CallID": "plm-s3c13-e3c39-1",
+                "Disposition": "ready",
+                "AtNanos": 2487967458
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "candidate_adopted",
+                "AtNanos": 2487968500
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "consumed",
+                "AtNanos": 2487968500
+              },
+              {
+                "SlotID": "slot-s2c7-e2c27-1",
+                "CallID": "plm-s2c7-e2c27-1",
+                "Disposition": "ready",
+                "AtNanos": 2487975750
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "job_completed",
+                "AtNanos": 2487994375
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "materialized",
+                "AtNanos": 2487994416
+              },
+              {
+                "SlotID": "slot-s2c7-e2c27-1",
+                "CallID": "plm-s2c7-e2c27-1",
+                "Disposition": "linearized",
+                "AtNanos": 2488080666
+              },
+              {
+                "SlotID": "slot-s2c7-e2c27-1",
+                "CallID": "plm-s2c7-e2c27-1",
+                "Disposition": "candidate_validated",
+                "AtNanos": 2488087125
+              },
+              {
+                "SlotID": "slot-s2c7-e2c27-1",
+                "CallID": "plm-s2c7-e2c27-1",
+                "Disposition": "candidate_adopted",
+                "AtNanos": 2488098625
+              },
+              {
+                "SlotID": "slot-s2c7-e2c27-1",
+                "CallID": "plm-s2c7-e2c27-1",
+                "Disposition": "consumed",
+                "AtNanos": 2488098666
+              },
+              {
+                "SlotID": "slot-s2c7-e2c27-1",
+                "CallID": "plm-s2c7-e2c27-1",
+                "Disposition": "job_completed",
+                "AtNanos": 2488104333
+              },
+              {
+                "SlotID": "slot-s2c7-e2c27-1",
+                "CallID": "plm-s2c7-e2c27-1",
+                "Disposition": "materialized",
+                "AtNanos": 2488104333
+              },
+              {
+                "SlotID": "slot-s3c13-e3c39-1",
+                "CallID": "plm-s3c13-e3c39-1",
+                "Disposition": "linearized",
+                "AtNanos": 2488177958
+              },
+              {
+                "SlotID": "slot-s3c13-e3c39-1",
+                "CallID": "plm-s3c13-e3c39-1",
+                "Disposition": "candidate_validated",
+                "AtNanos": 2488182875
+              },
+              {
+                "SlotID": "slot-s3c13-e3c39-1",
+                "CallID": "plm-s3c13-e3c39-1",
+                "Disposition": "candidate_adopted",
+                "AtNanos": 2488189500
+              },
+              {
+                "SlotID": "slot-s3c13-e3c39-1",
+                "CallID": "plm-s3c13-e3c39-1",
+                "Disposition": "consumed",
+                "AtNanos": 2488189500
+              },
+              {
+                "SlotID": "slot-s3c13-e3c39-1",
+                "CallID": "plm-s3c13-e3c39-1",
+                "Disposition": "job_completed",
+                "AtNanos": 2488196916
+              },
+              {
+                "SlotID": "slot-s3c13-e3c39-1",
+                "CallID": "plm-s3c13-e3c39-1",
+                "Disposition": "materialized",
+                "AtNanos": 2488196958
+              },
+              {
+                "SlotID": "slot-s4c9-e4c31-1",
+                "CallID": "plm-s4c9-e4c31-1",
+                "Disposition": "linearized",
+                "AtNanos": 2488266291
+              },
+              {
+                "SlotID": "slot-s4c9-e4c31-1",
+                "CallID": "plm-s4c9-e4c31-1",
+                "Disposition": "candidate_validated",
+                "AtNanos": 2488269541
+              },
+              {
+                "SlotID": "slot-s4c9-e4c31-1",
+                "CallID": "plm-s4c9-e4c31-1",
+                "Disposition": "candidate_adopted",
+                "AtNanos": 2488322458
+              },
+              {
+                "SlotID": "slot-s4c9-e4c31-1",
+                "CallID": "plm-s4c9-e4c31-1",
+                "Disposition": "consumed",
+                "AtNanos": 2488322500
+              },
+              {
+                "SlotID": "slot-s4c9-e4c31-1",
+                "CallID": "plm-s4c9-e4c31-1",
+                "Disposition": "job_completed",
+                "AtNanos": 2488326625
+              },
+              {
+                "SlotID": "slot-s4c9-e4c31-1",
+                "CallID": "plm-s4c9-e4c31-1",
+                "Disposition": "materialized",
+                "AtNanos": 2488326666
+              }
+            ]
+          }
+        },
+        {
+          "mode": "baseline",
+          "profile": "cold_end_to_end",
+          "iteration": 3,
+          "total_nanos": 4020182375,
+          "engine_setup_nanos": 1391576583,
+          "allocated_bytes": 443768600,
+          "provider_nanos": 306755959,
+          "lifecycle": {
+            "schema_version": "pysolate.plm-run-lifecycle.v1",
+            "module_instantiations": 0,
+            "initialize_calls": 0,
+            "runtime_init_calls": 0,
+            "source_validation_calls": 0,
+            "lowering_calls": 0,
+            "selection_calls": 0,
+            "execute_calls": 0,
+            "fresh_module": false,
+            "prepared_module": false,
+            "instantiate_nanos": 0,
+            "initialize_nanos": 0,
+            "runtime_init_nanos": 0,
+            "source_validation_nanos": 0,
+            "lowering_nanos": 0,
+            "selection_nanos": 0,
+            "prepare_nanos": 0,
+            "execute_nanos": 0,
+            "total_nanos": 0
+          },
+          "candidates": {
+            "Submitted": 0,
+            "Reused": 0,
+            "PhysicalStarts": 0,
+            "PhysicalFinishes": 0,
+            "LogicalClaims": 0,
+            "Consumed": 0,
+            "Discarded": 0,
+            "Cancelled": 0,
+            "Failed": 0,
+            "PhysicalResultBytes": 0,
+            "MaximumConcurrent": 0,
+            "EventsDropped": 0,
+            "CandidatesPrepared": 0,
+            "CandidatesAdopted": 0,
+            "CandidatesRejected": 0,
+            "CanonicalStarts": 0,
+            "JobsLinearized": 0,
+            "JobsMaterialized": 0,
+            "Validations": 0,
+            "ValidationFailures": 0,
+            "ValidationCostUnits": 0,
+            "ProviderValidationPhysicalEvents": 0,
+            "ProviderNanos": 0,
+            "ValidationNanos": 0,
+            "LinearizationNanos": 0,
+            "MaterializationNanos": 0,
+            "Events": null
+          }
+        },
+        {
+          "mode": "baseline",
+          "profile": "cold_end_to_end",
+          "iteration": 4,
+          "total_nanos": 4063004583,
+          "engine_setup_nanos": 1422010500,
+          "allocated_bytes": 443779112,
+          "provider_nanos": 308058250,
+          "lifecycle": {
+            "schema_version": "pysolate.plm-run-lifecycle.v1",
+            "module_instantiations": 0,
+            "initialize_calls": 0,
+            "runtime_init_calls": 0,
+            "source_validation_calls": 0,
+            "lowering_calls": 0,
+            "selection_calls": 0,
+            "execute_calls": 0,
+            "fresh_module": false,
+            "prepared_module": false,
+            "instantiate_nanos": 0,
+            "initialize_nanos": 0,
+            "runtime_init_nanos": 0,
+            "source_validation_nanos": 0,
+            "lowering_nanos": 0,
+            "selection_nanos": 0,
+            "prepare_nanos": 0,
+            "execute_nanos": 0,
+            "total_nanos": 0
+          },
+          "candidates": {
+            "Submitted": 0,
+            "Reused": 0,
+            "PhysicalStarts": 0,
+            "PhysicalFinishes": 0,
+            "LogicalClaims": 0,
+            "Consumed": 0,
+            "Discarded": 0,
+            "Cancelled": 0,
+            "Failed": 0,
+            "PhysicalResultBytes": 0,
+            "MaximumConcurrent": 0,
+            "EventsDropped": 0,
+            "CandidatesPrepared": 0,
+            "CandidatesAdopted": 0,
+            "CandidatesRejected": 0,
+            "CanonicalStarts": 0,
+            "JobsLinearized": 0,
+            "JobsMaterialized": 0,
+            "Validations": 0,
+            "ValidationFailures": 0,
+            "ValidationCostUnits": 0,
+            "ProviderValidationPhysicalEvents": 0,
+            "ProviderNanos": 0,
+            "ValidationNanos": 0,
+            "LinearizationNanos": 0,
+            "MaterializationNanos": 0,
+            "Events": null
+          }
+        },
+        {
+          "mode": "plm",
+          "profile": "cold_end_to_end",
+          "iteration": 4,
+          "total_nanos": 3954109750,
+          "engine_setup_nanos": 1455919708,
+          "allocated_bytes": 444251504,
+          "provider_nanos": 307821791,
+          "lifecycle": {
+            "schema_version": "pysolate.plm-run-lifecycle.v1",
+            "module_instantiations": 1,
+            "initialize_calls": 1,
+            "runtime_init_calls": 1,
+            "source_validation_calls": 1,
+            "lowering_calls": 1,
+            "selection_calls": 1,
+            "execute_calls": 1,
+            "fresh_module": true,
+            "prepared_module": false,
+            "instantiate_nanos": 2935334,
+            "initialize_nanos": 95875,
+            "runtime_init_nanos": 2331439625,
+            "source_validation_nanos": 386208,
+            "lowering_nanos": 74597541,
+            "selection_nanos": 9247209,
+            "prepare_nanos": 1090500,
+            "execute_nanos": 78003166,
+            "total_nanos": 2498107125
+          },
+          "candidates": {
+            "Submitted": 4,
+            "Reused": 0,
+            "PhysicalStarts": 4,
+            "PhysicalFinishes": 4,
+            "LogicalClaims": 4,
+            "Consumed": 4,
+            "Discarded": 0,
+            "Cancelled": 0,
+            "Failed": 0,
+            "PhysicalResultBytes": 72,
+            "MaximumConcurrent": 4,
+            "EventsDropped": 0,
+            "CandidatesPrepared": 4,
+            "CandidatesAdopted": 4,
+            "CandidatesRejected": 0,
+            "CanonicalStarts": 0,
+            "JobsLinearized": 4,
+            "JobsMaterialized": 4,
+            "Validations": 4,
+            "ValidationFailures": 0,
+            "ValidationCostUnits": 4,
+            "ProviderValidationPhysicalEvents": 0,
+            "ProviderNanos": 308011042,
             "ValidationNanos": 1250,
-            "LinearizationNanos": 24168,
-            "MaterializationNanos": 76908751,
+            "LinearizationNanos": 25125,
+            "MaterializationNanos": 76947126,
             "Events": [
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "submitted",
-                "AtNanos": 2323847375
+                "AtNanos": 2420001125
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "running",
-                "AtNanos": 2323883667
+                "AtNanos": 2420037333
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "submitted",
-                "AtNanos": 2323917750
+                "AtNanos": 2420069958
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "running",
-                "AtNanos": 2323954584
+                "AtNanos": 2420106708
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "submitted",
-                "AtNanos": 2324019834
+                "AtNanos": 2420144375
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "running",
-                "AtNanos": 2324055417
+                "AtNanos": 2420181750
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "submitted",
-                "AtNanos": 2324072042
+                "AtNanos": 2420202958
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "running",
-                "AtNanos": 2324108959
+                "AtNanos": 2420238833
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "linearized",
-                "AtNanos": 2324126959
+                "AtNanos": 2420251333
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2324132584
-              },
-              {
-                "SlotID": "slot-s3c13-e3c39-1",
-                "CallID": "plm-s3c13-e3c39-1",
-                "Disposition": "ready",
-                "AtNanos": 2400969209
-              },
-              {
-                "SlotID": "slot-s2c7-e2c27-1",
-                "CallID": "plm-s2c7-e2c27-1",
-                "Disposition": "ready",
-                "AtNanos": 2400977250
+                "AtNanos": 2420257541
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "ready",
-                "AtNanos": 2400978625
+                "AtNanos": 2497126458
+              },
+              {
+                "SlotID": "slot-s2c7-e2c27-1",
+                "CallID": "plm-s2c7-e2c27-1",
+                "Disposition": "ready",
+                "AtNanos": 2497130875
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "ready",
-                "AtNanos": 2400987167
+                "AtNanos": 2497157583
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2400996959
+                "AtNanos": 2497159833
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "consumed",
-                "AtNanos": 2400996959
+                "AtNanos": 2497159875
+              },
+              {
+                "SlotID": "slot-s3c13-e3c39-1",
+                "CallID": "plm-s3c13-e3c39-1",
+                "Disposition": "ready",
+                "AtNanos": 2497162708
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2401010459
+                "AtNanos": 2497173916
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "materialized",
-                "AtNanos": 2401010459
+                "AtNanos": 2497173958
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "linearized",
-                "AtNanos": 2401121750
+                "AtNanos": 2497279333
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2401130584
+                "AtNanos": 2497288375
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2401138334
+                "AtNanos": 2497296375
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "consumed",
-                "AtNanos": 2401138375
+                "AtNanos": 2497296416
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2401144084
+                "AtNanos": 2497302416
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "materialized",
-                "AtNanos": 2401144125
+                "AtNanos": 2497302416
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "linearized",
-                "AtNanos": 2401226917
+                "AtNanos": 2497385750
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2401231750
+                "AtNanos": 2497390916
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2401238209
+                "AtNanos": 2497397916
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "consumed",
-                "AtNanos": 2401238209
+                "AtNanos": 2497397916
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2401243625
+                "AtNanos": 2497403333
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "materialized",
-                "AtNanos": 2401243667
+                "AtNanos": 2497403375
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "linearized",
-                "AtNanos": 2401318584
+                "AtNanos": 2497478000
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2401322792
+                "AtNanos": 2497481958
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2401330584
+                "AtNanos": 2497488833
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "consumed",
-                "AtNanos": 2401330625
+                "AtNanos": 2497488875
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2401334959
+                "AtNanos": 2497493041
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "materialized",
-                "AtNanos": 2401335000
-              }
-            ]
-          }
-        },
-        {
-          "mode": "baseline",
-          "profile": "cold_end_to_end",
-          "iteration": 3,
-          "total_nanos": 3948567750,
-          "engine_setup_nanos": 1370117667,
-          "allocated_bytes": 443782280,
-          "provider_nanos": 308145417,
-          "lifecycle": {
-            "schema_version": "pysolate.plm-run-lifecycle.v1",
-            "module_instantiations": 0,
-            "initialize_calls": 0,
-            "runtime_init_calls": 0,
-            "source_validation_calls": 0,
-            "lowering_calls": 0,
-            "selection_calls": 0,
-            "execute_calls": 0,
-            "fresh_module": false,
-            "prepared_module": false,
-            "instantiate_nanos": 0,
-            "initialize_nanos": 0,
-            "runtime_init_nanos": 0,
-            "source_validation_nanos": 0,
-            "lowering_nanos": 0,
-            "selection_nanos": 0,
-            "prepare_nanos": 0,
-            "execute_nanos": 0,
-            "total_nanos": 0
-          },
-          "candidates": {
-            "Submitted": 0,
-            "Reused": 0,
-            "PhysicalStarts": 0,
-            "PhysicalFinishes": 0,
-            "LogicalClaims": 0,
-            "Consumed": 0,
-            "Discarded": 0,
-            "Cancelled": 0,
-            "Failed": 0,
-            "PhysicalResultBytes": 0,
-            "MaximumConcurrent": 0,
-            "EventsDropped": 0,
-            "CandidatesPrepared": 0,
-            "CandidatesAdopted": 0,
-            "CandidatesRejected": 0,
-            "CanonicalStarts": 0,
-            "JobsLinearized": 0,
-            "JobsMaterialized": 0,
-            "Validations": 0,
-            "ValidationFailures": 0,
-            "ValidationCostUnits": 0,
-            "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 0,
-            "ValidationNanos": 0,
-            "LinearizationNanos": 0,
-            "MaterializationNanos": 0,
-            "Events": null
-          }
-        },
-        {
-          "mode": "baseline",
-          "profile": "cold_end_to_end",
-          "iteration": 4,
-          "total_nanos": 3986943584,
-          "engine_setup_nanos": 1405094292,
-          "allocated_bytes": 443773496,
-          "provider_nanos": 306191125,
-          "lifecycle": {
-            "schema_version": "pysolate.plm-run-lifecycle.v1",
-            "module_instantiations": 0,
-            "initialize_calls": 0,
-            "runtime_init_calls": 0,
-            "source_validation_calls": 0,
-            "lowering_calls": 0,
-            "selection_calls": 0,
-            "execute_calls": 0,
-            "fresh_module": false,
-            "prepared_module": false,
-            "instantiate_nanos": 0,
-            "initialize_nanos": 0,
-            "runtime_init_nanos": 0,
-            "source_validation_nanos": 0,
-            "lowering_nanos": 0,
-            "selection_nanos": 0,
-            "prepare_nanos": 0,
-            "execute_nanos": 0,
-            "total_nanos": 0
-          },
-          "candidates": {
-            "Submitted": 0,
-            "Reused": 0,
-            "PhysicalStarts": 0,
-            "PhysicalFinishes": 0,
-            "LogicalClaims": 0,
-            "Consumed": 0,
-            "Discarded": 0,
-            "Cancelled": 0,
-            "Failed": 0,
-            "PhysicalResultBytes": 0,
-            "MaximumConcurrent": 0,
-            "EventsDropped": 0,
-            "CandidatesPrepared": 0,
-            "CandidatesAdopted": 0,
-            "CandidatesRejected": 0,
-            "CanonicalStarts": 0,
-            "JobsLinearized": 0,
-            "JobsMaterialized": 0,
-            "Validations": 0,
-            "ValidationFailures": 0,
-            "ValidationCostUnits": 0,
-            "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 0,
-            "ValidationNanos": 0,
-            "LinearizationNanos": 0,
-            "MaterializationNanos": 0,
-            "Events": null
-          }
-        },
-        {
-          "mode": "plm",
-          "profile": "cold_end_to_end",
-          "iteration": 4,
-          "total_nanos": 3851819709,
-          "engine_setup_nanos": 1408175084,
-          "allocated_bytes": 444246448,
-          "provider_nanos": 307827708,
-          "lifecycle": {
-            "schema_version": "pysolate.plm-run-lifecycle.v1",
-            "module_instantiations": 1,
-            "initialize_calls": 1,
-            "runtime_init_calls": 1,
-            "source_validation_calls": 1,
-            "lowering_calls": 1,
-            "selection_calls": 1,
-            "execute_calls": 1,
-            "fresh_module": true,
-            "prepared_module": false,
-            "instantiate_nanos": 5298541,
-            "initialize_nanos": 98292,
-            "runtime_init_nanos": 2275126291,
-            "source_validation_nanos": 357875,
-            "lowering_nanos": 73813084,
-            "selection_nanos": 9381750,
-            "prepare_nanos": 1041709,
-            "execute_nanos": 78115958,
-            "total_nanos": 2443552416
-          },
-          "candidates": {
-            "Submitted": 4,
-            "Reused": 0,
-            "PhysicalStarts": 4,
-            "PhysicalFinishes": 4,
-            "LogicalClaims": 4,
-            "Consumed": 4,
-            "Discarded": 0,
-            "Cancelled": 0,
-            "Failed": 0,
-            "PhysicalResultBytes": 72,
-            "MaximumConcurrent": 4,
-            "EventsDropped": 0,
-            "CandidatesPrepared": 4,
-            "CandidatesAdopted": 4,
-            "CandidatesRejected": 0,
-            "CanonicalStarts": 0,
-            "JobsLinearized": 4,
-            "JobsMaterialized": 4,
-            "Validations": 4,
-            "ValidationFailures": 0,
-            "ValidationCostUnits": 4,
-            "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 307998750,
-            "ValidationNanos": 1666,
-            "LinearizationNanos": 26000,
-            "MaterializationNanos": 76936333,
-            "Events": [
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "submitted",
-                "AtNanos": 2365348500
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "running",
-                "AtNanos": 2365384417
-              },
-              {
-                "SlotID": "slot-s2c7-e2c27-1",
-                "CallID": "plm-s2c7-e2c27-1",
-                "Disposition": "submitted",
-                "AtNanos": 2365423458
-              },
-              {
-                "SlotID": "slot-s2c7-e2c27-1",
-                "CallID": "plm-s2c7-e2c27-1",
-                "Disposition": "running",
-                "AtNanos": 2365460208
-              },
-              {
-                "SlotID": "slot-s3c13-e3c39-1",
-                "CallID": "plm-s3c13-e3c39-1",
-                "Disposition": "submitted",
-                "AtNanos": 2365489917
-              },
-              {
-                "SlotID": "slot-s3c13-e3c39-1",
-                "CallID": "plm-s3c13-e3c39-1",
-                "Disposition": "running",
-                "AtNanos": 2365526833
-              },
-              {
-                "SlotID": "slot-s4c9-e4c31-1",
-                "CallID": "plm-s4c9-e4c31-1",
-                "Disposition": "submitted",
-                "AtNanos": 2365551250
-              },
-              {
-                "SlotID": "slot-s4c9-e4c31-1",
-                "CallID": "plm-s4c9-e4c31-1",
-                "Disposition": "running",
-                "AtNanos": 2365586792
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "linearized",
-                "AtNanos": 2365604750
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "candidate_validated",
-                "AtNanos": 2365610125
-              },
-              {
-                "SlotID": "slot-s4c9-e4c31-1",
-                "CallID": "plm-s4c9-e4c31-1",
-                "Disposition": "ready",
-                "AtNanos": 2442482417
-              },
-              {
-                "SlotID": "slot-s3c13-e3c39-1",
-                "CallID": "plm-s3c13-e3c39-1",
-                "Disposition": "ready",
-                "AtNanos": 2442483625
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "ready",
-                "AtNanos": 2442495333
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "candidate_adopted",
-                "AtNanos": 2442496833
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "consumed",
-                "AtNanos": 2442496875
-              },
-              {
-                "SlotID": "slot-s2c7-e2c27-1",
-                "CallID": "plm-s2c7-e2c27-1",
-                "Disposition": "ready",
-                "AtNanos": 2442497875
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "job_completed",
-                "AtNanos": 2442513667
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "materialized",
-                "AtNanos": 2442513667
-              },
-              {
-                "SlotID": "slot-s2c7-e2c27-1",
-                "CallID": "plm-s2c7-e2c27-1",
-                "Disposition": "linearized",
-                "AtNanos": 2442676292
-              },
-              {
-                "SlotID": "slot-s2c7-e2c27-1",
-                "CallID": "plm-s2c7-e2c27-1",
-                "Disposition": "candidate_validated",
-                "AtNanos": 2442687125
-              },
-              {
-                "SlotID": "slot-s2c7-e2c27-1",
-                "CallID": "plm-s2c7-e2c27-1",
-                "Disposition": "candidate_adopted",
-                "AtNanos": 2442696167
-              },
-              {
-                "SlotID": "slot-s2c7-e2c27-1",
-                "CallID": "plm-s2c7-e2c27-1",
-                "Disposition": "consumed",
-                "AtNanos": 2442696208
-              },
-              {
-                "SlotID": "slot-s2c7-e2c27-1",
-                "CallID": "plm-s2c7-e2c27-1",
-                "Disposition": "job_completed",
-                "AtNanos": 2442702625
-              },
-              {
-                "SlotID": "slot-s2c7-e2c27-1",
-                "CallID": "plm-s2c7-e2c27-1",
-                "Disposition": "materialized",
-                "AtNanos": 2442702625
-              },
-              {
-                "SlotID": "slot-s3c13-e3c39-1",
-                "CallID": "plm-s3c13-e3c39-1",
-                "Disposition": "linearized",
-                "AtNanos": 2442790292
-              },
-              {
-                "SlotID": "slot-s3c13-e3c39-1",
-                "CallID": "plm-s3c13-e3c39-1",
-                "Disposition": "candidate_validated",
-                "AtNanos": 2442795417
-              },
-              {
-                "SlotID": "slot-s3c13-e3c39-1",
-                "CallID": "plm-s3c13-e3c39-1",
-                "Disposition": "candidate_adopted",
-                "AtNanos": 2442803000
-              },
-              {
-                "SlotID": "slot-s3c13-e3c39-1",
-                "CallID": "plm-s3c13-e3c39-1",
-                "Disposition": "consumed",
-                "AtNanos": 2442803042
-              },
-              {
-                "SlotID": "slot-s3c13-e3c39-1",
-                "CallID": "plm-s3c13-e3c39-1",
-                "Disposition": "job_completed",
-                "AtNanos": 2442808208
-              },
-              {
-                "SlotID": "slot-s3c13-e3c39-1",
-                "CallID": "plm-s3c13-e3c39-1",
-                "Disposition": "materialized",
-                "AtNanos": 2442808250
-              },
-              {
-                "SlotID": "slot-s4c9-e4c31-1",
-                "CallID": "plm-s4c9-e4c31-1",
-                "Disposition": "linearized",
-                "AtNanos": 2442885917
-              },
-              {
-                "SlotID": "slot-s4c9-e4c31-1",
-                "CallID": "plm-s4c9-e4c31-1",
-                "Disposition": "candidate_validated",
-                "AtNanos": 2442890000
-              },
-              {
-                "SlotID": "slot-s4c9-e4c31-1",
-                "CallID": "plm-s4c9-e4c31-1",
-                "Disposition": "candidate_adopted",
-                "AtNanos": 2442897542
-              },
-              {
-                "SlotID": "slot-s4c9-e4c31-1",
-                "CallID": "plm-s4c9-e4c31-1",
-                "Disposition": "consumed",
-                "AtNanos": 2442897583
-              },
-              {
-                "SlotID": "slot-s4c9-e4c31-1",
-                "CallID": "plm-s4c9-e4c31-1",
-                "Disposition": "job_completed",
-                "AtNanos": 2442901833
-              },
-              {
-                "SlotID": "slot-s4c9-e4c31-1",
-                "CallID": "plm-s4c9-e4c31-1",
-                "Disposition": "materialized",
-                "AtNanos": 2442901833
+                "AtNanos": 2497493083
               }
             ]
           }
@@ -1693,18 +1693,18 @@
     },
     {
       "name": "engine_precompiled",
-      "baseline_median_nanos": 2605602583,
-      "plm_median_nanos": 2437062667,
-      "delta_percent": -6.468366169868815,
+      "baseline_median_nanos": 2623754375,
+      "plm_median_nanos": 2463797875,
+      "delta_percent": -6.096473874388489,
       "samples": [
         {
           "mode": "baseline",
           "profile": "engine_precompiled",
           "iteration": 0,
-          "total_nanos": 2586701625,
-          "engine_setup_nanos": 1381001541,
-          "allocated_bytes": 135469680,
-          "provider_nanos": 308136917,
+          "total_nanos": 2615513792,
+          "engine_setup_nanos": 1394901208,
+          "allocated_bytes": 135468392,
+          "provider_nanos": 306201041,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 0,
@@ -1760,10 +1760,10 @@
           "mode": "plm",
           "profile": "engine_precompiled",
           "iteration": 0,
-          "total_nanos": 2435820708,
-          "engine_setup_nanos": 1406139833,
-          "allocated_bytes": 135945848,
-          "provider_nanos": 307833999,
+          "total_nanos": 2471263959,
+          "engine_setup_nanos": 1426506916,
+          "allocated_bytes": 135943640,
+          "provider_nanos": 307851083,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -1775,15 +1775,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 5451166,
-            "initialize_nanos": 99625,
-            "runtime_init_nanos": 2268643959,
-            "source_validation_nanos": 366708,
-            "lowering_nanos": 72518834,
-            "selection_nanos": 9349666,
-            "prepare_nanos": 1072792,
-            "execute_nanos": 77968125,
-            "total_nanos": 2435779084
+            "instantiate_nanos": 3011750,
+            "initialize_nanos": 115833,
+            "runtime_init_nanos": 2304101917,
+            "source_validation_nanos": 387500,
+            "lowering_nanos": 75022959,
+            "selection_nanos": 9237750,
+            "prepare_nanos": 1066209,
+            "execute_nanos": 77964750,
+            "total_nanos": 2471221917
           },
           "candidates": {
             "Submitted": 4,
@@ -1808,226 +1808,226 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 4,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 307988166,
-            "ValidationNanos": 1124,
-            "LinearizationNanos": 22001,
-            "MaterializationNanos": 76927792,
+            "ProviderNanos": 308055665,
+            "ValidationNanos": 1043,
+            "LinearizationNanos": 20168,
+            "MaterializationNanos": 76943124,
             "Events": [
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "submitted",
-                "AtNanos": 2357712250
+                "AtNanos": 2393160541
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "running",
-                "AtNanos": 2357748917
+                "AtNanos": 2393199416
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "submitted",
-                "AtNanos": 2357782833
+                "AtNanos": 2393230666
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "running",
-                "AtNanos": 2357819417
+                "AtNanos": 2393268416
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "submitted",
-                "AtNanos": 2357849250
+                "AtNanos": 2393295000
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "running",
-                "AtNanos": 2357886042
+                "AtNanos": 2393331291
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "submitted",
-                "AtNanos": 2357912000
+                "AtNanos": 2393353000
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "running",
-                "AtNanos": 2357947333
+                "AtNanos": 2393388583
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "linearized",
-                "AtNanos": 2357966458
+                "AtNanos": 2393403375
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2357971458
-              },
-              {
-                "SlotID": "slot-s4c9-e4c31-1",
-                "CallID": "plm-s4c9-e4c31-1",
-                "Disposition": "ready",
-                "AtNanos": 2434834250
-              },
-              {
-                "SlotID": "slot-s3c13-e3c39-1",
-                "CallID": "plm-s3c13-e3c39-1",
-                "Disposition": "ready",
-                "AtNanos": 2434843333
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "ready",
-                "AtNanos": 2434843667
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "candidate_adopted",
-                "AtNanos": 2434845000
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "consumed",
-                "AtNanos": 2434845000
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "job_completed",
-                "AtNanos": 2434869917
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "materialized",
-                "AtNanos": 2434869958
+                "AtNanos": 2393409291
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "ready",
-                "AtNanos": 2434870458
+                "AtNanos": 2470290250
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "ready",
+                "AtNanos": 2470311041
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "candidate_adopted",
+                "AtNanos": 2470313125
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "consumed",
+                "AtNanos": 2470313125
+              },
+              {
+                "SlotID": "slot-s4c9-e4c31-1",
+                "CallID": "plm-s4c9-e4c31-1",
+                "Disposition": "ready",
+                "AtNanos": 2470319000
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "job_completed",
+                "AtNanos": 2470324208
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "materialized",
+                "AtNanos": 2470324250
+              },
+              {
+                "SlotID": "slot-s3c13-e3c39-1",
+                "CallID": "plm-s3c13-e3c39-1",
+                "Disposition": "ready",
+                "AtNanos": 2470324916
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "linearized",
-                "AtNanos": 2434962250
+                "AtNanos": 2470415166
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2434971292
+                "AtNanos": 2470421625
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2434978500
+                "AtNanos": 2470428250
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "consumed",
-                "AtNanos": 2434978500
+                "AtNanos": 2470428291
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2434983792
+                "AtNanos": 2470433416
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "materialized",
-                "AtNanos": 2434983792
+                "AtNanos": 2470433416
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "linearized",
-                "AtNanos": 2435062708
+                "AtNanos": 2470513416
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2435066375
+                "AtNanos": 2470517208
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2435073208
+                "AtNanos": 2470523375
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "consumed",
-                "AtNanos": 2435073208
+                "AtNanos": 2470523375
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2435078208
+                "AtNanos": 2470528291
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "materialized",
-                "AtNanos": 2435078208
+                "AtNanos": 2470528333
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "linearized",
-                "AtNanos": 2435152208
+                "AtNanos": 2470601750
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2435155792
+                "AtNanos": 2470605041
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2435162167
+                "AtNanos": 2470611875
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "consumed",
-                "AtNanos": 2435162167
+                "AtNanos": 2470611916
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2435166042
+                "AtNanos": 2470615875
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "materialized",
-                "AtNanos": 2435166083
+                "AtNanos": 2470615875
               }
             ]
           }
@@ -2036,10 +2036,10 @@
           "mode": "plm",
           "profile": "engine_precompiled",
           "iteration": 1,
-          "total_nanos": 2437062667,
-          "engine_setup_nanos": 1377710334,
-          "allocated_bytes": 135931832,
-          "provider_nanos": 307864083,
+          "total_nanos": 2463797875,
+          "engine_setup_nanos": 1396512292,
+          "allocated_bytes": 135945032,
+          "provider_nanos": 307855166,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -2051,15 +2051,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 2865416,
-            "initialize_nanos": 98084,
-            "runtime_init_nanos": 2272851208,
-            "source_validation_nanos": 391042,
-            "lowering_nanos": 72459000,
-            "selection_nanos": 9045792,
-            "prepare_nanos": 1009375,
-            "execute_nanos": 77993667,
-            "total_nanos": 2437020458
+            "instantiate_nanos": 4792792,
+            "initialize_nanos": 101667,
+            "runtime_init_nanos": 2295123542,
+            "source_validation_nanos": 373958,
+            "lowering_nanos": 74768834,
+            "selection_nanos": 9212000,
+            "prepare_nanos": 1060917,
+            "execute_nanos": 78015125,
+            "total_nanos": 2463756875
           },
           "candidates": {
             "Submitted": 4,
@@ -2084,226 +2084,226 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 4,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 307996417,
-            "ValidationNanos": 1168,
-            "LinearizationNanos": 21875,
-            "MaterializationNanos": 76956084,
+            "ProviderNanos": 308008374,
+            "ValidationNanos": 1167,
+            "LinearizationNanos": 24000,
+            "MaterializationNanos": 76963916,
             "Events": [
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "submitted",
-                "AtNanos": 2358944417
+                "AtNanos": 2385643583
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "running",
-                "AtNanos": 2358981834
+                "AtNanos": 2385685416
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "submitted",
-                "AtNanos": 2359008959
+                "AtNanos": 2385713291
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "running",
-                "AtNanos": 2359044625
+                "AtNanos": 2385751791
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "submitted",
-                "AtNanos": 2359070167
+                "AtNanos": 2385775583
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "running",
-                "AtNanos": 2359106042
+                "AtNanos": 2385811791
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "submitted",
-                "AtNanos": 2359128625
+                "AtNanos": 2385833833
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "running",
-                "AtNanos": 2359164584
+                "AtNanos": 2385869041
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "linearized",
-                "AtNanos": 2359176500
+                "AtNanos": 2385883916
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2359181209
-              },
-              {
-                "SlotID": "slot-s4c9-e4c31-1",
-                "CallID": "plm-s4c9-e4c31-1",
-                "Disposition": "ready",
-                "AtNanos": 2436060959
-              },
-              {
-                "SlotID": "slot-s2c7-e2c27-1",
-                "CallID": "plm-s2c7-e2c27-1",
-                "Disposition": "ready",
-                "AtNanos": 2436067167
+                "AtNanos": 2385888166
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "ready",
-                "AtNanos": 2436077375
+                "AtNanos": 2462766791
+              },
+              {
+                "SlotID": "slot-s2c7-e2c27-1",
+                "CallID": "plm-s2c7-e2c27-1",
+                "Disposition": "ready",
+                "AtNanos": 2462772875
+              },
+              {
+                "SlotID": "slot-s4c9-e4c31-1",
+                "CallID": "plm-s4c9-e4c31-1",
+                "Disposition": "ready",
+                "AtNanos": 2462784750
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "ready",
-                "AtNanos": 2436089209
+                "AtNanos": 2462803791
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2436092042
+                "AtNanos": 2462805791
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "consumed",
-                "AtNanos": 2436092084
+                "AtNanos": 2462805791
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2436106000
+                "AtNanos": 2462819833
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "materialized",
-                "AtNanos": 2436106000
+                "AtNanos": 2462819833
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "linearized",
-                "AtNanos": 2436208500
+                "AtNanos": 2462929916
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2436216125
+                "AtNanos": 2462939416
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2436223959
+                "AtNanos": 2462947500
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "consumed",
-                "AtNanos": 2436224000
+                "AtNanos": 2462947500
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2436229667
+                "AtNanos": 2462953291
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "materialized",
-                "AtNanos": 2436229709
+                "AtNanos": 2462953333
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "linearized",
-                "AtNanos": 2436315584
+                "AtNanos": 2463039583
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2436320667
+                "AtNanos": 2463044500
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2436327584
+                "AtNanos": 2463051375
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "consumed",
-                "AtNanos": 2436327584
+                "AtNanos": 2463051416
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2436333084
+                "AtNanos": 2463057250
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "materialized",
-                "AtNanos": 2436333125
+                "AtNanos": 2463057291
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "linearized",
-                "AtNanos": 2436407125
+                "AtNanos": 2463132958
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2436410834
+                "AtNanos": 2463137583
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2436417834
+                "AtNanos": 2463145583
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "consumed",
-                "AtNanos": 2436417875
+                "AtNanos": 2463145625
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2436422709
+                "AtNanos": 2463150000
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "materialized",
-                "AtNanos": 2436422750
+                "AtNanos": 2463150041
               }
             ]
           }
@@ -2312,69 +2312,69 @@
           "mode": "baseline",
           "profile": "engine_precompiled",
           "iteration": 1,
-          "total_nanos": 2595965500,
-          "engine_setup_nanos": 1378293542,
+          "total_nanos": 2623754375,
+          "engine_setup_nanos": 1391462250,
+          "allocated_bytes": 135470016,
+          "provider_nanos": 307024833,
+          "lifecycle": {
+            "schema_version": "pysolate.plm-run-lifecycle.v1",
+            "module_instantiations": 0,
+            "initialize_calls": 0,
+            "runtime_init_calls": 0,
+            "source_validation_calls": 0,
+            "lowering_calls": 0,
+            "selection_calls": 0,
+            "execute_calls": 0,
+            "fresh_module": false,
+            "prepared_module": false,
+            "instantiate_nanos": 0,
+            "initialize_nanos": 0,
+            "runtime_init_nanos": 0,
+            "source_validation_nanos": 0,
+            "lowering_nanos": 0,
+            "selection_nanos": 0,
+            "prepare_nanos": 0,
+            "execute_nanos": 0,
+            "total_nanos": 0
+          },
+          "candidates": {
+            "Submitted": 0,
+            "Reused": 0,
+            "PhysicalStarts": 0,
+            "PhysicalFinishes": 0,
+            "LogicalClaims": 0,
+            "Consumed": 0,
+            "Discarded": 0,
+            "Cancelled": 0,
+            "Failed": 0,
+            "PhysicalResultBytes": 0,
+            "MaximumConcurrent": 0,
+            "EventsDropped": 0,
+            "CandidatesPrepared": 0,
+            "CandidatesAdopted": 0,
+            "CandidatesRejected": 0,
+            "CanonicalStarts": 0,
+            "JobsLinearized": 0,
+            "JobsMaterialized": 0,
+            "Validations": 0,
+            "ValidationFailures": 0,
+            "ValidationCostUnits": 0,
+            "ProviderValidationPhysicalEvents": 0,
+            "ProviderNanos": 0,
+            "ValidationNanos": 0,
+            "LinearizationNanos": 0,
+            "MaterializationNanos": 0,
+            "Events": null
+          }
+        },
+        {
+          "mode": "baseline",
+          "profile": "engine_precompiled",
+          "iteration": 2,
+          "total_nanos": 2625778500,
+          "engine_setup_nanos": 1419419000,
           "allocated_bytes": 135466728,
-          "provider_nanos": 308154666,
-          "lifecycle": {
-            "schema_version": "pysolate.plm-run-lifecycle.v1",
-            "module_instantiations": 0,
-            "initialize_calls": 0,
-            "runtime_init_calls": 0,
-            "source_validation_calls": 0,
-            "lowering_calls": 0,
-            "selection_calls": 0,
-            "execute_calls": 0,
-            "fresh_module": false,
-            "prepared_module": false,
-            "instantiate_nanos": 0,
-            "initialize_nanos": 0,
-            "runtime_init_nanos": 0,
-            "source_validation_nanos": 0,
-            "lowering_nanos": 0,
-            "selection_nanos": 0,
-            "prepare_nanos": 0,
-            "execute_nanos": 0,
-            "total_nanos": 0
-          },
-          "candidates": {
-            "Submitted": 0,
-            "Reused": 0,
-            "PhysicalStarts": 0,
-            "PhysicalFinishes": 0,
-            "LogicalClaims": 0,
-            "Consumed": 0,
-            "Discarded": 0,
-            "Cancelled": 0,
-            "Failed": 0,
-            "PhysicalResultBytes": 0,
-            "MaximumConcurrent": 0,
-            "EventsDropped": 0,
-            "CandidatesPrepared": 0,
-            "CandidatesAdopted": 0,
-            "CandidatesRejected": 0,
-            "CanonicalStarts": 0,
-            "JobsLinearized": 0,
-            "JobsMaterialized": 0,
-            "Validations": 0,
-            "ValidationFailures": 0,
-            "ValidationCostUnits": 0,
-            "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 0,
-            "ValidationNanos": 0,
-            "LinearizationNanos": 0,
-            "MaterializationNanos": 0,
-            "Events": null
-          }
-        },
-        {
-          "mode": "baseline",
-          "profile": "engine_precompiled",
-          "iteration": 2,
-          "total_nanos": 2605602583,
-          "engine_setup_nanos": 1408333250,
-          "allocated_bytes": 135466688,
-          "provider_nanos": 308142543,
+          "provider_nanos": 308169208,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 0,
@@ -2430,10 +2430,10 @@
           "mode": "plm",
           "profile": "engine_precompiled",
           "iteration": 2,
-          "total_nanos": 2433027708,
-          "engine_setup_nanos": 1415172750,
-          "allocated_bytes": 135935696,
-          "provider_nanos": 307829041,
+          "total_nanos": 2455084375,
+          "engine_setup_nanos": 1419916917,
+          "allocated_bytes": 135937136,
+          "provider_nanos": 307868375,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -2445,15 +2445,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 5322917,
-            "initialize_nanos": 140833,
-            "runtime_init_nanos": 2265196292,
-            "source_validation_nanos": 370250,
-            "lowering_nanos": 73381250,
-            "selection_nanos": 9319417,
-            "prepare_nanos": 1022709,
-            "execute_nanos": 77923625,
-            "total_nanos": 2432985791
+            "instantiate_nanos": 2898167,
+            "initialize_nanos": 92334,
+            "runtime_init_nanos": 2287929291,
+            "source_validation_nanos": 401625,
+            "lowering_nanos": 74797584,
+            "selection_nanos": 9461625,
+            "prepare_nanos": 1053291,
+            "execute_nanos": 78089250,
+            "total_nanos": 2455038542
           },
           "candidates": {
             "Submitted": 4,
@@ -2478,226 +2478,226 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 4,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 307974333,
+            "ProviderNanos": 308075043,
             "ValidationNanos": 1209,
-            "LinearizationNanos": 18334,
-            "MaterializationNanos": 76926791,
+            "LinearizationNanos": 27168,
+            "MaterializationNanos": 76974459,
             "Events": [
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "submitted",
-                "AtNanos": 2354958166
+                "AtNanos": 2376873125
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "running",
-                "AtNanos": 2354997875
+                "AtNanos": 2376910375
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "submitted",
-                "AtNanos": 2355030708
+                "AtNanos": 2376943542
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "running",
-                "AtNanos": 2355067000
+                "AtNanos": 2376979792
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "submitted",
-                "AtNanos": 2355094791
+                "AtNanos": 2377006417
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "running",
-                "AtNanos": 2355132375
+                "AtNanos": 2377047459
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "submitted",
-                "AtNanos": 2355158041
+                "AtNanos": 2377065500
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "running",
-                "AtNanos": 2355195000
+                "AtNanos": 2377100917
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "linearized",
-                "AtNanos": 2355210708
+                "AtNanos": 2377115459
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2355215666
-              },
-              {
-                "SlotID": "slot-s3c13-e3c39-1",
-                "CallID": "plm-s3c13-e3c39-1",
-                "Disposition": "ready",
-                "AtNanos": 2432080291
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "ready",
-                "AtNanos": 2432083875
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "candidate_adopted",
-                "AtNanos": 2432085041
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "consumed",
-                "AtNanos": 2432085083
+                "AtNanos": 2377121459
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "ready",
-                "AtNanos": 2432090916
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "job_completed",
-                "AtNanos": 2432110625
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "materialized",
-                "AtNanos": 2432110666
+                "AtNanos": 2454004209
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "ready",
-                "AtNanos": 2432114250
+                "AtNanos": 2454033542
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "ready",
+                "AtNanos": 2454037334
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "candidate_adopted",
+                "AtNanos": 2454039625
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "consumed",
+                "AtNanos": 2454039625
+              },
+              {
+                "SlotID": "slot-s3c13-e3c39-1",
+                "CallID": "plm-s3c13-e3c39-1",
+                "Disposition": "ready",
+                "AtNanos": 2454040417
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "job_completed",
+                "AtNanos": 2454053750
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "materialized",
+                "AtNanos": 2454053792
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "linearized",
-                "AtNanos": 2432194583
+                "AtNanos": 2454178625
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2432199958
+                "AtNanos": 2454188125
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2432206666
+                "AtNanos": 2454196625
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "consumed",
-                "AtNanos": 2432206708
+                "AtNanos": 2454196625
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2432214958
+                "AtNanos": 2454203167
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "materialized",
-                "AtNanos": 2432214958
+                "AtNanos": 2454203167
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "linearized",
-                "AtNanos": 2432290125
+                "AtNanos": 2454299584
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2432293958
+                "AtNanos": 2454304542
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2432300125
+                "AtNanos": 2454311792
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "consumed",
-                "AtNanos": 2432300166
+                "AtNanos": 2454311834
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2432305125
+                "AtNanos": 2454317250
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "materialized",
-                "AtNanos": 2432305166
+                "AtNanos": 2454317292
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "linearized",
-                "AtNanos": 2432376416
+                "AtNanos": 2454397042
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2432379916
+                "AtNanos": 2454403167
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2432386708
+                "AtNanos": 2454410125
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "consumed",
-                "AtNanos": 2432386708
+                "AtNanos": 2454410167
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2432390750
+                "AtNanos": 2454424542
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "materialized",
-                "AtNanos": 2432390791
+                "AtNanos": 2454424584
               }
             ]
           }
@@ -2706,10 +2706,10 @@
           "mode": "plm",
           "profile": "engine_precompiled",
           "iteration": 3,
-          "total_nanos": 2451113125,
-          "engine_setup_nanos": 1384418458,
-          "allocated_bytes": 135930728,
-          "provider_nanos": 307806290,
+          "total_nanos": 2469430334,
+          "engine_setup_nanos": 1399619666,
+          "allocated_bytes": 135930832,
+          "provider_nanos": 307793543,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -2721,15 +2721,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 2877667,
-            "initialize_nanos": 106250,
-            "runtime_init_nanos": 2285299417,
-            "source_validation_nanos": 388916,
-            "lowering_nanos": 73883875,
-            "selection_nanos": 9223625,
-            "prepare_nanos": 1041542,
-            "execute_nanos": 77943542,
-            "total_nanos": 2451073125
+            "instantiate_nanos": 5932875,
+            "initialize_nanos": 101625,
+            "runtime_init_nanos": 2299668250,
+            "source_validation_nanos": 377583,
+            "lowering_nanos": 74740459,
+            "selection_nanos": 9218750,
+            "prepare_nanos": 1078875,
+            "execute_nanos": 77957584,
+            "total_nanos": 2469385791
           },
           "candidates": {
             "Submitted": 4,
@@ -2754,226 +2754,226 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 4,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 307972916,
-            "ValidationNanos": 1166,
-            "LinearizationNanos": 21333,
-            "MaterializationNanos": 76922208,
+            "ProviderNanos": 307922374,
+            "ValidationNanos": 1000,
+            "LinearizationNanos": 24959,
+            "MaterializationNanos": 76926541,
             "Events": [
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "submitted",
-                "AtNanos": 2373030541
+                "AtNanos": 2391330750
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "running",
-                "AtNanos": 2373067333
+                "AtNanos": 2391367583
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "submitted",
-                "AtNanos": 2373101958
+                "AtNanos": 2391401583
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "running",
-                "AtNanos": 2373138208
+                "AtNanos": 2391439042
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "submitted",
-                "AtNanos": 2373173458
+                "AtNanos": 2391474125
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "running",
-                "AtNanos": 2373209750
+                "AtNanos": 2391512583
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "submitted",
-                "AtNanos": 2373233291
+                "AtNanos": 2391533833
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "running",
-                "AtNanos": 2373268458
+                "AtNanos": 2391568583
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "linearized",
-                "AtNanos": 2373286250
+                "AtNanos": 2391583417
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2373293333
-              },
-              {
-                "SlotID": "slot-s3c13-e3c39-1",
-                "CallID": "plm-s3c13-e3c39-1",
-                "Disposition": "ready",
-                "AtNanos": 2450152208
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "ready",
-                "AtNanos": 2450153833
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "candidate_adopted",
-                "AtNanos": 2450154916
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "consumed",
-                "AtNanos": 2450154916
+                "AtNanos": 2391587500
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "ready",
-                "AtNanos": 2450162375
+                "AtNanos": 2468442583
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "job_completed",
-                "AtNanos": 2450181708
+                "Disposition": "ready",
+                "AtNanos": 2468453208
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "materialized",
-                "AtNanos": 2450181750
+                "Disposition": "candidate_adopted",
+                "AtNanos": 2468454167
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "consumed",
+                "AtNanos": 2468454208
+              },
+              {
+                "SlotID": "slot-s3c13-e3c39-1",
+                "CallID": "plm-s3c13-e3c39-1",
+                "Disposition": "ready",
+                "AtNanos": 2468454958
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "ready",
-                "AtNanos": 2450190250
+                "AtNanos": 2468460667
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "job_completed",
+                "AtNanos": 2468479583
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "materialized",
+                "AtNanos": 2468479625
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "linearized",
-                "AtNanos": 2450271666
+                "AtNanos": 2468580500
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2450277875
+                "AtNanos": 2468590792
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2450287250
+                "AtNanos": 2468599542
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "consumed",
-                "AtNanos": 2450287250
+                "AtNanos": 2468599542
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2450292416
+                "AtNanos": 2468604667
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "materialized",
-                "AtNanos": 2450292458
+                "AtNanos": 2468604708
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "linearized",
-                "AtNanos": 2450369916
+                "AtNanos": 2468685292
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2450373916
+                "AtNanos": 2468691042
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2450380625
+                "AtNanos": 2468698208
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "consumed",
-                "AtNanos": 2450380666
+                "AtNanos": 2468698208
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2450387041
+                "AtNanos": 2468706125
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "materialized",
-                "AtNanos": 2450387041
+                "AtNanos": 2468706125
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "linearized",
-                "AtNanos": 2450459750
+                "AtNanos": 2468780125
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2450463166
+                "AtNanos": 2468784375
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2450470208
+                "AtNanos": 2468791292
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "consumed",
-                "AtNanos": 2450470250
+                "AtNanos": 2468791333
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2450474500
+                "AtNanos": 2468796292
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "materialized",
-                "AtNanos": 2450474500
+                "AtNanos": 2468796333
               }
             ]
           }
@@ -2982,10 +2982,10 @@
           "mode": "baseline",
           "profile": "engine_precompiled",
           "iteration": 3,
-          "total_nanos": 2610949625,
-          "engine_setup_nanos": 1379647125,
-          "allocated_bytes": 135466728,
-          "provider_nanos": 306634000,
+          "total_nanos": 2610791875,
+          "engine_setup_nanos": 1399251542,
+          "allocated_bytes": 135466520,
+          "provider_nanos": 308146208,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 0,
@@ -3041,10 +3041,10 @@
           "mode": "baseline",
           "profile": "engine_precompiled",
           "iteration": 4,
-          "total_nanos": 2624835416,
-          "engine_setup_nanos": 1415420208,
-          "allocated_bytes": 135466464,
-          "provider_nanos": 308160208,
+          "total_nanos": 2625253292,
+          "engine_setup_nanos": 1422756625,
+          "allocated_bytes": 135466912,
+          "provider_nanos": 308180249,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 0,
@@ -3100,10 +3100,10 @@
           "mode": "plm",
           "profile": "engine_precompiled",
           "iteration": 4,
-          "total_nanos": 2458018292,
-          "engine_setup_nanos": 1416887375,
-          "allocated_bytes": 135935816,
-          "provider_nanos": 307807583,
+          "total_nanos": 2455158625,
+          "engine_setup_nanos": 1415022875,
+          "allocated_bytes": 135935576,
+          "provider_nanos": 307832793,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -3115,15 +3115,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 5127792,
-            "initialize_nanos": 106084,
-            "runtime_init_nanos": 2290060625,
-            "source_validation_nanos": 361833,
-            "lowering_nanos": 73624625,
-            "selection_nanos": 9304416,
-            "prepare_nanos": 1054958,
-            "execute_nanos": 78023625,
-            "total_nanos": 2457974708
+            "instantiate_nanos": 5206000,
+            "initialize_nanos": 94833,
+            "runtime_init_nanos": 2287348666,
+            "source_validation_nanos": 368000,
+            "lowering_nanos": 73595083,
+            "selection_nanos": 9146791,
+            "prepare_nanos": 1026083,
+            "execute_nanos": 78014166,
+            "total_nanos": 2455114708
           },
           "candidates": {
             "Submitted": 4,
@@ -3148,226 +3148,226 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 4,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 307989960,
-            "ValidationNanos": 1333,
-            "LinearizationNanos": 24833,
-            "MaterializationNanos": 76944083,
+            "ProviderNanos": 307971375,
+            "ValidationNanos": 957,
+            "LinearizationNanos": 22958,
+            "MaterializationNanos": 76946876,
             "Events": [
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "submitted",
-                "AtNanos": 2379855833
+                "AtNanos": 2377017250
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "running",
-                "AtNanos": 2379892792
+                "AtNanos": 2377053708
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "submitted",
-                "AtNanos": 2379928625
+                "AtNanos": 2377089000
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "running",
-                "AtNanos": 2379965958
+                "AtNanos": 2377125583
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "submitted",
-                "AtNanos": 2379990333
+                "AtNanos": 2377150708
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "running",
-                "AtNanos": 2380027125
+                "AtNanos": 2377186875
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "submitted",
-                "AtNanos": 2380049750
+                "AtNanos": 2377209583
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "running",
-                "AtNanos": 2380088417
+                "AtNanos": 2377245583
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "linearized",
-                "AtNanos": 2380101958
+                "AtNanos": 2377259333
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2380107042
+                "AtNanos": 2377263583
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "ready",
-                "AtNanos": 2456980000
+                "AtNanos": 2454134542
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "ready",
-                "AtNanos": 2456981667
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "ready",
-                "AtNanos": 2456993583
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "candidate_adopted",
-                "AtNanos": 2457004500
-              },
-              {
-                "SlotID": "slot-s1c10-e1c33-1",
-                "CallID": "plm-s1c10-e1c33-1",
-                "Disposition": "consumed",
-                "AtNanos": 2457004500
+                "AtNanos": 2454141792
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "ready",
-                "AtNanos": 2457011417
+                "AtNanos": 2454142167
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "ready",
+                "AtNanos": 2454166333
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "candidate_adopted",
+                "AtNanos": 2454168292
+              },
+              {
+                "SlotID": "slot-s1c10-e1c33-1",
+                "CallID": "plm-s1c10-e1c33-1",
+                "Disposition": "consumed",
+                "AtNanos": 2454168333
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2457018792
+                "AtNanos": 2454180458
               },
               {
                 "SlotID": "slot-s1c10-e1c33-1",
                 "CallID": "plm-s1c10-e1c33-1",
                 "Disposition": "materialized",
-                "AtNanos": 2457018792
+                "AtNanos": 2454180500
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "linearized",
-                "AtNanos": 2457133542
+                "AtNanos": 2454287125
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2457143042
+                "AtNanos": 2454296125
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2457151625
+                "AtNanos": 2454303708
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "consumed",
-                "AtNanos": 2457151667
+                "AtNanos": 2454303708
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2457158167
+                "AtNanos": 2454309542
               },
               {
                 "SlotID": "slot-s2c7-e2c27-1",
                 "CallID": "plm-s2c7-e2c27-1",
                 "Disposition": "materialized",
-                "AtNanos": 2457158167
+                "AtNanos": 2454309542
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "linearized",
-                "AtNanos": 2457246250
+                "AtNanos": 2454393167
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2457251875
+                "AtNanos": 2454398292
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2457259333
+                "AtNanos": 2454404875
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "consumed",
-                "AtNanos": 2457259375
+                "AtNanos": 2454404875
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2457265667
+                "AtNanos": 2454410125
               },
               {
                 "SlotID": "slot-s3c13-e3c39-1",
                 "CallID": "plm-s3c13-e3c39-1",
                 "Disposition": "materialized",
-                "AtNanos": 2457265667
+                "AtNanos": 2454410125
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "linearized",
-                "AtNanos": 2457342667
+                "AtNanos": 2454485542
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2457346583
+                "AtNanos": 2454489542
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2457353000
+                "AtNanos": 2454496625
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "consumed",
-                "AtNanos": 2457353042
+                "AtNanos": 2454496625
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2457357375
+                "AtNanos": 2454500500
               },
               {
                 "SlotID": "slot-s4c9-e4c31-1",
                 "CallID": "plm-s4c9-e4c31-1",
                 "Disposition": "materialized",
-                "AtNanos": 2457357417
+                "AtNanos": 2454500542
               }
             ]
           }

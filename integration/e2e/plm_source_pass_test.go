@@ -89,6 +89,51 @@ func TestRealGuestPLMSourceTimeCandidateReusesAndLinearizesAtOriginalCall(t *tes
 	}
 }
 
+func TestRealGuestPLMPassDisabledExecutesUnchangedSource(t *testing.T) {
+	artifact, err := osReadGuestArtifact(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var physical atomic.Uint32
+	adapter := &e2ePLMAdapter{handler: capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		physical.Add(1)
+		return json.RawMessage(`{"body":"baseline"}`), nil
+	})}
+	plan := plmE2EPlan(t, 1, adapter)
+	plugins := unifiedPassCatalog(t)
+	config := runtimeconfig.DefaultRunConfig()
+	config.Timeout = 60 * time.Second
+	var broker *capability.Broker
+	runner, err := (wazeroengine.Factory{Passes: plugins, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+		broker, err = capability.NewBroker(capability.Config{RunIdentity: "plm-disabled", Plan: plan})
+		return broker, err
+	}}).New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	source := "value = sources.read(\"alpha\")\nresult = [value, 9]\n"
+	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "plm-disabled", Code: source, Inputs: json.RawMessage(`{}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := trustedSemanticRunner(t, runner)
+	execution, err := plugins.ExecuteCapabilityHostScheduled(
+		context.Background(), sourcepatch.PLMCapabilityCallsName, engine, request,
+		plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan),
+	)
+	if err != nil || execution.Applied || execution.Patch.DerivedSource != "" {
+		t.Fatalf("execution=%+v err=%v", execution, err)
+	}
+	result, err := decodeSuccessfulGuestResult(execution.Payload)
+	if err != nil || string(result) != `["baseline",9]` || physical.Load() != 1 || broker.CallCount() != 1 {
+		t.Fatalf("result=%s physical=%d calls=%d err=%v", result, physical.Load(), broker.CallCount(), err)
+	}
+	if lifecycle := engine.PLMRunLifecycleEvidence(); lifecycle.LoweringCalls != 0 || lifecycle.TotalNanos != 0 {
+		t.Fatalf("lifecycle=%+v", lifecycle)
+	}
+}
+
 func TestRealGuestPLMRuntimeDerivedCallsPreserveCodeAndReceipts(t *testing.T) {
 	artifact, err := osReadGuestArtifact(t)
 	if err != nil {

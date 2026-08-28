@@ -379,6 +379,9 @@ def _initialize(config_json: str) -> None:
     _validated_source_tree = None
     _validated_import_globals = {}
     _validated_effective_ast_sha256 = None
+    source_pass = sys.modules.get(f"{__name__}.source_pass")
+    if source_pass is not None:
+        source_pass._reset_source_pass_state()
 
 
 

@@ -28,6 +28,11 @@ _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _pending_capability_selection = None
 
 
+def _reset_source_pass_state():
+    global _pending_capability_selection
+    _pending_capability_selection = None
+
+
 def _digest(value):
     return "sha256:" + hashlib.sha256(value).hexdigest()
 
@@ -287,13 +292,37 @@ def _observes_compiled_code(node):
         return node.attr.startswith("co_") or node.attr in {
             "__code__", "__traceback__", "tb_frame", "tb_next", "tb_lineno",
             "f_code", "f_back", "gi_code", "cr_code", "ag_code", "_getframe",
+            "settrace", "gettrace", "setprofile", "getprofile", "call_tracing", "monitoring",
         }
     if isinstance(node, ast.Name):
-        return node.id in {"compile", "eval", "exec"}
+        return node.id in {
+            "__import__", "breakpoint", "compile", "dir", "eval", "exec", "getattr", "globals",
+            "hasattr", "locals", "vars",
+        }
     if isinstance(node, ast.Import):
         return any(alias.name.partition(".")[0] in {"dis", "inspect", "traceback"} for alias in node.names)
     if isinstance(node, ast.ImportFrom) and node.module is not None:
         return node.module.partition(".")[0] in {"dis", "inspect", "traceback"}
+    return False
+
+
+def _mutates_projection_receiver(node, modules):
+    if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+        return node.id in modules
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return node.name in modules
+    if isinstance(node, ast.arg):
+        return node.arg in modules
+    if isinstance(node, ast.Attribute) and isinstance(node.ctx, (ast.Store, ast.Del)):
+        return isinstance(node.value, ast.Name) and node.value.id in modules
+    if isinstance(node, ast.Attribute) and node.attr == "__dict__":
+        return isinstance(node.value, ast.Name) and node.value.id in modules
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {"setattr", "delattr"}:
+        return bool(node.args) and isinstance(node.args[0], ast.Name) and node.args[0].id in modules
+    if isinstance(node, ast.alias) and node.asname in modules:
+        return node.name.partition(".")[0] != node.asname
+    if isinstance(node, ast.ImportFrom):
+        return any((alias.asname or alias.name) in modules for alias in node.names)
     return False
 
 
@@ -418,11 +447,12 @@ def _plm_capability_calls(source, projections, prepared_tree=None):
     ):
         raise ValueError("invalid source pass input")
     projection_index = _validated_capability_projection_index(projections)
+    projection_modules = {module for module, _ in projection_index}
     tree = prepared_tree if isinstance(prepared_tree, ast.Module) else ast.parse(source, filename="<agent-run>", mode="exec")
     lines = source.splitlines()
     projected_calls = set()
     for node in ast.walk(tree):
-        if _observes_compiled_code(node):
+        if _observes_compiled_code(node) or _mutates_projection_receiver(node, projection_modules):
             return tree, "", 0, None
         if isinstance(node, ast.Call) and _projected_call(node, projection_index) is not None:
             projected_calls.add(id(node))
@@ -636,7 +666,7 @@ _TRANSFORMS = {
 
 def emit_source_pass_patch_request_json(request_json, prepared_tree=None):
     global _pending_capability_selection
-    _pending_capability_selection = None
+    _reset_source_pass_state()
     probe = json.loads(request_json)
     capability_pass = (
         isinstance(probe, dict)

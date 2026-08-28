@@ -423,6 +423,23 @@ class BootstrapTests(unittest.TestCase):
 
         self.assertEqual(1, compile_calls)
 
+    def test_runtime_init_clears_pending_source_pass_selection(self):
+        source = 'value = tools.get("alpha")\nresult = value\n'
+        raw = json.dumps({"run_id": "pending-reset", "code": source, "inputs": {}})
+        patch_request = json.dumps({
+            "pass_name": "plm_capability_calls",
+            "pass_version": "pysolate.plm-capability-calls-pass.v1",
+            "registration_sha256": "sha256:" + "a" * 64,
+            "source": source,
+            "capability_projections": [{"capability": "tools.get", "module": "tools", "method": "get", "arguments": ["key"], "result_field": "value"}],
+        }, sort_keys=True, separators=(",", ":"))
+        self.assertEqual(0, self.runtime._validate_request_source_for_patch(raw))
+        self.runtime._transform_source_pass(patch_request)
+        source_pass = importlib.import_module(f"{self.runtime.__name__}.source_pass")
+        self.assertIsNotNone(source_pass._pending_capability_selection)
+        self.runtime._initialize("{}")
+        self.assertIsNone(source_pass._pending_capability_selection)
+
     def test_patch_execution_parses_original_source_once(self):
         source = 'value = tools.get("alpha")\nresult = value\n'
         request = {"run_id": "single-parse", "code": source, "inputs": {}}

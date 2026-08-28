@@ -261,6 +261,20 @@ class SourcePassTests(unittest.TestCase):
         patch = json.loads(emit_source_pass_patch_request_json(capability_request(source, CAPABILITY_PROJECTIONS)))
         self.assertEqual("not_applicable", patch["status"])
 
+    def test_plm_capability_calls_rejects_receiver_drift_and_dynamic_introspection(self):
+        cases = (
+            'tools = None\nvalue = tools.get("alpha")\nresult = value\n',
+            'tools.get = lambda key: {"value": "local"}\nvalue = tools.get("alpha")\nresult = value\n',
+            'from other import tools\nvalue = tools.get("alpha")\nresult = value\n',
+            'tools.__dict__["get"] = lambda key: {"value": "local"}\nvalue = tools.get("alpha")\nresult = value\n',
+            'import sys\nsys.settrace(lambda *args: None)\nvalue = tools.get("alpha")\nresult = value\n',
+            'value = tools.get("alpha")\nresult = getattr(getattr(globals()["_pysolate_agent_main"], "__code__"), "co_code")\n',
+        )
+        for source in cases:
+            with self.subTest(source=source):
+                patch = json.loads(emit_source_pass_patch_request_json(capability_request(source, CAPABILITY_PROJECTIONS)))
+                self.assertEqual("not_applicable", patch["status"])
+
     def test_data_local_numpy_sum_emits_one_value_slot_materialization(self):
         source = "import io\nimport numpy as np\ndataset = np.load(io.BytesIO(open('/workspace/input.npy', 'rb').read()), allow_pickle=False)\nresult = int(dataset.sum())\n"
         raw = request(source, "data_local_numpy_sum", "pysolate.data-local-numpy-sum-pass.v2")

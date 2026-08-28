@@ -25,6 +25,7 @@ _PATCH_KEYS = {
 }
 _CAPABILITY_PATCH_KEYS = _PATCH_KEYS | {"capability_projections"}
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+_pending_capability_selection = None
 
 
 def _digest(value):
@@ -465,9 +466,7 @@ def _plm_capability_calls(source, projections):
         body = operations["replacement"] if operations["replacement"] is not None else original
         parts = [*operations["before"], body, *operations["after"]]
         derived[line_index] = indent + "; ".join(parts) + newline
-    derived_source = "".join(derived)
-    ast.parse(derived_source, filename="<agent-run>", mode="exec")
-    return tree, derived_source, len(supported_calls)
+    return tree, "".join(derived), len(supported_calls)
 
 
 def _data_local_numpy_sum(source):
@@ -586,6 +585,8 @@ _TRANSFORMS = {
 
 
 def emit_source_pass_patch_request_json(request_json):
+    global _pending_capability_selection
+    _pending_capability_selection = None
     probe = json.loads(request_json)
     capability_pass = (
         isinstance(probe, dict)
@@ -625,10 +626,13 @@ def emit_source_pass_patch_request_json(request_json):
     }
     if capability_pass:
         patch["capability_projections"] = request["capability_projections"]
+        if applied:
+            _pending_capability_selection = (request["source"], patch, derived_tree)
     return _contract(patch)
 
 
 def validate_source_pass_execution_request(final_source, patch_json):
+    global _pending_capability_selection
     probe = json.loads(patch_json)
     capability_pass = (
         isinstance(probe, dict)
@@ -639,6 +643,12 @@ def validate_source_pass_execution_request(final_source, patch_json):
     patch = _decode(patch_json, _CAPABILITY_PATCH_KEYS if capability_pass else _PATCH_KEYS)
     if patch["status"] != "applied" or patch["replacement_count"] <= 0:
         raise ValueError("source pass patch is not applicable")
+    pending = _pending_capability_selection
+    _pending_capability_selection = None
+    if capability_pass and pending is not None:
+        pending_source, pending_patch, pending_tree = pending
+        if final_source == pending_source and patch == pending_patch:
+            return pending_tree
     request = _canonical({
         "pass_name": patch["pass_name"],
         "pass_version": patch["pass_version"],
@@ -649,10 +659,13 @@ def validate_source_pass_execution_request(final_source, patch_json):
         request_value = json.loads(request)
         request_value["capability_projections"] = patch["capability_projections"]
         request = _canonical(request_value)
-    expected = _decode(
-        emit_source_pass_patch_request_json(request),
-        _CAPABILITY_PATCH_KEYS if capability_pass else _PATCH_KEYS,
-    )
+    try:
+        expected = _decode(
+            emit_source_pass_patch_request_json(request),
+            _CAPABILITY_PATCH_KEYS if capability_pass else _PATCH_KEYS,
+        )
+    finally:
+        _pending_capability_selection = None
     if expected != patch:
         raise ValueError("source pass patch does not match the original source")
     return ast.parse(patch["derived_source"], filename="<agent-run>", mode="exec")

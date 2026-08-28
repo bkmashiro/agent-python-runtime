@@ -2,6 +2,7 @@ import hashlib
 import json
 import unittest
 
+from agent_runtime import source_pass
 from agent_runtime.source_pass import (
     emit_source_pass_patch_request_json,
     validate_source_pass_execution_request,
@@ -58,6 +59,29 @@ CAPABILITY_PROJECTIONS = [
 
 
 class SourcePassTests(unittest.TestCase):
+    def test_same_guest_selection_does_not_replay_plm_transform(self):
+        source = 'value = tools.get("alpha")\nresult = value\n'
+        key = ("plm_capability_calls", "pysolate.plm-capability-calls-pass.v1")
+        transform = source_pass._TRANSFORMS[key]
+        calls = 0
+
+        def counted_transform(*args):
+            nonlocal calls
+            calls += 1
+            return transform(*args)
+
+        source_pass._TRANSFORMS[key] = counted_transform
+        try:
+            raw = emit_source_pass_patch_request_json(
+                plm_capability_request(source, CAPABILITY_PROJECTIONS)
+            )
+            tree = validate_source_pass_execution_request(source, raw)
+        finally:
+            source_pass._TRANSFORMS[key] = transform
+
+        self.assertEqual(1, calls)
+        self.assertIsNotNone(tree)
+
     def test_plm_capability_calls_emits_prepare_and_original_point_linearize(self):
         source = (
             'a = tools.get("alpha")\n'

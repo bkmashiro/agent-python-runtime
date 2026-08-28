@@ -5,6 +5,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SUITE = ROOT / "scripts" / "run-linux-evaluation-suite.sh"
 GATE = ROOT / "scripts" / "prepared-family-economics-gate.sh"
+PROJECTOR = ROOT / "scripts" / "project-linux-evaluation-manifest.py"
 
 
 class LinuxEvaluationSuiteContractTests(unittest.TestCase):
@@ -22,7 +23,8 @@ class LinuxEvaluationSuiteContractTests(unittest.TestCase):
         for flag in ("--source-commit", "--source-tree", "--source-epoch", "--output"):
             self.assertIn(flag, text)
         self.assertIn("output must be absent or an empty real directory", text)
-        self.assertIn("pysolate.linux-evaluation-suite.v1", text)
+        self.assertIn("project-linux-evaluation-manifest.py", text)
+        self.assertIn("pysolate.linux-evaluation-suite.v1", PROJECTOR.read_text())
 
     def test_prepared_family_gate_is_explicit_and_bounded(self) -> None:
         text = GATE.read_text()

@@ -165,56 +165,14 @@ PYSOLATE_PREPARED_FAMILY_ECONOMICS_RUNS="$runs" \
 PYSOLATE_PREPARED_FAMILY_ECONOMICS_FANOUT="$fanout" \
   scripts/prepared-family-economics-gate.sh "$output/prepared-family/economics.json"
 
-python3 - "$output" "$source_commit" "$source_tree" "$source_epoch" "$runs" "$fanout" <<'PY'
-import hashlib, json, pathlib, sys
-root = pathlib.Path(sys.argv[1])
-source_commit, source_tree, source_epoch = sys.argv[2:5]
-runs, fanout = map(int, sys.argv[5:7])
-
-def sha(path):
-    return 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest()
-
-def load(relative):
-    return json.loads((root / relative).read_text())
-
-one = load('plm/one-read.json')
-four = load('plm/four-read.json')
-family = load('prepared-family/economics.json')
-producer = load('producer/public.json')
-platform = load('platform.json')
-expected = {
-    'one': 'pysolate.plm-economics.v1',
-    'four': 'pysolate.plm-multiread-economics.v1',
-    'family': 'pysolate.prepared-family-economics.v1',
-    'producer': 'pysolate.transparent-campaign-public-projection.v1',
-}
-actual = {
-    'one': one.get('schema_version'), 'four': four.get('schema_version'),
-    'family': family.get('schema_version'), 'producer': producer.get('schema_version'),
-}
-if actual != expected:
-    raise SystemExit(f'evidence schema drift: {actual}')
-manifest = {
-    'schema_version': 'pysolate.linux-evaluation-suite.v1',
-    'source_commit': source_commit,
-    'source_tree': source_tree,
-    'source_epoch': int(source_epoch),
-    'platform': platform,
-    'parameters': {'runs_per_arm': runs, 'prepared_family_fanout': fanout},
-    'artifacts': {
-        'base': {'sha256': sha(root / 'artifacts/base.wasm')},
-        'numpy_core': {'sha256': sha(root / 'artifacts/numpy-core.wasm')},
-    },
-    'evidence': {
-        'plm_one_read': {'path': 'plm/one-read.json', 'sha256': sha(root / 'plm/one-read.json')},
-        'plm_four_read': {'path': 'plm/four-read.json', 'sha256': sha(root / 'plm/four-read.json')},
-        'prepared_family': {'path': 'prepared-family/economics.json', 'sha256': sha(root / 'prepared-family/economics.json')},
-        'producer_public': {'path': 'producer/public.json', 'sha256': sha(root / 'producer/public.json')},
-        'producer_private_summary': {'path': 'producer/private/summary.json', 'sha256': sha(root / 'producer/private/summary.json')},
-    },
-}
-(root / 'suite-manifest.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
-PY
+python3 scripts/project-linux-evaluation-manifest.py \
+  --root "$output" \
+  --source-commit "$source_commit" \
+  --source-tree "$source_tree" \
+  --source-epoch "$source_epoch" \
+  --runs "$runs" \
+  --fanout "$fanout" \
+  --output "$output/suite-manifest.json"
 
 rm -f "$output/artifacts/base.wasm" "$output/artifacts/numpy-core.wasm"
 rmdir "$output/artifacts"

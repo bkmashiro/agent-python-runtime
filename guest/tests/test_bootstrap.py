@@ -395,7 +395,6 @@ class BootstrapTests(unittest.TestCase):
             "pass_name": "plm_capability_calls",
             "pass_version": "pysolate.plm-capability-calls-pass.v1",
             "registration_sha256": "sha256:" + "1" * 64,
-            "source": source,
             "capability_projections": [{
                 "capability": "tools.get", "module": "tools", "method": "get",
                 "arguments": ["key"], "result_field": "value",

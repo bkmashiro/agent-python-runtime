@@ -354,7 +354,8 @@ def emit_source_pass_patch_request_json(request_json, prepared_tree=None):
     ):
         from .plm_source_pass import emit_patch
 
-        return emit_patch(request_json, prepared_tree)
+        source = probe.pop("source", None)
+        return emit_patch(probe, source, prepared_tree)
     request = _decode(request_json, _REQUEST_KEYS)
     transform = _TRANSFORMS.get((request["pass_name"], request["pass_version"]))
     if (
@@ -389,7 +390,7 @@ def validate_source_pass_execution_request(final_source, patch_json):
     ):
         from .plm_source_pass import select_tree
 
-        return select_tree(final_source, patch_json)
+        return select_tree(final_source, probe)
     patch = _decode(patch_json, _PATCH_KEYS)
     if patch["status"] != "applied" or patch["replacement_count"] <= 0:
         raise ValueError("source pass patch is not applicable")

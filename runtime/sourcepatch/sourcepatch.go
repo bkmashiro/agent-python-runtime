@@ -42,7 +42,7 @@ type Request struct {
 	PassName              passregistration.Name  `json:"pass_name"`
 	PassVersion           string                 `json:"pass_version"`
 	RegistrationSHA256    string                 `json:"registration_sha256"`
-	Source                string                 `json:"source"`
+	Source                string                 `json:"source,omitempty"`
 	CapabilityProjections []CapabilityProjection `json:"capability_projections,omitempty"`
 }
 

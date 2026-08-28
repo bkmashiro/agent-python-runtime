@@ -304,12 +304,10 @@ def _transform(source, projections, prepared_tree=None):
     return tree, len(supported_calls), tree
 
 
-def emit_patch(request_json, prepared_tree=None):
+def emit_patch(request, source, prepared_tree=None):
     global _pending_selection
     reset_state()
     try:
-        request = json.loads(request_json)
-        source = request["source"]
         projections = request["capability_projections"]
         registration = request["registration_sha256"]
     except (KeyError, TypeError, ValueError) as exc:
@@ -332,12 +330,8 @@ def emit_patch(request_json, prepared_tree=None):
     return _canonical(patch) + "\n"
 
 
-def select_tree(final_source, patch_json):
+def select_tree(final_source, patch):
     global _pending_selection
-    try:
-        patch = json.loads(patch_json)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("invalid PLM source pass patch") from exc
     pending = _pending_selection
     _pending_selection = None
     if pending is None:

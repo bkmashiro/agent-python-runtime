@@ -988,25 +988,29 @@ def _transform_source_pass(request_json: str) -> str:
         raise ValueError("source pass request is invalid") from exc
     if not isinstance(transform_request, dict):
         raise ValueError("source pass request is invalid")
+    plm_request = (
+        transform_request.get("pass_name") == "plm_capability_calls"
+        and transform_request.get("pass_version") == "pysolate.plm-capability-calls-pass.v1"
+    )
     prepared_tree = _validated_source_tree
+    admitted_request = None
     if prepared_tree is not None:
         if _validated_request_json is None:
             raise ValueError("source pass source was not admitted")
-        request, error = _decode_request(_validated_request_json)
+        admitted_request, error = _decode_request(_validated_request_json)
         if (
             error is not None
-            or request is None
-            or transform_request.get("source") != request["code"]
+            or admitted_request is None
+            or (not plm_request and transform_request.get("source") != admitted_request["code"])
         ):
             raise ValueError("source pass source does not match the admitted request")
         _validated_source_tree = None
-    if (
-        transform_request.get("pass_name") == "plm_capability_calls"
-        and transform_request.get("pass_version") == "pysolate.plm-capability-calls-pass.v1"
-    ):
+    if plm_request:
+        if prepared_tree is None or admitted_request is None:
+            raise ValueError("PLM source pass source was not admitted")
         from .plm_source_pass import emit_patch
 
-        return emit_patch(request_json, prepared_tree)
+        return emit_patch(transform_request, admitted_request["code"], prepared_tree)
     from .source_pass import emit_source_pass_patch_request_json
 
     return emit_source_pass_patch_request_json(request_json, prepared_tree)
@@ -1029,7 +1033,7 @@ def _prepare_source_pass_execution(patch_json: str) -> None:
     ):
         from .plm_source_pass import select_tree
 
-        tree = select_tree(request["code"], patch_json)
+        tree = select_tree(request["code"], patch)
     else:
         from .source_pass import validate_source_pass_execution_request
 

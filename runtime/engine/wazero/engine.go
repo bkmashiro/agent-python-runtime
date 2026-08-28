@@ -1086,13 +1086,9 @@ func (engine *Engine) RunCapabilitySourcePatchInline(ctx context.Context, reques
 		sourcepatch.ValidateCapabilityProjectionBinding(sourcepatch.Patch{CapabilityProjections: projections}, projections) != nil {
 		return passplugin.CapabilitySourcePatchRun{}, runtimeconfig.ErrMechanismDisabled
 	}
-	runRequest, err := runtimeconfig.DecodeRunRequest(request)
-	if err != nil {
-		return passplugin.CapabilitySourcePatchRun{}, err
-	}
 	transformRequest, err := json.Marshal(sourcepatch.Request{
 		PassName: registration.Name(), PassVersion: registration.Version(), RegistrationSHA256: registration.IdentitySHA256(),
-		Source: runRequest.Code, CapabilityProjections: projections,
+		CapabilityProjections: projections,
 	})
 	if err != nil {
 		return passplugin.CapabilitySourcePatchRun{}, err
@@ -1205,13 +1201,8 @@ func (engine *Engine) prepareInlineCapabilitySelection(ctx context.Context, modu
 	if !patch.Applied() {
 		return nil
 	}
-	patchRaw, err := json.Marshal(patch)
-	if err != nil {
-		inline.passErr = err
-		return nil
-	}
 	selection.export = "runtime_select_source_pass_execution"
-	selection.payload = append(patchRaw, '\n')
+	selection.payload = payload
 	selection.plmSourceSealIdentity = patch.OriginalSourceSHA256
 	inline.applied = true
 	selectionStarted := time.Now()

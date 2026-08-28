@@ -46,6 +46,7 @@ type SplitPhaseSnapshot struct {
 	Failed              uint32
 	PhysicalResultBytes uint64
 	MaximumConcurrent   uint32
+	EventsDropped       uint32
 	Events              []SplitPhaseEvent
 }
 
@@ -67,8 +68,11 @@ type splitPhaseEntry struct {
 // Broker.Call remains the only owner of logical operation indices and receipts.
 type SplitPhaseTable struct {
 	mu                  sync.Mutex
+	owner               *Broker
+	runIdentity         string
 	plan                *Plan
 	limits              SplitPhaseLimits
+	eventLimit          uint32
 	startedAt           time.Time
 	entriesBySlot       map[string]*splitPhaseEntry
 	entriesByCall       map[string]*splitPhaseEntry
@@ -79,15 +83,30 @@ type SplitPhaseTable struct {
 	snapshot            SplitPhaseSnapshot
 }
 
-func NewSplitPhaseTable(plan *Plan, limits SplitPhaseLimits) (*SplitPhaseTable, error) {
-	if plan == nil || plan.Identity() == "" || !limits.valid() || limits.MaxCalls > plan.MaxCalls() {
+func NewSplitPhaseTable(owner *Broker, limits SplitPhaseLimits) (*SplitPhaseTable, error) {
+	if owner == nil {
 		return nil, ErrSplitPhaseUnavailable
 	}
-	return &SplitPhaseTable{
-		plan: plan, limits: limits, startedAt: time.Now(),
+	plan := owner.CapabilityPlan()
+	if plan == nil || plan.Identity() == "" || owner.RunIdentity() == "" || !limits.valid() || limits.MaxCalls > plan.MaxCalls() {
+		return nil, ErrSplitPhaseUnavailable
+	}
+	table := &SplitPhaseTable{
+		owner: owner, runIdentity: owner.RunIdentity(), plan: plan, limits: limits, startedAt: time.Now(), eventLimit: splitPhaseEventLimit(limits.MaxCalls),
 		entriesBySlot: make(map[string]*splitPhaseEntry, limits.MaxCalls),
 		entriesByCall: make(map[string]*splitPhaseEntry, limits.MaxCalls),
-	}, nil
+	}
+	if err := owner.AttachStagedClaimer(table); err != nil {
+		return nil, err
+	}
+	return table, nil
+}
+
+func (table *SplitPhaseTable) RunIdentity() string {
+	if table == nil {
+		return ""
+	}
+	return table.runIdentity
 }
 
 func (table *SplitPhaseTable) PlanIdentity() string {
@@ -144,7 +163,7 @@ func (table *SplitPhaseTable) issue(ctx context.Context, slotID string, raw []by
 			table.mu.Unlock()
 			return ErrSplitPhaseMismatch
 		}
-		table.snapshot.Reused++
+		table.snapshot.Reused = saturatingIncrement(table.snapshot.Reused)
 		table.recordLocked(existing, "reused")
 		table.mu.Unlock()
 		return nil
@@ -211,8 +230,8 @@ func (table *SplitPhaseTable) execute(ctx context.Context, entry *splitPhaseEntr
 
 // Materialize routes the original request through Broker so logical budget,
 // operation order, schemas and receipts remain on the unchanged path.
-func (table *SplitPhaseTable) Materialize(ctx context.Context, slotID string, broker *Broker) ([]byte, error) {
-	if table == nil || broker == nil || ctx == nil {
+func (table *SplitPhaseTable) Materialize(ctx context.Context, slotID string) ([]byte, error) {
+	if table == nil || table.owner == nil || ctx == nil {
 		return nil, ErrSplitPhaseUnavailable
 	}
 	table.mu.Lock()
@@ -229,7 +248,7 @@ func (table *SplitPhaseTable) Materialize(ctx context.Context, slotID string, br
 	requestCopy := append([]byte(nil), entry.request...)
 	table.recordLocked(entry, "materialize")
 	table.mu.Unlock()
-	return broker.Call(ctx, requestCopy)
+	return table.owner.Call(ctx, requestCopy)
 }
 
 // Claim is invoked only from Broker after logical call admission and schema
@@ -330,10 +349,30 @@ func (table *SplitPhaseTable) Snapshot() SplitPhaseSnapshot {
 }
 
 func (table *SplitPhaseTable) recordLocked(entry *splitPhaseEntry, disposition string) {
+	if uint32(len(table.snapshot.Events)) >= table.eventLimit {
+		table.snapshot.EventsDropped = saturatingIncrement(table.snapshot.EventsDropped)
+		return
+	}
 	table.snapshot.Events = append(table.snapshot.Events, SplitPhaseEvent{
 		SlotID: entry.slotID, CallID: entry.call.CallID, Disposition: disposition,
 		AtNanos: time.Since(table.startedAt).Nanoseconds(),
 	})
+}
+
+func splitPhaseEventLimit(maxCalls uint32) uint32 {
+	const hardLimit = uint64(4096)
+	limit := uint64(maxCalls)*8 + 8
+	if limit > hardLimit {
+		limit = hardLimit
+	}
+	return uint32(limit)
+}
+
+func saturatingIncrement(value uint32) uint32 {
+	if value == ^uint32(0) {
+		return value
+	}
+	return value + 1
 }
 
 func decodeSplitPhaseRequest(raw []byte) (request, error) {

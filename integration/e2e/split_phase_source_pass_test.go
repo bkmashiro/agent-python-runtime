@@ -102,7 +102,11 @@ func TestRealGuestUnifiedSplitPhasePreissueThenRuntimeIssue(t *testing.T) {
 	if !ok {
 		t.Fatal("source-time call was not positively admitted")
 	}
-	table, err := capability.NewSplitPhaseTable(plan, capability.SplitPhaseLimits{MaxCalls: 2, MaxCostUnits: 2, MaxResultBytes: 1 << 20})
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "unified-split-phase", Plan: plan})
+	if err != nil {
+		t.Fatal(err)
+	}
+	table, err := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{MaxCalls: 2, MaxCostUnits: 2, MaxResultBytes: 1 << 20})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,17 +119,11 @@ func TestRealGuestUnifiedSplitPhasePreissueThenRuntimeIssue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var broker *capability.Broker
 	executionConfig := runtimeconfig.DefaultRunConfig()
 	executionConfig.Timeout = 90 * time.Second
 	executionConfig.ExecutionProfile = &profile
 	runner, err := (wazeroengine.Factory{Passes: plugins, BrokerFactory: func(context.Context) (*capability.Broker, error) {
-		created, createErr := capability.NewBroker(capability.Config{RunIdentity: "unified-split-phase", Plan: plan})
-		if createErr == nil {
-			createErr = created.AttachStagedClaimer(table)
-		}
-		broker = created
-		return created, createErr
+		return broker, nil
 	}}).New(context.Background(), artifact, executionConfig)
 	if err != nil {
 		t.Fatal(err)

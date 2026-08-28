@@ -317,11 +317,27 @@ func (engine *Engine) ValueSlotEvidence() valueslot.Evidence {
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
+	if err := validateProductConstructorConfig(config); err != nil {
+		return nil, err
+	}
 	return newEngine(ctx, wasm, config, nil, nil, nil, nil)
 }
 
 func NewWithBrokerFactory(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, factory BrokerFactory) (*Engine, error) {
+	if err := validateProductConstructorConfig(config); err != nil {
+		return nil, err
+	}
 	return newEngine(ctx, wasm, config, factory, nil, nil, nil)
+}
+
+func validateProductConstructorConfig(config runtimeconfig.RunConfig) error {
+	if err := config.Validate(); err != nil {
+		return err
+	}
+	if config.Mechanisms.Streaming || config.Mechanisms.SemanticPreDispatch {
+		return runtimeconfig.ErrMechanismDisabled
+	}
+	return nil
 }
 
 func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, brokerFactory BrokerFactory, binding *workspaceBinding, preparedRegions *preparedregion.PreparedRegionTable, valueSlots *valueslot.Table) (*Engine, error) {
@@ -1178,6 +1194,72 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 	}
 	runContext, cancel := context.WithTimeout(ctx, engine.config.Timeout)
 	defer cancel()
+	var broker *capability.Broker
+	var splitPhaseTable *capability.SplitPhaseTable
+	brokerFinalized := false
+	defer func() {
+		if broker != nil && !brokerFinalized {
+			cancel()
+			finalizeErr := broker.Finalize(false)
+			runErr = errors.Join(runErr, finalizeErr)
+			if splitPhaseTable != nil {
+				engine.splitPhaseEvidence.set(splitPhaseTable.Snapshot())
+			}
+		}
+	}()
+	createBroker := func() error {
+		if broker != nil || engine.brokerFactory == nil {
+			return nil
+		}
+		var createErr error
+		broker, createErr = engine.brokerFactory(runContext)
+		if createErr != nil {
+			return fmt.Errorf("create capability broker: %w", createErr)
+		}
+		if broker == nil {
+			return errors.New("capability broker factory returned nil")
+		}
+		if broker.SemanticPreDispatchEnabled() != engine.config.Mechanisms.SemanticPreDispatch {
+			return errors.New("capability Broker semantic pre-dispatch mode does not match Run configuration")
+		}
+		if broker.ApprovalSuspensionEnabled() != engine.config.Mechanisms.ApprovalSuspension {
+			return errors.New("capability Broker approval suspension mode does not match Run configuration")
+		}
+		expectsProgrammaticParent := engine.config.ProgramSurface == runtimeconfig.ProgramSurfaceProgrammatic || engine.config.ProgramSurface == runtimeconfig.ProgramSurfaceBoth
+		if broker.ProgrammaticParentBound() != expectsProgrammaticParent {
+			return errors.New("capability Broker programmatic parent binding does not match Run configuration")
+		}
+		expectsDirectAlongsideProgrammatic := engine.config.ProgramSurface == runtimeconfig.ProgramSurfaceBoth
+		if broker.DirectCallsAllowedWithProgrammaticParent() != expectsDirectAlongsideProgrammatic {
+			return errors.New("capability Broker direct/programmatic admission does not match Run configuration")
+		}
+		if executionRef != nil && broker.RunIdentity() != executionRef.ExecutionID {
+			return ErrExecutionIdentityMismatch
+		}
+		if engine.config.Mechanisms.SplitPhaseCalls {
+			splitPhaseTable = broker.AttachedSplitPhaseTable()
+			if splitPhaseTable != nil {
+				if splitPhaseTable.RunIdentity() != broker.RunIdentity() || splitPhaseTable.PlanIdentity() != broker.CapabilityPlanSHA256() {
+					return errors.New("source-time split-phase table does not match capability Run and Plan")
+				}
+			} else {
+				maxCalls := broker.CapabilityPlan().MaxCalls()
+				var tableErr error
+				splitPhaseTable, tableErr = capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{
+					MaxCalls: maxCalls, MaxCostUnits: uint64(maxCalls) * 4, MaxResultBytes: uint64(engine.config.MaxResponseBytes) * uint64(maxCalls),
+				})
+				if tableErr != nil {
+					return fmt.Errorf("create split-phase call table: %w", tableErr)
+				}
+			}
+		}
+		return nil
+	}
+	if engine.config.Mechanisms.SplitPhaseCalls {
+		if err := createBroker(); err != nil {
+			return nil, err
+		}
+	}
 	if engine.preparedRegions != nil {
 		runContext = context.WithValue(runContext, preparedRegionContextKey{}, engine.preparedRegions)
 		defer func() { runErr = errors.Join(runErr, engine.preparedRegions.Close()) }()
@@ -1216,8 +1298,6 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		workspaceInitial = &snapshot
 	}
 	observation := observationLifecycle{session: observationSession}
-	var broker *capability.Broker
-	var splitPhaseTable *capability.SplitPhaseTable
 	capabilityCallsObserved := false
 	if hasObservation && observationSession.Mode() != observe.Off {
 		profileSHA256, profileErr := runtimeconfig.ExecutionProfileBindingSHA256(engine.config)
@@ -1329,31 +1409,9 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 			return nil, withGuestDiagnostic(err, stderr.String())
 		}
 	}
-	brokerFinalized := false
 	if engine.brokerFactory != nil {
-		broker, err = engine.brokerFactory(runContext)
-		if err != nil {
-			return nil, fmt.Errorf("create capability broker: %w", err)
-		}
-		if broker == nil {
-			return nil, errors.New("capability broker factory returned nil")
-		}
-		if broker.SemanticPreDispatchEnabled() != engine.config.Mechanisms.SemanticPreDispatch {
-			return nil, errors.New("capability Broker semantic pre-dispatch mode does not match Run configuration")
-		}
-		if broker.ApprovalSuspensionEnabled() != engine.config.Mechanisms.ApprovalSuspension {
-			return nil, errors.New("capability Broker approval suspension mode does not match Run configuration")
-		}
-		expectsProgrammaticParent := engine.config.ProgramSurface == runtimeconfig.ProgramSurfaceProgrammatic || engine.config.ProgramSurface == runtimeconfig.ProgramSurfaceBoth
-		if broker.ProgrammaticParentBound() != expectsProgrammaticParent {
-			return nil, errors.New("capability Broker programmatic parent binding does not match Run configuration")
-		}
-		expectsDirectAlongsideProgrammatic := engine.config.ProgramSurface == runtimeconfig.ProgramSurfaceBoth
-		if broker.DirectCallsAllowedWithProgrammaticParent() != expectsDirectAlongsideProgrammatic {
-			return nil, errors.New("capability Broker direct/programmatic admission does not match Run configuration")
-		}
-		if executionRef != nil && broker.RunIdentity() != executionRef.ExecutionID {
-			return nil, ErrExecutionIdentityMismatch
+		if err := createBroker(); err != nil {
+			return nil, err
 		}
 		if observation.started {
 			if err := observation.capabilityPlan(runContext, broker.CapabilityPlanSHA256()); err != nil {
@@ -1363,39 +1421,11 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 				return nil, fmt.Errorf("attach capability lifecycle observer: %w", err)
 			}
 		}
-		if engine.config.Mechanisms.SplitPhaseCalls {
-			splitPhaseTable = broker.AttachedSplitPhaseTable()
-			if splitPhaseTable != nil {
-				if splitPhaseTable.PlanIdentity() != broker.CapabilityPlanSHA256() {
-					return nil, errors.New("source-time split-phase table does not match capability Plan")
-				}
-			} else {
-				maxCalls := broker.CapabilityPlan().MaxCalls()
-				var tableErr error
-				splitPhaseTable, tableErr = capability.NewSplitPhaseTable(broker.CapabilityPlan(), capability.SplitPhaseLimits{
-					MaxCalls: maxCalls, MaxCostUnits: uint64(maxCalls) * 4, MaxResultBytes: uint64(engine.config.MaxResponseBytes) * uint64(maxCalls),
-				})
-				if tableErr != nil {
-					return nil, fmt.Errorf("create split-phase call table: %w", tableErr)
-				}
-				if tableErr = broker.AttachStagedClaimer(splitPhaseTable); tableErr != nil {
-					return nil, fmt.Errorf("attach split-phase call table: %w", tableErr)
-				}
-			}
+		if splitPhaseTable != nil {
 			runContext = context.WithValue(runContext, splitPhaseContextKey{}, splitPhaseTable)
 		}
 		runContext = context.WithValue(runContext, brokerContextKey{}, broker)
 	}
-	defer func() {
-		if broker != nil && !brokerFinalized {
-			cancel()
-			finalizeErr := broker.Finalize(false)
-			runErr = errors.Join(runErr, finalizeErr)
-			if splitPhaseTable != nil {
-				engine.splitPhaseEvidence.set(splitPhaseTable.Snapshot())
-			}
-		}
-	}()
 	runContext = context.WithValue(runContext, streamingContextKey{}, streaming)
 	for {
 		select {
@@ -1592,15 +1622,14 @@ func hostMaterializeCall(ctx context.Context, module api.Module, slotPointer, sl
 		return -1
 	}
 	table, tableOK := ctx.Value(splitPhaseContextKey{}).(*capability.SplitPhaseTable)
-	broker, brokerOK := ctx.Value(brokerContextKey{}).(*capability.Broker)
-	if !tableOK || table == nil || !brokerOK || broker == nil {
+	if !tableOK || table == nil {
 		return -1
 	}
 	slotView, ok := module.Memory().Read(slotPointer, slotLength)
 	if !ok {
 		return -1
 	}
-	response, err := table.Materialize(ctx, string(append([]byte(nil), slotView...)), broker)
+	response, err := table.Materialize(ctx, string(append([]byte(nil), slotView...)))
 	if err != nil || len(response) == 0 || len(response) > int(responseCapacity) {
 		return -1
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -166,6 +167,25 @@ func TestRunStreamRequiresSelectedMechanism(t *testing.T) {
 	}
 }
 
+func TestLowLevelConstructorsCannotBypassLegacyResearchGate(t *testing.T) {
+	for name, mechanisms := range map[string]runtimeconfig.MechanismSet{
+		"semantic pre-dispatch": {SemanticAnalysis: true, SemanticPreDispatch: true, StagedObservation: true},
+		"retained-prefix Guest": {Streaming: true, PrivateWorkspace: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			config := runtimeconfig.DefaultRunConfig()
+			config.Mechanisms = mechanisms
+			if _, err := wazeroengine.New(context.Background(), []byte("not wasm"), config); !errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
+				t.Fatalf("New error=%v", err)
+			}
+			factory := func(context.Context) (*capability.Broker, error) { return nil, nil }
+			if _, err := wazeroengine.NewWithBrokerFactory(context.Background(), []byte("not wasm"), config, factory); !errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
+				t.Fatalf("NewWithBrokerFactory error=%v", err)
+			}
+		})
+	}
+}
+
 func TestFactoryIsFreshOnly(t *testing.T) {
 	runner, err := (wazeroengine.Factory{}).New(context.Background(), []byte{0, 97, 115, 109, 1, 0, 0, 0}, runtimeconfig.DefaultRunConfig())
 	if err != nil {
@@ -287,4 +307,77 @@ func TestLegacyGuestFailsSourceValidationBeforeBroker(t *testing.T) {
 	if err == nil || brokerCalled {
 		t.Fatalf("legacy guest did not fail closed: err=%v broker_called=%v", err, brokerCalled)
 	}
+}
+
+func TestSplitPhaseSetupFailureFinalizesSourceTimeCandidate(t *testing.T) {
+	wasm, err := base64.StdEncoding.DecodeString("AGFzbQEAAAABEwRgAABgAn9/AX9gAX8Bf2ABfwADBwYAAQECAwEFAwEAAQdVBwZtZW1vcnkCAAtfaW5pdGlhbGl6ZQAADHJ1bnRpbWVfaW5pdAABD3J1bnRpbWVfcHJlcGFyZQACBWFsbG9jAAMHZGVhbGxvYwAEB2V4ZWN1dGUABQoaBgIACwQAQQALBABBAAsEAEEICwIACwMAAAs=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	plan := splitPhaseCleanupPlan(t, capability.HandlerFunc(func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		close(started)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}))
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "setup-failure", Plan: plan})
+	if err != nil {
+		t.Fatal(err)
+	}
+	table, err := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := []byte(`{"call_id":"setup-failure-read","capability":"workspace.read_text","arguments":{"path":"a.txt"}}`)
+	if err := table.IssueOrReuse(context.Background(), "slot-setup-failure", request); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.SplitPhaseCalls = true
+	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
+		return broker, nil
+	}}).New(context.Background(), wasm, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	_, err = runner.Run(context.Background(), []byte(`{"run_id":"setup-failure","code":"result = 1","inputs":{}}`), "")
+	if err == nil {
+		t.Fatal("legacy Guest unexpectedly passed source validation")
+	}
+	snapshot := table.Snapshot()
+	if snapshot.Cancelled != 1 || snapshot.Discarded != 1 || snapshot.PhysicalFinishes != 1 {
+		t.Fatalf("source-time candidate leaked after setup failure: %+v", snapshot)
+	}
+}
+
+func splitPhaseCleanupPlan(t *testing.T, handler capability.HandlerFunc) *capability.Plan {
+	t.Helper()
+	registry := capability.NewRegistry()
+	grant, err := capability.NewGrant(json.RawMessage(`{"scope":"setup-failure"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := capability.Spec{
+		Name: "workspace.read_text", Version: "test.workspace.read-text.v1", Description: "setup cleanup read",
+		EffectClass: capability.EffectWorkspaceRead, Playback: capability.PlaybackLiveOnly, HandlerIdentity: "test.workspace.read-text.v1",
+		InputSchema:  json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}`),
+		OutputSchema: json.RawMessage(`{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false}`),
+		Python:       &capability.PythonProjection{Module: "workspace", Method: "read_text", Arguments: []string{"path"}},
+		ReadOnly:     true, Idempotent: true,
+		PreDispatch: &capability.PreDispatchContract{
+			Resource: capability.ResourceReference{Namespace: "workspace", Argument: "path"}, Freshness: capability.FreshnessPlanEpoch,
+			Unclaimed: capability.UnclaimedDiscardWithDisposition, Privacy: capability.PreDispatchPrivacyExactPartition,
+			Coalescing: capability.PreDispatchCoalescingForbidden, MaxResultBytes: 1 << 20, CostUnits: 1,
+		},
+	}
+	if err := registry.Register(spec, grant, handler); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return plan
 }

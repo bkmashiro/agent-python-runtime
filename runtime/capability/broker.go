@@ -198,6 +198,10 @@ func (broker *Broker) AttachStagedClaimer(claimer StagedObservationClaimer) erro
 	}
 	broker.mu.Lock()
 	defer broker.mu.Unlock()
+	if table, ok := claimer.(*SplitPhaseTable); ok &&
+		(table.owner != broker || table.RunIdentity() != broker.config.RunIdentity || table.PlanIdentity() != broker.config.Plan.Identity()) {
+		return ErrInvalidBroker
+	}
 	if broker.calls != 0 || broker.config.StagedClaimer != nil || broker.config.Playback != nil || broker.config.Branch != nil || broker.config.SemanticPreDispatch {
 		return ErrInvalidBroker
 	}

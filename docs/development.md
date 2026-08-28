@@ -20,6 +20,14 @@ AGENT_RUNTIME_GUEST=/absolute/path/to/agent-python-runtime.wasm \
   scripts/unified-split-phase-gate.sh guest
 ```
 
+The wrapper uses `PYTHON_BIN` when set. `full` requires an interpreter with the local
+Guest-test dependencies, including NumPy; select an existing project interpreter rather than
+installing into the system Python:
+
+```bash
+PYTHON_BIN=/path/to/python-with-numpy scripts/unified-split-phase-gate.sh full
+```
+
 For Track F semantic-region and Lab work, use the repository gate wrapper instead of
 reconstructing long commands by hand:
 

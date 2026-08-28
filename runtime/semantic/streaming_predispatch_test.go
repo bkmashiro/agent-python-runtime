@@ -143,7 +143,11 @@ func TestStreamingPrefixAdmissionIssuesIntoUnifiedSplitPhaseTable(t *testing.T) 
 	plan := legalityTestPlan(t, true)
 	prefixSource := "result = sources.read(\"profile\")\n"
 	prefixVerified, _ := streamingPrefixAnalysis(t, plan, prefixSource)
-	table, err := capability.NewSplitPhaseTable(plan, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "unified-prefix", Plan: plan})
+	if err != nil {
+		t.Fatal(err)
+	}
+	table, err := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,14 +161,7 @@ func TestStreamingPrefixAdmissionIssuesIntoUnifiedSplitPhaseTable(t *testing.T) 
 	if err := admission.SealFinalSource(prefixSource + "answer = result\n"); err != nil {
 		t.Fatal(err)
 	}
-	broker, err := capability.NewBroker(capability.Config{RunIdentity: "unified-prefix", Plan: plan})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := broker.AttachStagedClaimer(table); err != nil {
-		t.Fatal(err)
-	}
-	response, err := table.Materialize(context.Background(), "slot-s1c9-e1c32-1", broker)
+	response, err := table.Materialize(context.Background(), "slot-s1c9-e1c32-1")
 	if err != nil || !json.Valid(response) {
 		t.Fatalf("response=%s err=%v", response, err)
 	}

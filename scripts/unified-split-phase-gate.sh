@@ -3,12 +3,13 @@ set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 MODE=${1:-focused}
+PYTHON_BIN=${PYTHON_BIN:-python3}
 cd "${ROOT_DIR}"
 
 case "${MODE}" in
   focused)
     go test ./runtime/capability ./runtime/semantic ./runtime/sourcepatch ./runtime/passplugin ./runtime/engine/wazero -count=1
-    PYTHONPATH=guest/bootstrap python3 -m unittest \
+    PYTHONPATH=guest/bootstrap "${PYTHON_BIN}" -m unittest \
       guest.tests.test_source_pass \
       guest.tests.test_bootstrap \
       guest.tests.test_source_contract \
@@ -21,8 +22,8 @@ case "${MODE}" in
     git diff --check
     go test ./... -count=1
     go vet ./...
-    PYTHONPATH=guest/bootstrap python3 -m unittest discover -s guest/tests -p 'test_*.py'
-    python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+    PYTHONPATH=guest/bootstrap "${PYTHON_BIN}" -m unittest discover -s guest/tests -p 'test_*.py'
+    "${PYTHON_BIN}" -m unittest discover -s scripts/tests -p 'test_*.py'
     ;;
   guest)
     if [[ -z ${AGENT_RUNTIME_GUEST:-} || ! -s ${AGENT_RUNTIME_GUEST} ]]; then

@@ -401,14 +401,14 @@ RED cases:
 
 Tasks:
 
-- [ ] Make one Run owner bind Run identity, Plan identity, Broker and candidate/job table atomically.
-- [ ] Remove arbitrary-Broker materialisation from the table API.
-- [ ] Make attachment one-shot and impossible after any logical call or physical start.
-- [ ] Apply mechanism gates through every exported constructor surface.
-- [ ] Install cleanup ownership before a factory can return or start source-time physical work.
-- [ ] Bound event evidence separately from candidate count; preserve aggregate counters without overflow.
-- [ ] Preserve one-shot finalization and uncertain-outcome no-replay semantics.
-- [ ] Run focused/race/full gates, sign, push and continue.
+- [x] Make one Run owner bind Run identity, Plan identity, Broker and candidate/job table atomically.
+- [x] Remove arbitrary-Broker materialisation from the table API.
+- [x] Make attachment one-shot and impossible after any logical call or physical start.
+- [x] Apply mechanism gates through every exported constructor surface.
+- [x] Install cleanup ownership before a factory can return or start source-time physical work.
+- [x] Bound event evidence separately from candidate count; preserve aggregate counters without overflow.
+- [x] Preserve one-shot finalization and uncertain-outcome no-replay semantics.
+- [x] Run focused/race/full gates, sign, push and continue.
 
 **Gate G2:** The four independent Host-review findings reproduce before the fix and are closed by direct tests. No table or attempt can cross a Run/Broker identity.
 
@@ -598,8 +598,8 @@ Tasks:
 
 ## Current execution pointer
 
-**Current:** Gates 0 and 1 are complete. The versioned PLM contract, pure linearization oracle, deterministic fake world and RED identity/temporal matrix are frozen. Production execution is not yet connected to PLM.
+**Current:** Gates 0 through 2 are complete. Every split-phase table is created by and atomically attached to one Run Broker; arbitrary-Broker materialisation is removed, legacy constructors fail closed, setup failures finalize source-time work and reuse evidence is bounded.
 
-**Next:** Execute Gate 2: make Run identity, Plan, Broker and candidate table one owner and close the constructor-gate, foreign-Broker, setup-cleanup and bounded-event findings.
+**Next:** Execute Gate 3: version predecessor issue/collect into explicit immutable candidate preparation and original-point `linearize + materialize` with separate candidate/job state.
 
 **Blocked:** No blocker.

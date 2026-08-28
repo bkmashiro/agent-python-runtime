@@ -29,11 +29,8 @@ func TestSplitPhaseTableKeepsPhysicalWorkSeparateUntilBrokerMaterialize(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	table, err := capability.NewSplitPhaseTable(plan, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
+	table, err := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := broker.AttachStagedClaimer(table); err != nil {
 		t.Fatal(err)
 	}
 	request := []byte(`{"call_id":"split-one","capability":"workspace.read_text","arguments":{"path":"a.txt"}}`)
@@ -49,7 +46,7 @@ func TestSplitPhaseTableKeepsPhysicalWorkSeparateUntilBrokerMaterialize(t *testi
 		t.Fatalf("submit created logical evidence: calls=%d receipts=%#v", broker.Calls(), broker.SnapshotReceipts())
 	}
 	close(release)
-	response, err := table.Materialize(context.Background(), "slot-one", broker)
+	response, err := table.Materialize(context.Background(), "slot-one")
 	if err != nil || !containsResult(response, "ready") {
 		t.Fatalf("response=%s err=%v", response, err)
 	}
@@ -95,11 +92,8 @@ func TestSplitPhaseTableOverlapsTwoReadsAndMaterializesInSourceOrder(t *testing.
 		}
 	})
 	broker, _ := capability.NewBroker(capability.Config{RunIdentity: "split-two", Plan: plan})
-	table, err := capability.NewSplitPhaseTable(plan, capability.SplitPhaseLimits{MaxCalls: 2, MaxCostUnits: 2, MaxResultBytes: 2 << 20})
+	table, err := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{MaxCalls: 2, MaxCostUnits: 2, MaxResultBytes: 2 << 20})
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := broker.AttachStagedClaimer(table); err != nil {
 		t.Fatal(err)
 	}
 	first := []byte(`{"call_id":"split-first","capability":"workspace.read_text","arguments":{"path":"first"}}`)
@@ -123,11 +117,11 @@ func TestSplitPhaseTableOverlapsTwoReadsAndMaterializesInSourceOrder(t *testing.
 		t.Fatalf("max=%d logical=%d", maximum.Load(), broker.Calls())
 	}
 	close(release)
-	firstResponse, err := table.Materialize(context.Background(), "slot-first", broker)
+	firstResponse, err := table.Materialize(context.Background(), "slot-first")
 	if err != nil || !containsResult(firstResponse, "first") {
 		t.Fatalf("first=%s err=%v", firstResponse, err)
 	}
-	secondResponse, err := table.Materialize(context.Background(), "slot-second", broker)
+	secondResponse, err := table.Materialize(context.Background(), "slot-second")
 	if err != nil || !containsResult(secondResponse, "second") {
 		t.Fatalf("second=%s err=%v", secondResponse, err)
 	}
@@ -164,10 +158,7 @@ func TestSplitPhaseTableDiscardsLaterPhysicalWorkWithoutLogicalReceipt(t *testin
 		return json.Marshal(map[string]string{"text": decoded.Path})
 	})
 	broker, _ := capability.NewBroker(capability.Config{RunIdentity: "split-fail", Plan: plan})
-	table, _ := capability.NewSplitPhaseTable(plan, capability.SplitPhaseLimits{MaxCalls: 2, MaxCostUnits: 2, MaxResultBytes: 2 << 20})
-	if err := broker.AttachStagedClaimer(table); err != nil {
-		t.Fatal(err)
-	}
+	table, _ := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{MaxCalls: 2, MaxCostUnits: 2, MaxResultBytes: 2 << 20})
 	first := []byte(`{"call_id":"split-fail-first","capability":"workspace.read_text","arguments":{"path":"fail"}}`)
 	second := []byte(`{"call_id":"split-fail-second","capability":"workspace.read_text","arguments":{"path":"later"}}`)
 	if err := table.IssueOrReuse(context.Background(), "slot-fail", first); err != nil {
@@ -179,7 +170,7 @@ func TestSplitPhaseTableDiscardsLaterPhysicalWorkWithoutLogicalReceipt(t *testin
 	<-started
 	<-started
 	close(release)
-	response, err := table.Materialize(context.Background(), "slot-fail", broker)
+	response, err := table.Materialize(context.Background(), "slot-fail")
 	if err != nil || !containsCode(response, "handler_error") {
 		t.Fatalf("response=%s err=%v", response, err)
 	}
@@ -204,10 +195,7 @@ func TestSplitPhaseTableTargetMismatchNeverFallsBackToSecondPhysicalCall(t *test
 		return json.RawMessage(`{"text":"ready"}`), nil
 	})
 	broker, _ := capability.NewBroker(capability.Config{RunIdentity: "split-mismatch", Plan: plan})
-	table, _ := capability.NewSplitPhaseTable(plan, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
-	if err := broker.AttachStagedClaimer(table); err != nil {
-		t.Fatal(err)
-	}
+	table, _ := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
 	target := []byte(`{"call_id":"split-target","capability":"workspace.read_text","arguments":{"path":"expected"}}`)
 	if err := table.IssueOrReuse(context.Background(), "slot-target", target); err != nil {
 		t.Fatal(err)
@@ -234,7 +222,8 @@ func TestSplitPhaseTableFinalizeCancelsAndJoinsUnclaimedWork(t *testing.T) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	})
-	table, err := capability.NewSplitPhaseTable(plan, capability.SplitPhaseLimits{
+	broker, _ := capability.NewBroker(capability.Config{RunIdentity: "split-cancel", Plan: plan})
+	table, err := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{
 		MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20,
 	})
 	if err != nil {
@@ -270,10 +259,7 @@ func TestSplitPhaseTableIssueOrReuseStartsOneAdmittedPhysicalAttempt(t *testing.
 		}
 	})
 	broker, _ := capability.NewBroker(capability.Config{RunIdentity: "split-reuse", Plan: plan})
-	table, _ := capability.NewSplitPhaseTable(plan, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
-	if err := broker.AttachStagedClaimer(table); err != nil {
-		t.Fatal(err)
-	}
+	table, _ := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
 	request := []byte(`{"call_id":"split-s1c0-e1c29-1","capability":"workspace.read_text","arguments":{"path":"a"}}`)
 	if err := table.IssueOrReuse(context.Background(), "slot-s1c0-e1c29-1", request); err != nil {
 		t.Fatal(err)
@@ -287,7 +273,7 @@ func TestSplitPhaseTableIssueOrReuseStartsOneAdmittedPhysicalAttempt(t *testing.
 		t.Fatal("physical call did not start")
 	}
 	close(release)
-	response, err := table.Materialize(context.Background(), "slot-s1c0-e1c29-1", broker)
+	response, err := table.Materialize(context.Background(), "slot-s1c0-e1c29-1")
 	if err != nil || !containsResult(response, "ready") {
 		t.Fatalf("response=%s err=%v", response, err)
 	}
@@ -306,7 +292,8 @@ func TestSplitPhaseTableIssueOrReuseRejectsRequestMismatch(t *testing.T) {
 		physical.Add(1)
 		return json.RawMessage(`{"text":"ready"}`), nil
 	})
-	table, _ := capability.NewSplitPhaseTable(plan, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
+	broker, _ := capability.NewBroker(capability.Config{RunIdentity: "split-request-mismatch", Plan: plan})
+	table, _ := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
 	first := []byte(`{"call_id":"split-s1c0-e1c29-1","capability":"workspace.read_text","arguments":{"path":"a"}}`)
 	second := []byte(`{"call_id":"split-s1c0-e1c29-1","capability":"workspace.read_text","arguments":{"path":"b"}}`)
 	if err := table.IssueOrReuse(context.Background(), "slot-s1c0-e1c29-1", first); err != nil {
@@ -337,7 +324,8 @@ func TestSplitPhaseTableIssueOrReuseRejectsNonStageableWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan, _ := registry.Seal(capability.PlanConfig{MaxCalls: 1})
-	table, _ := capability.NewSplitPhaseTable(plan, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
+	broker, _ := capability.NewBroker(capability.Config{RunIdentity: "split-write", Plan: plan})
+	table, _ := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
 	request := []byte(`{"call_id":"split-write-1","capability":"workspace.write_text","arguments":{"path":"a","content":"b"}}`)
 	if err := table.IssueOrReuse(context.Background(), "slot-write-1", request); !errors.Is(err, capability.ErrSplitPhaseUnavailable) {
 		t.Fatalf("write issue error=%v", err)

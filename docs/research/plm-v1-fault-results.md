@@ -8,6 +8,6 @@ The gate passed 16 deterministic two-call seeds, 10 repeated race runs, 10 setup
 
 Visible results, logical-call counts and receipt order refine the sequential path. Provider starts, restart decisions and validator events remain separate economic evidence. Candidate and job dispositions remain Host-private and bounded. No response or provider body is stored in the aggregate.
 
-The fault gate found one safety defect: an uncertain provider outcome was treated as an ordinary prepare failure and replayed. `PLMProviderOutcomeUncertain` now materialises one logical `provider_outcome_uncertain` error after the usual binding and temporal checks. It never starts the canonical handler.
+The fault gate found and closed an uncertainty replay defect. A restart decision now cancels and settles the exact candidate before any canonical start. If the provider reports `PLMProviderOutcomeUncertain`, PLM materialises one logical `provider_outcome_uncertain` error even when temporal or provider proof fails; it does not invoke the provider again.
 
 The controlled latency fixture remains negative; this result does not generalise beyond that fixture.

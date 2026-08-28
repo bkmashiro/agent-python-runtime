@@ -121,6 +121,8 @@ class SourcePassTests(unittest.TestCase):
         for source in (
             'values.append("before"); value = tools.get("alpha")\nresult = value\n',
             'value = tools.get("alpha"); values.append("after")\nresult = value\n',
+            'if inputs["take"]: value = tools.get("alpha")\nresult = value\n',
+            'for item in inputs["items"]: value = tools.get(item)\nresult = value\n',
         ):
             patch = json.loads(emit_source_pass_patch_request_json(
                 plm_capability_request(source, CAPABILITY_PROJECTIONS)

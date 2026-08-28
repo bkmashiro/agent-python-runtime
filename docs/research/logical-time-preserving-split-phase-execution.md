@@ -141,8 +141,9 @@ At the original logical call, the Run-owned Host context:
 2. rechecks Run, Plan and authority identity;
 3. validates the candidate's temporal certificate against the current operation context;
 4. adopts the candidate when validation is sound;
-5. otherwise discards or detaches it according to policy and starts the canonical
-   operation at the logical point.
+5. otherwise cancels and settles it before any canonical start;
+6. materialises a terminal ambiguity when settlement is uncertain, or starts the canonical
+   operation at the logical point when replay is proven safe.
 
 The abstract Host operation begins at linearization, not at physical preparation.
 Classical linearizability places an operation's effect between its invocation and
@@ -236,7 +237,10 @@ V1 also fixes failure and authority policy:
 
 ```text
 prepared success      validate temporally at linearization
-prepared failure      restart canonically at linearization by default
+ordinary prepared failure
+                      restart canonically at linearization by default
+uncertain physical outcome
+                      terminal error at linearization; never replay
 stable certified failure
                       adopt only under an operation-specific sound contract
 authority             always recheck at linearization

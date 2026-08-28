@@ -25,8 +25,8 @@ V1 introduces the semantic distinction needed to migrate the predecessor
 
 ```text
 P: prepare a Host-private candidate
-L: at the original call, adopt the candidate or start the canonical operation
-M: synchronously return the adopted or canonical job outcome
+L: at the original call, adopt, terminalise physical ambiguity, or start canonically
+M: synchronously return the adopted, ambiguous, or canonical job outcome
 ```
 
 V1 fixes:
@@ -56,9 +56,11 @@ Broker call and records no receipt. Resource identity is derived from the contra
 capability, handler and argument identities are rebuilt by the table. A registry-bound Host
 validator produces temporal, provider non-interference and optional stable-failure results.
 The logical caller supplies no validation booleans. One internal job then makes exactly one
-Broker call. A valid candidate is claimed by that call. A mismatch, invalid proof or
-prepare-time failure detaches the candidate and lets the same Broker call execute the
-canonical handler; it does not create a second logical operation.
+Broker call. A valid candidate is claimed by that call. A mismatch, invalid proof or ordinary
+prepare-time failure cancels and settles the candidate before the same Broker call may execute
+the canonical handler. A settled uncertain physical outcome instead becomes one terminal
+`provider_outcome_uncertain` result and is never replayed. Neither path creates a second logical
+operation.
 
 `CURRENT` uses `PreparePLMTransport` and never invokes the final-value handler before `L`.
 `WALLCLOCK_OBSERVING` rejects preparation. Validation cost and provider-visible validation
@@ -132,8 +134,9 @@ authority epoch
 provider-session identity
 ```
 
-Any mismatch at `L` rejects the candidate and starts the canonical operation. Compiler-emitted
-site data and Guest-provided arguments never grant capability authority.
+Any mismatch at `L` rejects candidate adoption and first settles the exact candidate. The
+canonical operation starts only when settlement proves there is no uncertain physical outcome.
+Compiler-emitted site data and Guest-provided arguments never grant capability authority.
 
 Each reached `(site, occurrence)` linearizes at most once. For two calls whose temporal histories
 do not commute, source order requires `L_a` before `L_b`; physical candidate completion order does

@@ -53,6 +53,18 @@ type plmEconomicsEvidence struct {
 	Profiles       []plmEconomicsProfile `json:"profiles"`
 }
 
+type plmMultireadEconomicsEvidence struct {
+	SchemaVersion        string                `json:"schema_version"`
+	TargetCommit         string                `json:"target_commit"`
+	ArtifactSourceCommit string                `json:"artifact_source_commit"`
+	ArtifactSHA256       string                `json:"artifact_sha256"`
+	SourceSHA256         string                `json:"source_sha256"`
+	RunsPerArm           int                   `json:"runs_per_arm"`
+	HostOperations       uint32                `json:"host_operations"`
+	ProviderDelay        string                `json:"provider_delay"`
+	Profiles             []plmEconomicsProfile `json:"profiles"`
+}
+
 func TestRealGuestPLMEconomicsFixture(t *testing.T) {
 	output := os.Getenv("PLM_ECONOMICS_OUTPUT")
 	if output == "" {
@@ -104,7 +116,64 @@ func TestRealGuestPLMEconomicsFixture(t *testing.T) {
 	t.Logf("PLM_ECONOMICS %s", encoded)
 }
 
+func TestRealGuestPLMMultireadEconomicsFixture(t *testing.T) {
+	output := os.Getenv("PLM_MULTIREAD_ECONOMICS_OUTPUT")
+	if output == "" {
+		t.Skip("set PLM_MULTIREAD_ECONOMICS_OUTPUT to run the bounded multiread fixture")
+	}
+	runs, err := strconv.Atoi(os.Getenv("PLM_ECONOMICS_RUNS"))
+	if err != nil || runs < 3 || runs > 20 {
+		t.Fatalf("PLM_ECONOMICS_RUNS must be in [3,20]")
+	}
+	artifact, err := osReadGuestArtifact(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const calls = uint32(4)
+	source := plmMultireadEconomicsSource()
+	profiles := make([]plmEconomicsProfile, 0, 2)
+	for _, profile := range []string{"cold_end_to_end", "engine_precompiled"} {
+		samples := make([]plmEconomicsSample, 0, 2*runs)
+		for iteration := 0; iteration < runs; iteration++ {
+			order := []string{"baseline", "plm"}
+			if iteration%2 == 1 {
+				order[0], order[1] = order[1], order[0]
+			}
+			for _, mode := range order {
+				samples = append(samples, runPLMEconomicsSampleWithCalls(t, artifact, source, mode, profile, iteration, calls))
+			}
+		}
+		baselineMedian := plmMedian(samples, "baseline")
+		plmMedianNanos := plmMedian(samples, "plm")
+		profiles = append(profiles, plmEconomicsProfile{
+			Name: profile, BaselineMedianNanos: baselineMedian, PLMMedianNanos: plmMedianNanos,
+			DeltaPercent: 100 * (float64(plmMedianNanos) - float64(baselineMedian)) / float64(baselineMedian), Samples: samples,
+		})
+	}
+	artifactDigest := sha256.Sum256(artifact)
+	sourceDigest := sha256.Sum256([]byte(source))
+	evidence := plmMultireadEconomicsEvidence{
+		SchemaVersion: "pysolate.plm-multiread-economics.v1", TargetCommit: os.Getenv("PLM_TARGET_COMMIT"),
+		ArtifactSourceCommit: os.Getenv("PLM_ARTIFACT_SOURCE_COMMIT"),
+		ArtifactSHA256:       fmt.Sprintf("sha256:%x", artifactDigest[:]), SourceSHA256: fmt.Sprintf("sha256:%x", sourceDigest[:]),
+		RunsPerArm: runs, HostOperations: calls, ProviderDelay: "75ms", Profiles: profiles,
+	}
+	encoded, err := json.MarshalIndent(evidence, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded = append(encoded, '\n')
+	if err := os.WriteFile(output, encoded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("PLM_MULTIREAD_ECONOMICS %s", encoded)
+}
+
 func runPLMEconomicsSample(t *testing.T, artifact []byte, source, mode, profile string, iteration int) plmEconomicsSample {
+	return runPLMEconomicsSampleWithCalls(t, artifact, source, mode, profile, iteration, 1)
+}
+
+func runPLMEconomicsSampleWithCalls(t *testing.T, artifact []byte, source, mode, profile string, iteration int, maxCalls uint32) plmEconomicsSample {
 	t.Helper()
 	runID := fmt.Sprintf("plm-economics-%s-%s-%d", profile, mode, iteration)
 	var providerNanos atomic.Uint64
@@ -114,7 +183,7 @@ func runPLMEconomicsSample(t *testing.T, artifact []byte, source, mode, profile 
 		providerNanos.Add(uint64(time.Since(started)))
 		return json.RawMessage(`{"body":"fixture"}`), nil
 	})}
-	plan := plmE2EPlan(t, 1, adapter)
+	plan := plmE2EPlan(t, maxCalls, adapter)
 	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: runID, Code: source, Inputs: json.RawMessage(`{}`)})
 	if err != nil {
 		t.Fatal(err)
@@ -148,13 +217,14 @@ func runPLMEconomicsSample(t *testing.T, artifact []byte, source, mode, profile 
 	if profile == "cold_end_to_end" {
 		timedStarted = setupStarted
 	}
+	var result []byte
 	if mode == "plm" {
 		execution, runErr := plugins.ExecuteCapabilityHostScheduled(context.Background(), sourcepatch.PLMCapabilityCallsName, engine, request,
 			plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan))
 		if runErr != nil || !execution.Applied {
 			t.Fatalf("mode=%s execution=%+v err=%v", mode, execution, runErr)
 		}
-		if _, runErr = decodeSuccessfulGuestResult(execution.Payload); runErr != nil {
+		if result, runErr = decodeSuccessfulGuestResult(execution.Payload); runErr != nil {
 			t.Fatal(runErr)
 		}
 	} else {
@@ -162,7 +232,7 @@ func runPLMEconomicsSample(t *testing.T, artifact []byte, source, mode, profile 
 		if runErr != nil {
 			t.Fatal(runErr)
 		}
-		if _, runErr = decodeSuccessfulGuestResult(payload); runErr != nil {
+		if result, runErr = decodeSuccessfulGuestResult(payload); runErr != nil {
 			t.Fatal(runErr)
 		}
 	}
@@ -176,12 +246,19 @@ func runPLMEconomicsSample(t *testing.T, artifact []byte, source, mode, profile 
 	if profile == "cold_end_to_end" {
 		allocated = after.TotalAlloc - beforeSetup.TotalAlloc
 	}
-	if broker == nil || broker.CallCount() != 1 {
+	if broker == nil || broker.CallCount() != maxCalls {
 		t.Fatalf("mode=%s broker=%v", mode, broker)
+	}
+	if maxCalls == 4 && string(result) != `["fixture","fixture","fixture","fixture"]` {
+		t.Fatalf("mode=%s result=%s", mode, result)
+	}
+	candidates := engine.SplitPhaseEvidence()
+	if mode == "plm" && (candidates.CandidatesPrepared != maxCalls || candidates.CandidatesAdopted != maxCalls || candidates.MaximumConcurrent != maxCalls) {
+		t.Fatalf("mode=%s candidates=%+v", mode, candidates)
 	}
 	return plmEconomicsSample{
 		Mode: mode, Profile: profile, Iteration: iteration, TotalNanos: totalNanos, EngineSetupNanos: setupNanos,
-		AllocatedBytes: allocated, ProviderNanos: providerNanos.Load(), Lifecycle: engine.PLMRunLifecycleEvidence(), Candidates: engine.SplitPhaseEvidence(),
+		AllocatedBytes: allocated, ProviderNanos: providerNanos.Load(), Lifecycle: engine.PLMRunLifecycleEvidence(), Candidates: candidates,
 	}
 }
 
@@ -193,6 +270,14 @@ func plmEconomicsSource(statements int) string {
 	}
 	fmt.Fprintf(&source, "value = sources.read(\"alpha\")\nresult = [value, x%d]\n", statements)
 	return source.String()
+}
+
+func plmMultireadEconomicsSource() string {
+	return "metrics = sources.read(\"metrics\")\n" +
+		"logs = sources.read(\"logs\")\n" +
+		"deployment = sources.read(\"deployment\")\n" +
+		"config = sources.read(\"config\")\n" +
+		"result = [metrics, logs, deployment, config]\n"
 }
 
 func plmMedian(samples []plmEconomicsSample, mode string) uint64 {

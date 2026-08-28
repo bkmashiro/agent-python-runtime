@@ -110,6 +110,7 @@ type Spec struct {
 	ReadOnly        bool                 `json:"read_only,omitempty"`
 	Idempotent      bool                 `json:"idempotent,omitempty"`
 	PreDispatch     *PreDispatchContract `json:"pre_dispatch,omitempty"`
+	PLM             *PLMContract         `json:"plm,omitempty"`
 	Approval        *ApprovalRequirement `json:"approval,omitempty"`
 }
 
@@ -245,6 +246,9 @@ func (registry *Registry) Register(spec Spec, grant Grant, handler Handler) erro
 		if _, ok := handler.(EvidenceHandler); !ok {
 			return ErrInvalidTool
 		}
+	}
+	if canonical.PLM != nil && !validPLMValidatorBinding(canonical, handler) {
+		return ErrInvalidTool
 	}
 	if !validGrant(grant) {
 		return ErrInvalidGrant
@@ -449,6 +453,14 @@ func (plan *Plan) PreDispatch(name string) (PreDispatchQualification, bool) {
 	return preDispatchQualification(registered.spec)
 }
 
+func (plan *Plan) PLMContract(name string) (PLMContract, bool) {
+	registered, ok := plan.lookup(name)
+	if !ok || registered.spec.PLM == nil {
+		return PLMContract{}, false
+	}
+	return *registered.spec.PLM, true
+}
+
 func preDispatchQualification(spec Spec) (PreDispatchQualification, bool) {
 	if spec.PreDispatch == nil {
 		return PreDispatchQualification{}, false
@@ -507,7 +519,7 @@ func prepareSpec(spec Spec) (Spec, *jsonschema.Schema, *jsonschema.Schema, error
 		!validEffectClass(spec.EffectClass) || !validPlaybackTreatment(spec.Playback) ||
 		len(spec.InputSchema) == 0 || len(spec.InputSchema) > maxCapabilitySchemaBytes ||
 		len(spec.OutputSchema) == 0 || len(spec.OutputSchema) > maxCapabilitySchemaBytes || !validPythonProjection(spec.Python) ||
-		!validPreDispatchQualification(spec) || !validApprovalRequirement(spec) {
+		!validPreDispatchQualification(spec) || !validPLMQualification(spec) || !validApprovalRequirement(spec) {
 		return Spec{}, nil, nil, ErrInvalidTool
 	}
 	inputDocument, inputCanonical, err := canonicalJSON(spec.InputSchema)
@@ -538,16 +550,68 @@ func validApprovalRequirement(spec Spec) bool {
 	}
 	return spec.Approval.Mode == ApprovalLease && spec.Approval.LeaseMilliseconds > 0 &&
 		spec.Approval.LeaseMilliseconds <= uint64((24*time.Hour)/time.Millisecond) &&
-		spec.Playback == PlaybackLiveOnly && spec.PreDispatch == nil
+		spec.Playback == PlaybackLiveOnly && spec.PreDispatch == nil && spec.PLM == nil
 }
 
 func validPreDispatchQualification(spec Spec) bool {
+	if spec.PLM != nil && spec.PreDispatch == nil {
+		return true
+	}
 	any := spec.ReadOnly || spec.Idempotent || spec.PreDispatch != nil
 	if !any {
 		return true
 	}
 	readClass := spec.EffectClass == EffectPure || spec.EffectClass == EffectWorkspaceRead || spec.EffectClass == EffectExternalRead
 	return readClass && spec.ReadOnly && spec.Idempotent && spec.Python != nil && validPreDispatchContract(spec.Python, spec.PreDispatch)
+}
+
+func validPLMQualification(spec Spec) bool {
+	if spec.PLM == nil {
+		return true
+	}
+	if spec.PreDispatch != nil || spec.PLM.Validate() != nil || spec.Playback != PlaybackLiveOnly || spec.Python == nil {
+		return false
+	}
+	readClass := spec.EffectClass == EffectPure || spec.EffectClass == EffectWorkspaceRead || spec.EffectClass == EffectExternalRead
+	if !readClass || !spec.ReadOnly || !spec.Idempotent {
+		return false
+	}
+	if spec.PLM.Temporal == TemporalWallclockObserving {
+		return true
+	}
+	if spec.PLM.Resource.Constant != "" {
+		return true
+	}
+	for _, argument := range spec.Python.Arguments {
+		if argument == spec.PLM.Resource.Argument {
+			return true
+		}
+	}
+	return false
+}
+
+func validPLMValidatorBinding(spec Spec, handler Handler) bool {
+	contract := spec.PLM
+	if contract == nil {
+		return true
+	}
+	if contract.PrepareEffect == PrepareNone {
+		return true
+	}
+	validator, ok := handler.(PLMValidator)
+	if !ok {
+		return false
+	}
+	identities := validator.PLMValidatorIdentities()
+	if identities.Temporal != contract.TemporalValidator || identities.ProviderNonInterference != contract.ProviderNonInterferenceValidator ||
+		identities.StableFailure != contract.StableFailureValidator {
+		return false
+	}
+	if contract.PrepareEffect == PrepareTransportOnly {
+		_, ok = handler.(PLMTransportPreparer)
+		return ok
+	}
+	return true
 }
 
 func validPreDispatchContract(projection *PythonProjection, contract *PreDispatchContract) bool {
@@ -836,6 +900,10 @@ func cloneSpec(spec Spec) Spec {
 	if spec.PreDispatch != nil {
 		contract := *spec.PreDispatch
 		cloned.PreDispatch = &contract
+	}
+	if spec.PLM != nil {
+		contract := *spec.PLM
+		cloned.PLM = &contract
 	}
 	if spec.Approval != nil {
 		requirement := *spec.Approval

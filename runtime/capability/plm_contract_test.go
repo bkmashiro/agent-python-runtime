@@ -14,6 +14,7 @@ func TestPLMContractV1AcceptsOnlyExplicitTemporalCombinations(t *testing.T) {
 		plmValueContract(capability.TemporalLeased),
 		{
 			Version: capability.PLMContractVersionV1, Temporal: capability.TemporalCurrent,
+			Resource:      capability.ResourceReference{Namespace: "workspace", Argument: "path"},
 			PrepareEffect: capability.PrepareTransportOnly, Speculation: capability.SpeculationNever,
 			Failure: capability.FailureRetryAtLinearize, Authority: capability.AuthorityRecheckAtLinearize,
 			ProviderNonInterferenceValidator: "pysolate.test.provider-noninterference.v1", CostUnits: 1,
@@ -207,6 +208,7 @@ func TestPLMCurrentAndPrepareFailuresRestartAtLinearization(t *testing.T) {
 	binding := plmBinding()
 	currentContract := capability.PLMContract{
 		Version: capability.PLMContractVersionV1, Temporal: capability.TemporalCurrent,
+		Resource:      capability.ResourceReference{Namespace: "workspace", Argument: "path"},
 		PrepareEffect: capability.PrepareTransportOnly, Speculation: capability.SpeculationNever,
 		Failure: capability.FailureRetryAtLinearize, Authority: capability.AuthorityRecheckAtLinearize,
 		ProviderNonInterferenceValidator: "pysolate.test.provider-noninterference.v1", CostUnits: 1,
@@ -322,6 +324,7 @@ func plmValueContract(mode capability.TemporalMode) capability.PLMContract {
 		Version: capability.PLMContractVersionV1, Temporal: mode,
 		PrepareEffect: capability.PrepareSilentRead, Speculation: capability.SpeculationBudgeted,
 		Failure: capability.FailureRetryAtLinearize, Authority: capability.AuthorityRecheckAtLinearize,
+		Resource:                         capability.ResourceReference{Namespace: "workspace", Argument: "path"},
 		TemporalValidator:                "pysolate.test.temporal-validator.v1",
 		ProviderNonInterferenceValidator: "pysolate.test.provider-noninterference.v1",
 		MaxResultBytes:                   1 << 20, CostUnits: 1,

@@ -440,18 +440,18 @@ remain isolated from PLM candidates and are not described as the new product con
 
 Tasks:
 
-- [ ] Replace `FreshnessPlanEpoch` as the complete freshness model with a versioned temporal contract while retaining Plan/authority binding separately.
-- [ ] Add `IMMUTABLE` and `SNAPSHOT` validators.
-- [ ] Add one real or deterministic fake `VERSIONED` adapter with a sound version check.
-- [ ] Add one provider-guaranteed `LEASED` fixture with monotonic/epoch-safe validation.
-- [ ] Add `CURRENT` transport/session-only preparation and prove no final value is read before linearization.
-- [ ] Reject `WALLCLOCK_OBSERVING` movement.
-- [ ] Add default `RETRY_AT_LINEARIZE` failure handling and one explicit
+- [x] Replace `FreshnessPlanEpoch` as the complete freshness model with a versioned temporal contract while retaining Plan/authority binding separately.
+- [x] Add `IMMUTABLE` and `SNAPSHOT` validators.
+- [x] Add one deterministic fake `VERSIONED` adapter with a sound version check.
+- [x] Add one provider-guaranteed `LEASED` fixture with monotonic/epoch-safe validation.
+- [x] Add `CURRENT` transport/session-only preparation and prove no final value is read before linearization.
+- [x] Reject `WALLCLOCK_OBSERVING` movement.
+- [x] Add default `RETRY_AT_LINEARIZE` failure handling and one explicit
   `STABLE_FAILURE` fixture; never surface a prepare-time exception early.
-- [ ] Bind candidate certificates to request, resource, handler, site/occurrence, Run, Plan, authority epoch and mode evidence.
-- [ ] Reject changed source seal, arguments, authority, provider session, snapshot/version/lease and resource identity.
-- [ ] Record validation request/cost/provider effects separately from the logical operation.
-- [ ] Prove a provider-visible prepare that consumes outcome-affecting quota is rejected unless its contract explicitly preserves later semantics.
+- [x] Bind candidate certificates to request, resource, handler, site/occurrence, Run, Plan, authority epoch and mode evidence.
+- [x] Reject changed source seal, arguments, authority, provider session, snapshot/version/lease and resource identity.
+- [x] Record validation request/cost/provider effects separately from the logical operation.
+- [x] Prove a provider-visible prepare that consumes outcome-affecting quota is rejected unless its contract explicitly preserves later semantics.
 
 **Gate G4:** Immutable/snapshot/versioned/leased candidates adopt only under sound evidence; current reads execute at linearization; no absent/unknown mode fails open.
 
@@ -601,8 +601,8 @@ Tasks:
 
 ## Current execution pointer
 
-**Current:** Gates 0 through 2 and the Gate 3 Host behavior gate are complete. The existing Run table now supports immutable PLM candidates, explicit candidate/job state, original-point folded `L=M`, valid adoption and invalid/failure canonical restart through one Broker logical call. Compiler/Guest production execution still uses the isolated predecessor bridge.
+**Current:** Gates 0 through 4 are complete except the Gate 3 predecessor-bridge retirement, which remains conditioned on Gate 5 exact-Guest parity. PLM contracts are Plan-bound to exact Host validators; resource identity is derived from canonical arguments; immutable, snapshot, versioned, leased, current, wallclock, stable-failure, authority and provider-quota rows pass.
 
-**Next:** Execute Gate 4: bind PLM contracts and operation-specific temporal/provider validators to Host-authored capability specs, then cover snapshot, versioned, leased, current, wallclock and stable-failure rows.
+**Next:** Execute Gate 5: version the sealed-source pass and Guest ABI to emit PLM prepare plus original-point linearize/materialize, preserve fallback/control-flow semantics, then retire the predecessor bridge after exact parity.
 
 **Blocked:** No blocker.

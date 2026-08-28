@@ -1,6 +1,10 @@
 package capability
 
-import "errors"
+import (
+	"context"
+	"encoding/json"
+	"errors"
+)
 
 const PLMContractVersionV1 = "pysolate.plm-contract.v1"
 
@@ -36,6 +40,7 @@ const (
 )
 
 var ErrInvalidPLMContract = errors.New("invalid PLM contract")
+var ErrPLMTransportUnavailable = errors.New("PLM transport preparation is unavailable")
 
 // PLMContract is Host-authored policy for physical preparation before a
 // synchronous capability call reaches its original logical position. V1 does
@@ -47,6 +52,7 @@ type PLMContract struct {
 	Speculation                      SpeculationMode   `json:"speculation"`
 	Failure                          FailureMode       `json:"failure"`
 	Authority                        AuthorityMode     `json:"authority"`
+	Resource                         ResourceReference `json:"resource,omitempty"`
 	TemporalValidator                string            `json:"temporal_validator,omitempty"`
 	ProviderNonInterferenceValidator string            `json:"provider_noninterference_validator,omitempty"`
 	StableFailureValidator           string            `json:"stable_failure_validator,omitempty"`
@@ -76,26 +82,36 @@ func (contract PLMContract) Validate() error {
 	case TemporalImmutable, TemporalSnapshot, TemporalVersioned, TemporalLeased:
 		if contract.PrepareEffect != PrepareSilentRead || contract.MaxResultBytes == 0 || contract.MaxResultBytes > maxCallBytes ||
 			contract.CostUnits == 0 || contract.CostUnits > maxPreDispatchCostUnits || !validHandlerIdentity(contract.TemporalValidator) ||
-			!validHandlerIdentity(contract.ProviderNonInterferenceValidator) {
+			!validHandlerIdentity(contract.ProviderNonInterferenceValidator) || !validPLMResource(contract.Resource) {
 			return ErrInvalidPLMContract
 		}
 	case TemporalCurrent:
 		if contract.PrepareEffect != PrepareTransportOnly || contract.Speculation != SpeculationNever ||
 			contract.Failure != FailureRetryAtLinearize || contract.MaxResultBytes != 0 || contract.CostUnits == 0 ||
 			contract.CostUnits > maxPreDispatchCostUnits || contract.TemporalValidator != "" ||
-			!validHandlerIdentity(contract.ProviderNonInterferenceValidator) {
+			!validHandlerIdentity(contract.ProviderNonInterferenceValidator) || !validPLMResource(contract.Resource) {
 			return ErrInvalidPLMContract
 		}
 	case TemporalWallclockObserving:
 		if contract.PrepareEffect != PrepareNone || contract.Speculation != SpeculationNever ||
 			contract.Failure != FailureRetryAtLinearize || contract.MaxResultBytes != 0 || contract.CostUnits != 0 ||
-			contract.TemporalValidator != "" || contract.ProviderNonInterferenceValidator != "" {
+			contract.TemporalValidator != "" || contract.ProviderNonInterferenceValidator != "" || contract.Resource != (ResourceReference{}) {
 			return ErrInvalidPLMContract
 		}
 	default:
 		return ErrInvalidPLMContract
 	}
 	return nil
+}
+
+func validPLMResource(resource ResourceReference) bool {
+	if !validHandlerIdentity(resource.Namespace) || (resource.Argument == "") == (resource.Constant == "") {
+		return false
+	}
+	if resource.Constant != "" {
+		return validHandlerIdentity(resource.Constant)
+	}
+	return validPythonIdentifier(resource.Argument)
 }
 
 func (contract PLMContract) CanPrepareValueCandidate() bool {
@@ -152,6 +168,53 @@ type LinearizationContext struct {
 	TemporalValidated                bool
 	ProviderNonInterferenceValidated bool
 	StableFailureValidated           bool
+}
+
+// PLMLogicalContext carries Host-derived facts available when CPython reaches
+// the original call. Run, Plan, capability, handler and argument identities are
+// rebuilt by the table and cannot be supplied by the Guest.
+type PLMLogicalContext struct {
+	SourceSealIdentity      string
+	SiteID                  string
+	Occurrence              uint32
+	AuthorityEpoch          string
+	ProviderSessionIdentity string
+	ActualArguments         json.RawMessage
+}
+
+type PLMValidatorIdentities struct {
+	Temporal                string
+	ProviderNonInterference string
+	StableFailure           string
+}
+
+type PLMValidationRequest struct {
+	Contract    PLMContract
+	Certificate CandidateCertificate
+	Logical     PLMLogicalContext
+	Outcome     CandidateOutcome
+}
+
+type PLMValidationResult struct {
+	Temporal                         TemporalEvidence
+	TemporalValid                    bool
+	ProviderNonInterferenceValid     bool
+	StableFailureValid               bool
+	ValidationCostUnits              uint32
+	ProviderValidationPhysicalEvents uint32
+}
+
+// PLMValidator is a Host adapter contract. Registry sealing binds these exact
+// identities to PLMContract; runtime callers cannot provide validation booleans.
+type PLMValidator interface {
+	PLMValidatorIdentities() PLMValidatorIdentities
+	ValidatePLM(context.Context, PLMValidationRequest) (PLMValidationResult, error)
+}
+
+// PLMTransportPreparer may prepare connection/session state for CURRENT mode.
+// It must not read or return the operation's final value.
+type PLMTransportPreparer interface {
+	PreparePLMTransport(context.Context, json.RawMessage) error
 }
 
 type LinearizationAction string

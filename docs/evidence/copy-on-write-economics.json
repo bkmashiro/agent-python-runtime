@@ -1,0 +1,458 @@
+{
+  "schema_version": "pysolate.prepared-family-economics.v1",
+  "source_commit": "eeb67fa475d7cf51cd8d08835a03c4cc6558e0a4",
+  "source_tree": "d77974beeab2fd739c61e8957c3d9f63a3767075",
+  "artifact_sha256": "sha256:ad9ae5493619fd27a7f4cca26f21f514dd2a29e2b8d4325ab665f9c1006b49f2",
+  "input_sha256": "sha256:ea8dc1c1918a2fa466836806f2578463375c2480eb06f081eef3316e09a55f3e",
+  "input_bytes": 8388608,
+  "runs_per_arm": 5,
+  "fanout": 4,
+  "isolation": "one fresh test subprocess per treatment and repetition; treatment order alternates",
+  "process_memory_source": "/proc/self/smaps_rollup",
+  "treatments": [
+    {
+      "mode": "private_copy",
+      "family_prepare_median_nanos": 8090330,
+      "runner_create_median_nanos": 17788941390,
+      "run_median_nanos": 30078797201,
+      "pss_create_delta_median_bytes": 1026121728,
+      "pss_run_delta_median_bytes": 1359040512,
+      "private_dirty_create_delta_median_bytes": 1026088960,
+      "private_dirty_run_delta_median_bytes": 1359040512,
+      "samples": [
+        {
+          "mode": "private_copy",
+          "iteration": 0,
+          "fanout": 4,
+          "family_prepare_nanos": 8252262,
+          "runner_create_nanos": [
+            4482113613,
+            4301432444,
+            4438351197,
+            4552600156
+          ],
+          "run_nanos": [
+            7742776176,
+            7434484818,
+            7404779265,
+            7396823116
+          ],
+          "runner_close_nanos": [
+            11610,
+            3980,
+            3810,
+            2950
+          ],
+          "family_close_nanos": 1020,
+          "baseline_resources": {
+            "pss_bytes": 196199424,
+            "private_dirty_bytes": 191979520
+          },
+          "after_create_resources": {
+            "pss_bytes": 1229808640,
+            "private_dirty_bytes": 1225588736
+          },
+          "after_run_resources": {
+            "pss_bytes": 1555239936,
+            "private_dirty_bytes": 1551020032
+          },
+          "pss_create_delta_bytes": 1033609216,
+          "pss_run_delta_bytes": 1359040512,
+          "private_dirty_create_delta_bytes": 1033609216,
+          "private_dirty_run_delta_bytes": 1359040512,
+          "result": 1
+        },
+        {
+          "mode": "private_copy",
+          "iteration": 1,
+          "fanout": 4,
+          "family_prepare_nanos": 7669826,
+          "runner_create_nanos": [
+            4628766655,
+            4589970216,
+            4454871635,
+            4287336773
+          ],
+          "run_nanos": [
+            7348584265,
+            7518386208,
+            7367040707,
+            7395997182
+          ],
+          "runner_close_nanos": [
+            11240,
+            4130,
+            3630,
+            3030
+          ],
+          "family_close_nanos": 900,
+          "baseline_resources": {
+            "pss_bytes": 196482048,
+            "private_dirty_bytes": 192229376
+          },
+          "after_create_resources": {
+            "pss_bytes": 1213711360,
+            "private_dirty_bytes": 1209425920
+          },
+          "after_run_resources": {
+            "pss_bytes": 1589449728,
+            "private_dirty_bytes": 1585164288
+          },
+          "pss_create_delta_bytes": 1017229312,
+          "pss_run_delta_bytes": 1392967680,
+          "private_dirty_create_delta_bytes": 1017196544,
+          "private_dirty_run_delta_bytes": 1392934912,
+          "result": 1
+        },
+        {
+          "mode": "private_copy",
+          "iteration": 2,
+          "fanout": 4,
+          "family_prepare_nanos": 8090330,
+          "runner_create_nanos": [
+            4542251263,
+            4428803965,
+            4481959021,
+            4272421134
+          ],
+          "run_nanos": [
+            7499616658,
+            7578879934,
+            7545598677,
+            7454701932
+          ],
+          "runner_close_nanos": [
+            13390,
+            4300,
+            3780,
+            3971
+          ],
+          "family_close_nanos": 960,
+          "baseline_resources": {
+            "pss_bytes": 196244480,
+            "private_dirty_bytes": 192024576
+          },
+          "after_create_resources": {
+            "pss_bytes": 1203254272,
+            "private_dirty_bytes": 1199001600
+          },
+          "after_run_resources": {
+            "pss_bytes": 1579017216,
+            "private_dirty_bytes": 1574764544
+          },
+          "pss_create_delta_bytes": 1007009792,
+          "pss_run_delta_bytes": 1382772736,
+          "private_dirty_create_delta_bytes": 1006977024,
+          "private_dirty_run_delta_bytes": 1382739968,
+          "result": 1
+        },
+        {
+          "mode": "private_copy",
+          "iteration": 3,
+          "fanout": 4,
+          "family_prepare_nanos": 8088580,
+          "runner_create_nanos": [
+            4621045623,
+            4608892544,
+            4566090753,
+            4598432548
+          ],
+          "run_nanos": [
+            7780471659,
+            7480023333,
+            7559883946,
+            7341804516
+          ],
+          "runner_close_nanos": [
+            12960,
+            3880,
+            4210,
+            3360
+          ],
+          "family_close_nanos": 930,
+          "baseline_resources": {
+            "pss_bytes": 196387840,
+            "private_dirty_bytes": 192135168
+          },
+          "after_create_resources": {
+            "pss_bytes": 1240597504,
+            "private_dirty_bytes": 1236312064
+          },
+          "after_run_resources": {
+            "pss_bytes": 1525130240,
+            "private_dirty_bytes": 1520844800
+          },
+          "pss_create_delta_bytes": 1044209664,
+          "pss_run_delta_bytes": 1328742400,
+          "private_dirty_create_delta_bytes": 1044176896,
+          "private_dirty_run_delta_bytes": 1328709632,
+          "result": 1
+        },
+        {
+          "mode": "private_copy",
+          "iteration": 4,
+          "fanout": 4,
+          "family_prepare_nanos": 8770977,
+          "runner_create_nanos": [
+            4378349710,
+            4466396952,
+            4449302568,
+            4494892160
+          ],
+          "run_nanos": [
+            7655557741,
+            7661681856,
+            7711955312,
+            7680893916
+          ],
+          "runner_close_nanos": [
+            11990,
+            3990,
+            3940,
+            3740
+          ],
+          "family_close_nanos": 1150,
+          "baseline_resources": {
+            "pss_bytes": 196281344,
+            "private_dirty_bytes": 192061440
+          },
+          "after_create_resources": {
+            "pss_bytes": 1222403072,
+            "private_dirty_bytes": 1218150400
+          },
+          "after_run_resources": {
+            "pss_bytes": 1548768256,
+            "private_dirty_bytes": 1544515584
+          },
+          "pss_create_delta_bytes": 1026121728,
+          "pss_run_delta_bytes": 1352486912,
+          "private_dirty_create_delta_bytes": 1026088960,
+          "private_dirty_run_delta_bytes": 1352454144,
+          "result": 1
+        }
+      ]
+    },
+    {
+      "mode": "private_cow",
+      "family_prepare_median_nanos": 12276364292,
+      "runner_create_median_nanos": 17611090523,
+      "run_median_nanos": 217325407,
+      "pss_create_delta_median_bytes": 1077133312,
+      "pss_run_delta_median_bytes": 1077145600,
+      "private_dirty_create_delta_median_bytes": 1077100544,
+      "private_dirty_run_delta_median_bytes": 1077112832,
+      "samples": [
+        {
+          "mode": "private_cow",
+          "iteration": 0,
+          "fanout": 4,
+          "family_prepare_nanos": 11926353509,
+          "runner_create_nanos": [
+            4275104399,
+            4543318214,
+            4323466804,
+            4258954868
+          ],
+          "run_nanos": [
+            62370706,
+            50874228,
+            52655598,
+            51590866
+          ],
+          "runner_close_nanos": [
+            11180,
+            4170,
+            3490,
+            2911
+          ],
+          "family_close_nanos": 23215198,
+          "baseline_resources": {
+            "pss_bytes": 183792640,
+            "private_dirty_bytes": 179572736
+          },
+          "after_create_resources": {
+            "pss_bytes": 1260925952,
+            "private_dirty_bytes": 1256673280
+          },
+          "after_run_resources": {
+            "pss_bytes": 1260938240,
+            "private_dirty_bytes": 1256685568
+          },
+          "pss_create_delta_bytes": 1077133312,
+          "pss_run_delta_bytes": 1077145600,
+          "private_dirty_create_delta_bytes": 1077100544,
+          "private_dirty_run_delta_bytes": 1077112832,
+          "result": 1
+        },
+        {
+          "mode": "private_cow",
+          "iteration": 1,
+          "fanout": 4,
+          "family_prepare_nanos": 12311262502,
+          "runner_create_nanos": [
+            4572059864,
+            4631435678,
+            4548215283,
+            4566263868
+          ],
+          "run_nanos": [
+            58766585,
+            54078063,
+            53650998,
+            54159734
+          ],
+          "runner_close_nanos": [
+            10980,
+            4330,
+            3540,
+            2980
+          ],
+          "family_close_nanos": 27439356,
+          "baseline_resources": {
+            "pss_bytes": 195245056,
+            "private_dirty_bytes": 191025152
+          },
+          "after_create_resources": {
+            "pss_bytes": 1291609088,
+            "private_dirty_bytes": 1287356416
+          },
+          "after_run_resources": {
+            "pss_bytes": 1291617280,
+            "private_dirty_bytes": 1287364608
+          },
+          "pss_create_delta_bytes": 1096364032,
+          "pss_run_delta_bytes": 1096372224,
+          "private_dirty_create_delta_bytes": 1096331264,
+          "private_dirty_run_delta_bytes": 1096339456,
+          "result": 1
+        },
+        {
+          "mode": "private_cow",
+          "iteration": 2,
+          "fanout": 4,
+          "family_prepare_nanos": 12153410395,
+          "runner_create_nanos": [
+            4419943046,
+            4442720055,
+            4453140995,
+            4295286427
+          ],
+          "run_nanos": [
+            57054423,
+            53226661,
+            51227859,
+            52969838
+          ],
+          "runner_close_nanos": [
+            10900,
+            4140,
+            3520,
+            2820
+          ],
+          "family_close_nanos": 24668104,
+          "baseline_resources": {
+            "pss_bytes": 196576256,
+            "private_dirty_bytes": 192356352
+          },
+          "after_create_resources": {
+            "pss_bytes": 1275651072,
+            "private_dirty_bytes": 1271398400
+          },
+          "after_run_resources": {
+            "pss_bytes": 1275675648,
+            "private_dirty_bytes": 1271422976
+          },
+          "pss_create_delta_bytes": 1079074816,
+          "pss_run_delta_bytes": 1079099392,
+          "private_dirty_create_delta_bytes": 1079042048,
+          "private_dirty_run_delta_bytes": 1079066624,
+          "result": 1
+        },
+        {
+          "mode": "private_cow",
+          "iteration": 3,
+          "fanout": 4,
+          "family_prepare_nanos": 12276364292,
+          "runner_create_nanos": [
+            4387285620,
+            4423257113,
+            4303320517,
+            4402779807
+          ],
+          "run_nanos": [
+            56843551,
+            52995778,
+            54230492,
+            52179319
+          ],
+          "runner_close_nanos": [
+            12150,
+            4600,
+            3800,
+            3570
+          ],
+          "family_close_nanos": 25040818,
+          "baseline_resources": {
+            "pss_bytes": 196129792,
+            "private_dirty_bytes": 191909888
+          },
+          "after_create_resources": {
+            "pss_bytes": 1236550656,
+            "private_dirty_bytes": 1232297984
+          },
+          "after_run_resources": {
+            "pss_bytes": 1236567040,
+            "private_dirty_bytes": 1232314368
+          },
+          "pss_create_delta_bytes": 1040420864,
+          "pss_run_delta_bytes": 1040437248,
+          "private_dirty_create_delta_bytes": 1040388096,
+          "private_dirty_run_delta_bytes": 1040404480,
+          "result": 1
+        },
+        {
+          "mode": "private_cow",
+          "iteration": 4,
+          "fanout": 4,
+          "family_prepare_nanos": 12423591336,
+          "runner_create_nanos": [
+            4552516213,
+            4509857837,
+            4478208242,
+            4484706630
+          ],
+          "run_nanos": [
+            60195176,
+            52157288,
+            52768725,
+            52204218
+          ],
+          "runner_close_nanos": [
+            14310,
+            4170,
+            4250,
+            4000
+          ],
+          "family_close_nanos": 23613332,
+          "baseline_resources": {
+            "pss_bytes": 184914944,
+            "private_dirty_bytes": 180695040
+          },
+          "after_create_resources": {
+            "pss_bytes": 1236816896,
+            "private_dirty_bytes": 1232564224
+          },
+          "after_run_resources": {
+            "pss_bytes": 1236837376,
+            "private_dirty_bytes": 1232584704
+          },
+          "pss_create_delta_bytes": 1051901952,
+          "pss_run_delta_bytes": 1051922432,
+          "private_dirty_create_delta_bytes": 1051869184,
+          "private_dirty_run_delta_bytes": 1051889664,
+          "result": 1
+        }
+      ]
+    }
+  ]
+}

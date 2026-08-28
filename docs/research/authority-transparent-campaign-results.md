@@ -2,22 +2,22 @@
 
 ## Conclusion
 
-Across 5 paired repetitions of the fixed 20-program campaign, qualified execution used a median of 17 physical executions versus 19 for baseline: a paired reduction of 2 executions (10.5%). Median wall time was 22.00 s versus 25.73 s; this descriptive small-sample result is not a production throughput claim.
+Across 5 paired repetitions of the fixed 20-program campaign, qualified execution used a median of 17 physical executions versus 19 for baseline: a paired reduction of 2 executions (10.5%). Median wall time was 29.30 s versus 35.07 s; this descriptive small-sample result is not a production throughput claim.
 
 ![Paired physical execution counts](../figures/authority-transparent-campaign.svg)
 
 | Treatment | Physical executions, median [min, max] | Wall time, median [min, max] | Process CPU, median [min, max] |
 |---|---:|---:|---:|
-| Baseline | 19 [19, 19] | 25.73 s [25.34, 26.32] | 70.26 s [68.95, 71.70] |
-| Qualified | 17 [17, 17] | 22.00 s [21.70, 22.55] | 66.38 s [65.52, 67.90] |
+| Baseline | 19 [19, 19] | 35.07 s [34.39, 38.00] | 93.30 s [92.01, 94.95] |
+| Qualified | 17 [17, 17] | 29.30 s [28.91, 32.32] | 87.21 s [87.09, 88.48] |
 
 ## Provenance
 
-- Campaign source: 40882ca5a818f4c5388bdeebe7d36ee9dc5fe7c5
-- Guest artifact: sha256:0a37a963a09b4e763cb6a40886a771e9c13e2f6a9d3a2d295788752e319c5795
-- Guest artifact source: ae922641cd9c539b68a0ea7110b5dc205e5c9a8a
-- Manifest: sha256:0633e6d98dd67fee6a2aad12cfd491a6d14e5344d5d2d78d91c059e62ec0fe7e
-- Host: darwin/arm64; go1.26.0; Darwin 25.4.0 Darwin Kernel Version 25.4.0: Thu Mar 19 19:31:09 PDT 2026; root:xnu-12377.101.15~1/RELEASE_ARM64_T8132
+- Campaign source: eeb67fa475d7cf51cd8d08835a03c4cc6558e0a4
+- Guest artifact: sha256:4dc00643195df736cfa31a3cde5a43bde4c2586ef8aa9a36c4cecf104ed3a084
+- Guest artifact source: eeb67fa475d7cf51cd8d08835a03c4cc6558e0a4
+- Manifest: sha256:01b1598760962311be630a2bbc5ac0e259ac211ed6bcd4b9e29933201a83cfc7
+- Host: linux/amd64; go1.25.0; Linux 6.17.0-35-generic #35~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Tue May 26 19:30:42 UTC 2
 - Evidence strength: paired repetitions, full min–max shown; no confidence interval inferred.
 
 ## Claim boundary
@@ -60,5 +60,5 @@ Across 5 paired repetitions of the fixed 20-program campaign, qualified executio
 | Logical cases | Qualified physical identity | Observed boundary |
 |---|---|---|
 | P05 / P06 | campaign-exact-2 / campaign-exact-2 | exact request identity reused one physical Guest result |
-| P10 / P11 | campaign-verifier-17 / campaign-verifier-17 | exact sealed-root verifier identity reused one verifier execution |
+| P10 / P11 | campaign-verifier-19 / campaign-verifier-19 | exact sealed-root verifier identity reused one verifier execution |
 | P18 / P19 / P20 | none | rejected or cancelled before physical execution |

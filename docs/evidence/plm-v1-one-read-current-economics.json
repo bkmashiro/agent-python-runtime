@@ -1,25 +1,25 @@
 {
   "schema_version": "pysolate.plm-economics.v1",
-  "target_commit": "49f10768012443b84832680f24104e2a3d25e3b4",
-  "artifact_sha256": "sha256:02825c67cd1cd3bd8cfe333965e248c7b6ef41684bca73f42be25f5274b1bc9b",
+  "target_commit": "eeb67fa475d7cf51cd8d08835a03c4cc6558e0a4",
+  "artifact_sha256": "sha256:4dc00643195df736cfa31a3cde5a43bde4c2586ef8aa9a36c4cecf104ed3a084",
   "source_sha256": "sha256:8dfa20a015c7204d7061979a9c0872af140defaec73a2eb383d50c6537849851",
   "runs_per_arm": 5,
   "provider_delay": "75ms",
   "profiles": [
     {
       "name": "cold_end_to_end",
-      "baseline_median_nanos": 4135052583,
-      "plm_median_nanos": 4230633166,
-      "delta_percent": 2.3114720086740914,
+      "baseline_median_nanos": 6287767103,
+      "plm_median_nanos": 6316729445,
+      "delta_percent": 0.46061410236046396,
       "samples": [
         {
           "mode": "baseline",
           "profile": "cold_end_to_end",
           "iteration": 0,
-          "total_nanos": 4119857000,
-          "engine_setup_nanos": 1400106167,
-          "allocated_bytes": 443923344,
-          "provider_nanos": 77025084,
+          "total_nanos": 6195370912,
+          "engine_setup_nanos": 2166236830,
+          "allocated_bytes": 437864152,
+          "provider_nanos": 75194530,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 0,
@@ -75,10 +75,10 @@
           "mode": "plm",
           "profile": "cold_end_to_end",
           "iteration": 0,
-          "total_nanos": 4222761875,
-          "engine_setup_nanos": 1393171708,
-          "allocated_bytes": 444248000,
-          "provider_nanos": 77028625,
+          "total_nanos": 6243353574,
+          "engine_setup_nanos": 1999632301,
+          "allocated_bytes": 438096608,
+          "provider_nanos": 75173339,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -90,15 +90,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 7185167,
-            "initialize_nanos": 103750,
-            "runtime_init_nanos": 2280269792,
-            "source_validation_nanos": 20689333,
-            "lowering_nanos": 90681792,
-            "selection_nanos": 350624000,
-            "prepare_nanos": 1173917,
-            "execute_nanos": 78365125,
-            "total_nanos": 2829489292
+            "instantiate_nanos": 40724439,
+            "initialize_nanos": 33131,
+            "runtime_init_nanos": 3410940821,
+            "source_validation_nanos": 31512487,
+            "lowering_nanos": 133935347,
+            "selection_nanos": 547273424,
+            "prepare_nanos": 1688609,
+            "execute_nanos": 76978159,
+            "total_nanos": 4243592662
           },
           "candidates": {
             "Submitted": 1,
@@ -123,64 +123,64 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 1,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 77113167,
-            "ValidationNanos": 542,
-            "LinearizationNanos": 5458,
-            "MaterializationNanos": 76821541,
+            "ProviderNanos": 75245360,
+            "ValidationNanos": 670,
+            "LinearizationNanos": 13910,
+            "MaterializationNanos": 74842485,
             "Events": [
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "submitted",
-                "AtNanos": 2751529542
+                "AtNanos": 4167250780
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "running",
-                "AtNanos": 2751578542
+                "AtNanos": 4167331821
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "linearized",
-                "AtNanos": 2751881500
+                "AtNanos": 4167755026
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2751886792
+                "AtNanos": 4167768596
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "ready",
-                "AtNanos": 2828692667
+                "AtNanos": 4242578071
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2828698500
+                "AtNanos": 4242584811
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "consumed",
-                "AtNanos": 2828698542
+                "AtNanos": 4242584881
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2828711292
+                "AtNanos": 4242617181
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "materialized",
-                "AtNanos": 2828711500
+                "AtNanos": 4242617221
               }
             ]
           }
@@ -189,10 +189,10 @@
           "mode": "plm",
           "profile": "cold_end_to_end",
           "iteration": 1,
-          "total_nanos": 4238872458,
-          "engine_setup_nanos": 1390101083,
-          "allocated_bytes": 444224696,
-          "provider_nanos": 75828333,
+          "total_nanos": 6316729445,
+          "engine_setup_nanos": 2082342140,
+          "allocated_bytes": 438110696,
+          "provider_nanos": 75184489,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -204,15 +204,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 8551333,
-            "initialize_nanos": 100916,
-            "runtime_init_nanos": 2303982625,
-            "source_validation_nanos": 20444500,
-            "lowering_nanos": 90276250,
-            "selection_nanos": 346627250,
-            "prepare_nanos": 1095000,
-            "execute_nanos": 77139625,
-            "total_nanos": 2848692875
+            "instantiate_nanos": 47686986,
+            "initialize_nanos": 31670,
+            "runtime_init_nanos": 3397920403,
+            "source_validation_nanos": 31138113,
+            "lowering_nanos": 133680344,
+            "selection_nanos": 544331231,
+            "prepare_nanos": 1716219,
+            "execute_nanos": 77206402,
+            "total_nanos": 4234303323
           },
           "candidates": {
             "Submitted": 1,
@@ -237,64 +237,64 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 1,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 75891709,
-            "ValidationNanos": 959,
-            "LinearizationNanos": 7750,
-            "MaterializationNanos": 75593875,
+            "ProviderNanos": 75246050,
+            "ValidationNanos": 670,
+            "LinearizationNanos": 13360,
+            "MaterializationNanos": 74847435,
             "Events": [
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "submitted",
-                "AtNanos": 2771875750
+                "AtNanos": 4157551437
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "running",
-                "AtNanos": 2771917792
+                "AtNanos": 4157620078
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "linearized",
-                "AtNanos": 2772225792
+                "AtNanos": 4158037833
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2772233333
+                "AtNanos": 4158050773
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "ready",
-                "AtNanos": 2847811167
+                "AtNanos": 4232867198
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2847815292
+                "AtNanos": 4232875998
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "consumed",
-                "AtNanos": 2847815333
+                "AtNanos": 4232876048
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2847830125
+                "AtNanos": 4232903708
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "materialized",
-                "AtNanos": 2847830167
+                "AtNanos": 4232903748
               }
             ]
           }
@@ -303,10 +303,10 @@
           "mode": "baseline",
           "profile": "cold_end_to_end",
           "iteration": 1,
-          "total_nanos": 4109439792,
-          "engine_setup_nanos": 1390801667,
-          "allocated_bytes": 443852440,
-          "provider_nanos": 77024375,
+          "total_nanos": 6352425889,
+          "engine_setup_nanos": 2164211079,
+          "allocated_bytes": 437757352,
+          "provider_nanos": 75179179,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 0,
@@ -362,10 +362,10 @@
           "mode": "baseline",
           "profile": "cold_end_to_end",
           "iteration": 2,
-          "total_nanos": 4135052583,
-          "engine_setup_nanos": 1395368875,
-          "allocated_bytes": 443859632,
-          "provider_nanos": 77022042,
+          "total_nanos": 6273330599,
+          "engine_setup_nanos": 2178267471,
+          "allocated_bytes": 437718744,
+          "provider_nanos": 75139608,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 0,
@@ -421,10 +421,10 @@
           "mode": "plm",
           "profile": "cold_end_to_end",
           "iteration": 2,
-          "total_nanos": 4221361417,
-          "engine_setup_nanos": 1394025625,
-          "allocated_bytes": 444223624,
-          "provider_nanos": 77025917,
+          "total_nanos": 6394526955,
+          "engine_setup_nanos": 2110277658,
+          "allocated_bytes": 438110952,
+          "provider_nanos": 75172689,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -436,15 +436,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 5785208,
-            "initialize_nanos": 102458,
-            "runtime_init_nanos": 2283079125,
-            "source_validation_nanos": 20840541,
-            "lowering_nanos": 91245166,
-            "selection_nanos": 346506541,
-            "prepare_nanos": 1080083,
-            "execute_nanos": 78227292,
-            "total_nanos": 2827245041
+            "instantiate_nanos": 98923781,
+            "initialize_nanos": 39060,
+            "runtime_init_nanos": 3400517568,
+            "source_validation_nanos": 32013352,
+            "lowering_nanos": 129766641,
+            "selection_nanos": 543813323,
+            "prepare_nanos": 1632348,
+            "execute_nanos": 76976779,
+            "total_nanos": 4284158666
           },
           "candidates": {
             "Submitted": 1,
@@ -469,64 +469,64 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 1,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 77082500,
-            "ValidationNanos": 1250,
-            "LinearizationNanos": 7667,
-            "MaterializationNanos": 76790334,
+            "ProviderNanos": 75234419,
+            "ValidationNanos": 900,
+            "LinearizationNanos": 12141,
+            "MaterializationNanos": 74857645,
             "Events": [
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "submitted",
-                "AtNanos": 2749350000
+                "AtNanos": 4207778174
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "running",
-                "AtNanos": 2749394000
+                "AtNanos": 4207848625
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "linearized",
-                "AtNanos": 2749697375
+                "AtNanos": 4208241589
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2749704708
+                "AtNanos": 4208253420
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "ready",
-                "AtNanos": 2826478166
+                "AtNanos": 4283084224
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2826482250
+                "AtNanos": 4283092424
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "consumed",
-                "AtNanos": 2826482291
+                "AtNanos": 4283092474
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2826497958
+                "AtNanos": 4283115215
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "materialized",
-                "AtNanos": 2826498000
+                "AtNanos": 4283115255
               }
             ]
           }
@@ -535,10 +535,10 @@
           "mode": "plm",
           "profile": "cold_end_to_end",
           "iteration": 3,
-          "total_nanos": 4230633166,
-          "engine_setup_nanos": 1391112958,
-          "allocated_bytes": 444219728,
-          "provider_nanos": 77022750,
+          "total_nanos": 6191744852,
+          "engine_setup_nanos": 2067780047,
+          "allocated_bytes": 438121568,
+          "provider_nanos": 75174758,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -550,15 +550,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 3188500,
-            "initialize_nanos": 105417,
-            "runtime_init_nanos": 2297706375,
-            "source_validation_nanos": 21150416,
-            "lowering_nanos": 90245750,
-            "selection_nanos": 347249750,
-            "prepare_nanos": 1115833,
-            "execute_nanos": 78253291,
-            "total_nanos": 2839432000
+            "instantiate_nanos": 18168350,
+            "initialize_nanos": 28740,
+            "runtime_init_nanos": 3333166721,
+            "source_validation_nanos": 30804860,
+            "lowering_nanos": 130379516,
+            "selection_nanos": 532166624,
+            "prepare_nanos": 1654538,
+            "execute_nanos": 76966919,
+            "total_nanos": 4123845983
           },
           "candidates": {
             "Submitted": 1,
@@ -583,64 +583,64 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 1,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 77079000,
-            "ValidationNanos": 625,
-            "LinearizationNanos": 5708,
-            "MaterializationNanos": 76790333,
+            "ProviderNanos": 75240429,
+            "ValidationNanos": 670,
+            "LinearizationNanos": 10620,
+            "MaterializationNanos": 74864105,
             "Events": [
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "submitted",
-                "AtNanos": 2761492042
+                "AtNanos": 4047408491
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "running",
-                "AtNanos": 2761532583
+                "AtNanos": 4047477382
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "linearized",
-                "AtNanos": 2761833792
+                "AtNanos": 4047873616
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2761839417
+                "AtNanos": 4047883926
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "ready",
-                "AtNanos": 2838612542
+                "AtNanos": 4122719801
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2838619125
+                "AtNanos": 4122727451
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "consumed",
-                "AtNanos": 2838619167
+                "AtNanos": 4122727511
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2838633083
+                "AtNanos": 4122753731
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "materialized",
-                "AtNanos": 2838633083
+                "AtNanos": 4122753781
               }
             ]
           }
@@ -649,10 +649,10 @@
           "mode": "baseline",
           "profile": "cold_end_to_end",
           "iteration": 3,
-          "total_nanos": 4162120250,
-          "engine_setup_nanos": 1391423583,
-          "allocated_bytes": 443858464,
-          "provider_nanos": 77026250,
+          "total_nanos": 6287767103,
+          "engine_setup_nanos": 2156402692,
+          "allocated_bytes": 437754536,
+          "provider_nanos": 75180108,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 0,
@@ -708,10 +708,10 @@
           "mode": "baseline",
           "profile": "cold_end_to_end",
           "iteration": 4,
-          "total_nanos": 4139852166,
-          "engine_setup_nanos": 1387852958,
-          "allocated_bytes": 443854816,
-          "provider_nanos": 77023667,
+          "total_nanos": 6379437855,
+          "engine_setup_nanos": 2133902821,
+          "allocated_bytes": 437755976,
+          "provider_nanos": 75163369,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 0,
@@ -767,10 +767,10 @@
           "mode": "plm",
           "profile": "cold_end_to_end",
           "iteration": 4,
-          "total_nanos": 4243396250,
-          "engine_setup_nanos": 1393821333,
-          "allocated_bytes": 444218440,
-          "provider_nanos": 77026167,
+          "total_nanos": 6339392885,
+          "engine_setup_nanos": 2052891125,
+          "allocated_bytes": 438070424,
+          "provider_nanos": 75165688,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -782,15 +782,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 4605000,
-            "initialize_nanos": 101375,
-            "runtime_init_nanos": 2307138958,
-            "source_validation_nanos": 21070250,
-            "lowering_nanos": 89885250,
-            "selection_nanos": 346882042,
-            "prepare_nanos": 1134500,
-            "execute_nanos": 78270416,
-            "total_nanos": 2849484416
+            "instantiate_nanos": 17010167,
+            "initialize_nanos": 31350,
+            "runtime_init_nanos": 3386000410,
+            "source_validation_nanos": 31064272,
+            "lowering_nanos": 145313981,
+            "selection_nanos": 628030548,
+            "prepare_nanos": 1660408,
+            "execute_nanos": 76809806,
+            "total_nanos": 4286394539
           },
           "candidates": {
             "Submitted": 1,
@@ -815,64 +815,64 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 1,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 77081625,
-            "ValidationNanos": 500,
-            "LinearizationNanos": 6708,
-            "MaterializationNanos": 76790791,
+            "ProviderNanos": 75204498,
+            "ValidationNanos": 1040,
+            "LinearizationNanos": 12460,
+            "MaterializationNanos": 74824244,
             "Events": [
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "submitted",
-                "AtNanos": 2771603958
+                "AtNanos": 4210145578
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "running",
-                "AtNanos": 2771644667
+                "AtNanos": 4210216149
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "linearized",
-                "AtNanos": 2771950042
+                "AtNanos": 4210611973
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2771956625
+                "AtNanos": 4210624113
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "ready",
-                "AtNanos": 2848728542
+                "AtNanos": 4285422607
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2848734667
+                "AtNanos": 4285429987
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "consumed",
-                "AtNanos": 2848734708
+                "AtNanos": 4285430047
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2848750250
+                "AtNanos": 4285452807
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "materialized",
-                "AtNanos": 2848750250
+                "AtNanos": 4285452847
               }
             ]
           }
@@ -881,18 +881,18 @@
     },
     {
       "name": "engine_precompiled",
-      "baseline_median_nanos": 2747294375,
-      "plm_median_nanos": 2836654792,
-      "delta_percent": 3.2526698927194504,
+      "baseline_median_nanos": 4071575457,
+      "plm_median_nanos": 4281737650,
+      "delta_percent": 5.161692205376706,
       "samples": [
         {
           "mode": "baseline",
           "profile": "engine_precompiled",
           "iteration": 0,
-          "total_nanos": 2753566208,
-          "engine_setup_nanos": 1392707500,
-          "allocated_bytes": 135537248,
-          "provider_nanos": 77025167,
+          "total_nanos": 4028459891,
+          "engine_setup_nanos": 2021451936,
+          "allocated_bytes": 135798040,
+          "provider_nanos": 75167548,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 0,
@@ -948,10 +948,10 @@
           "mode": "plm",
           "profile": "engine_precompiled",
           "iteration": 0,
-          "total_nanos": 2832856750,
-          "engine_setup_nanos": 1390839666,
-          "allocated_bytes": 135914520,
-          "provider_nanos": 77010375,
+          "total_nanos": 4314190143,
+          "engine_setup_nanos": 2091362414,
+          "allocated_bytes": 136148144,
+          "provider_nanos": 75182559,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -963,15 +963,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 5033875,
-            "initialize_nanos": 91875,
-            "runtime_init_nanos": 2291213625,
-            "source_validation_nanos": 20422458,
-            "lowering_nanos": 89899958,
-            "selection_nanos": 346479000,
-            "prepare_nanos": 1087208,
-            "execute_nanos": 78206625,
-            "total_nanos": 2832817666
+            "instantiate_nanos": 18917258,
+            "initialize_nanos": 40080,
+            "runtime_init_nanos": 3487545920,
+            "source_validation_nanos": 31835551,
+            "lowering_nanos": 137686316,
+            "selection_nanos": 558827354,
+            "prepare_nanos": 1831110,
+            "execute_nanos": 76938338,
+            "total_nanos": 4314136583
           },
           "candidates": {
             "Submitted": 1,
@@ -996,64 +996,64 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 1,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 77037542,
-            "ValidationNanos": 750,
-            "LinearizationNanos": 7458,
-            "MaterializationNanos": 76740583,
+            "ProviderNanos": 75229769,
+            "ValidationNanos": 660,
+            "LinearizationNanos": 12820,
+            "MaterializationNanos": 74817614,
             "Events": [
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "submitted",
-                "AtNanos": 2754982833
+                "AtNanos": 4237778962
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "running",
-                "AtNanos": 2755026333
+                "AtNanos": 4237848332
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "linearized",
-                "AtNanos": 2755333291
+                "AtNanos": 4238274597
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2755340333
+                "AtNanos": 4238287097
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "ready",
-                "AtNanos": 2832065458
+                "AtNanos": 4313079161
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2832069666
+                "AtNanos": 4313085101
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "consumed",
-                "AtNanos": 2832069708
+                "AtNanos": 4313085151
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2832083708
+                "AtNanos": 4313108711
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "materialized",
-                "AtNanos": 2832083708
+                "AtNanos": 4313108751
               }
             ]
           }
@@ -1062,10 +1062,10 @@
           "mode": "plm",
           "profile": "engine_precompiled",
           "iteration": 1,
-          "total_nanos": 2822160625,
-          "engine_setup_nanos": 1391943208,
-          "allocated_bytes": 135904256,
-          "provider_nanos": 77019583,
+          "total_nanos": 4354736045,
+          "engine_setup_nanos": 2204112664,
+          "allocated_bytes": 136160672,
+          "provider_nanos": 75166267,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -1077,15 +1077,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 2908750,
-            "initialize_nanos": 99458,
-            "runtime_init_nanos": 2281093208,
-            "source_validation_nanos": 20648541,
-            "lowering_nanos": 90709250,
-            "selection_nanos": 346976333,
-            "prepare_nanos": 1060083,
-            "execute_nanos": 78229625,
-            "total_nanos": 2822120667
+            "instantiate_nanos": 33849693,
+            "initialize_nanos": 30460,
+            "runtime_init_nanos": 3496188791,
+            "source_validation_nanos": 32345976,
+            "lowering_nanos": 137600325,
+            "selection_nanos": 575582588,
+            "prepare_nanos": 1729609,
+            "execute_nanos": 76845736,
+            "total_nanos": 4354683674
           },
           "candidates": {
             "Submitted": 1,
@@ -1110,64 +1110,64 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 1,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 77064458,
-            "ValidationNanos": 458,
-            "LinearizationNanos": 6125,
-            "MaterializationNanos": 76780542,
+            "ProviderNanos": 75209849,
+            "ValidationNanos": 680,
+            "LinearizationNanos": 12760,
+            "MaterializationNanos": 74826044,
             "Events": [
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "submitted",
-                "AtNanos": 2744237458
+                "AtNanos": 4278435355
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "running",
-                "AtNanos": 2744279583
+                "AtNanos": 4278504165
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "linearized",
-                "AtNanos": 2744573750
+                "AtNanos": 4278898940
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2744579500
+                "AtNanos": 4278911380
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "ready",
-                "AtNanos": 2821345875
+                "AtNanos": 4353715004
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2821349583
+                "AtNanos": 4353719684
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "consumed",
-                "AtNanos": 2821349625
+                "AtNanos": 4353719734
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2821362708
+                "AtNanos": 4353741794
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "materialized",
-                "AtNanos": 2821362750
+                "AtNanos": 4353741834
               }
             ]
           }
@@ -1176,10 +1176,10 @@
           "mode": "baseline",
           "profile": "engine_precompiled",
           "iteration": 1,
-          "total_nanos": 2747294375,
-          "engine_setup_nanos": 1390221917,
-          "allocated_bytes": 135550592,
-          "provider_nanos": 77018708,
+          "total_nanos": 4185358814,
+          "engine_setup_nanos": 2177036612,
+          "allocated_bytes": 135795680,
+          "provider_nanos": 75144277,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 0,
@@ -1235,10 +1235,10 @@
           "mode": "baseline",
           "profile": "engine_precompiled",
           "iteration": 2,
-          "total_nanos": 2733120667,
-          "engine_setup_nanos": 1394778917,
-          "allocated_bytes": 135543104,
-          "provider_nanos": 77025416,
+          "total_nanos": 4071575457,
+          "engine_setup_nanos": 2071605739,
+          "allocated_bytes": 135795624,
+          "provider_nanos": 75161528,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 0,
@@ -1294,10 +1294,10 @@
           "mode": "plm",
           "profile": "engine_precompiled",
           "iteration": 2,
-          "total_nanos": 2839605000,
-          "engine_setup_nanos": 1394146625,
-          "allocated_bytes": 135913248,
-          "provider_nanos": 77029208,
+          "total_nanos": 4203047949,
+          "engine_setup_nanos": 2065439228,
+          "allocated_bytes": 136148136,
+          "provider_nanos": 75177247,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -1309,15 +1309,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 4739208,
-            "initialize_nanos": 91375,
-            "runtime_init_nanos": 2292895791,
-            "source_validation_nanos": 20392333,
-            "lowering_nanos": 90843000,
-            "selection_nanos": 350805250,
-            "prepare_nanos": 1138042,
-            "execute_nanos": 78295208,
-            "total_nanos": 2839569834
+            "instantiate_nanos": 19492894,
+            "initialize_nanos": 33151,
+            "runtime_init_nanos": 3393308236,
+            "source_validation_nanos": 32469307,
+            "lowering_nanos": 133388598,
+            "selection_nanos": 544982949,
+            "prepare_nanos": 1779140,
+            "execute_nanos": 76990057,
+            "total_nanos": 4202990919
           },
           "candidates": {
             "Submitted": 1,
@@ -1342,64 +1342,64 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 1,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 77089917,
-            "ValidationNanos": 583,
-            "LinearizationNanos": 5875,
-            "MaterializationNanos": 76814041,
+            "ProviderNanos": 75223569,
+            "ValidationNanos": 850,
+            "LinearizationNanos": 12830,
+            "MaterializationNanos": 74841194,
             "Events": [
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "submitted",
-                "AtNanos": 2761639958
+                "AtNanos": 4126510437
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "running",
-                "AtNanos": 2761676666
+                "AtNanos": 4126581737
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "linearized",
-                "AtNanos": 2761976875
+                "AtNanos": 4126980802
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2761982500
+                "AtNanos": 4126993222
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "ready",
-                "AtNanos": 2838768083
+                "AtNanos": 4201806536
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2838774750
+                "AtNanos": 4201813706
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "consumed",
-                "AtNanos": 2838774791
+                "AtNanos": 4201813766
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2838800041
+                "AtNanos": 4201839526
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "materialized",
-                "AtNanos": 2838800083
+                "AtNanos": 4201839576
               }
             ]
           }
@@ -1408,10 +1408,10 @@
           "mode": "plm",
           "profile": "engine_precompiled",
           "iteration": 3,
-          "total_nanos": 2854985708,
-          "engine_setup_nanos": 1391292000,
-          "allocated_bytes": 135913600,
-          "provider_nanos": 77032041,
+          "total_nanos": 4281737650,
+          "engine_setup_nanos": 2169710083,
+          "allocated_bytes": 136155264,
+          "provider_nanos": 75173248,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -1423,15 +1423,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 2900625,
-            "initialize_nanos": 101041,
-            "runtime_init_nanos": 2314750708,
-            "source_validation_nanos": 20501625,
-            "lowering_nanos": 90957958,
-            "selection_nanos": 345869417,
-            "prepare_nanos": 1116041,
-            "execute_nanos": 78325333,
-            "total_nanos": 2854944500
+            "instantiate_nanos": 35265909,
+            "initialize_nanos": 38480,
+            "runtime_init_nanos": 3457765821,
+            "source_validation_nanos": 31323714,
+            "lowering_nanos": 133453718,
+            "selection_nanos": 544654195,
+            "prepare_nanos": 1777570,
+            "execute_nanos": 76959917,
+            "total_nanos": 4281688290
           },
           "candidates": {
             "Submitted": 1,
@@ -1456,64 +1456,64 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 1,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 77091417,
-            "ValidationNanos": 1375,
-            "LinearizationNanos": 6833,
-            "MaterializationNanos": 76802250,
+            "ProviderNanos": 75222908,
+            "ValidationNanos": 780,
+            "LinearizationNanos": 11940,
+            "MaterializationNanos": 74866044,
             "Events": [
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "submitted",
-                "AtNanos": 2776945209
+                "AtNanos": 4205382720
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "running",
-                "AtNanos": 2776982709
+                "AtNanos": 4205480321
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "linearized",
-                "AtNanos": 2777283709
+                "AtNanos": 4205852785
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2777290417
+                "AtNanos": 4205864455
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "ready",
-                "AtNanos": 2854076459
+                "AtNanos": 4280704349
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2854080667
+                "AtNanos": 4280712799
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "consumed",
-                "AtNanos": 2854080709
+                "AtNanos": 4280712859
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2854096584
+                "AtNanos": 4280735739
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "materialized",
-                "AtNanos": 2854096625
+                "AtNanos": 4280735779
               }
             ]
           }
@@ -1522,10 +1522,10 @@
           "mode": "baseline",
           "profile": "engine_precompiled",
           "iteration": 3,
-          "total_nanos": 2758298250,
-          "engine_setup_nanos": 1393307709,
-          "allocated_bytes": 135542008,
-          "provider_nanos": 77022084,
+          "total_nanos": 4093927309,
+          "engine_setup_nanos": 2078773051,
+          "allocated_bytes": 135791072,
+          "provider_nanos": 75167377,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 0,
@@ -1581,10 +1581,10 @@
           "mode": "baseline",
           "profile": "engine_precompiled",
           "iteration": 4,
-          "total_nanos": 2743592542,
-          "engine_setup_nanos": 1391257958,
-          "allocated_bytes": 135544720,
-          "provider_nanos": 77010291,
+          "total_nanos": 4048033278,
+          "engine_setup_nanos": 2106647295,
+          "allocated_bytes": 135798736,
+          "provider_nanos": 75178417,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 0,
@@ -1640,10 +1640,10 @@
           "mode": "plm",
           "profile": "engine_precompiled",
           "iteration": 4,
-          "total_nanos": 2836654792,
-          "engine_setup_nanos": 1397581334,
-          "allocated_bytes": 135909152,
-          "provider_nanos": 77022916,
+          "total_nanos": 4214055791,
+          "engine_setup_nanos": 2086499530,
+          "allocated_bytes": 136149984,
+          "provider_nanos": 75187627,
           "lifecycle": {
             "schema_version": "pysolate.plm-run-lifecycle.v1",
             "module_instantiations": 1,
@@ -1655,15 +1655,15 @@
             "execute_calls": 1,
             "fresh_module": true,
             "prepared_module": false,
-            "instantiate_nanos": 4777375,
-            "initialize_nanos": 104375,
-            "runtime_init_nanos": 2296557833,
-            "source_validation_nanos": 20942542,
-            "lowering_nanos": 89359959,
-            "selection_nanos": 345214250,
-            "prepare_nanos": 1064250,
-            "execute_nanos": 78215083,
-            "total_nanos": 2836615584
+            "instantiate_nanos": 18275112,
+            "initialize_nanos": 34150,
+            "runtime_init_nanos": 3414001977,
+            "source_validation_nanos": 30571787,
+            "lowering_nanos": 132257715,
+            "selection_nanos": 539623718,
+            "prepare_nanos": 1731439,
+            "execute_nanos": 76994737,
+            "total_nanos": 4214003621
           },
           "candidates": {
             "Submitted": 1,
@@ -1688,64 +1688,64 @@
             "ValidationFailures": 0,
             "ValidationCostUnits": 1,
             "ProviderValidationPhysicalEvents": 0,
-            "ProviderNanos": 77077291,
-            "ValidationNanos": 708,
-            "LinearizationNanos": 7916,
-            "MaterializationNanos": 76804625,
+            "ProviderNanos": 75239638,
+            "ValidationNanos": 680,
+            "LinearizationNanos": 10570,
+            "MaterializationNanos": 74839513,
             "Events": [
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "submitted",
-                "AtNanos": 2758750000
+                "AtNanos": 4137615740
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "running",
-                "AtNanos": 2758790208
+                "AtNanos": 4137689851
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "linearized",
-                "AtNanos": 2759075333
+                "AtNanos": 4138108566
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_validated",
-                "AtNanos": 2759083041
+                "AtNanos": 4138118816
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "ready",
-                "AtNanos": 2835868583
+                "AtNanos": 4212931249
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "candidate_adopted",
-                "AtNanos": 2835872916
+                "AtNanos": 4212939879
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "consumed",
-                "AtNanos": 2835872958
+                "AtNanos": 4212939929
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "job_completed",
-                "AtNanos": 2835890666
+                "AtNanos": 4212963699
               },
               {
                 "SlotID": "slot-s752c8-e752c29-1",
                 "CallID": "plm-s752c8-e752c29-1",
                 "Disposition": "materialized",
-                "AtNanos": 2835890666
+                "AtNanos": 4212963739
               }
             ]
           }

@@ -1,15 +1,15 @@
 {
   "schema_version": "pysolate.transparent-campaign-public-projection.v1",
   "source": {
-    "artifact_sha256": "sha256:0a37a963a09b4e763cb6a40886a771e9c13e2f6a9d3a2d295788752e319c5795",
-    "artifact_source_commit": "ae922641cd9c539b68a0ea7110b5dc205e5c9a8a",
-    "campaign_source_commit": "40882ca5a818f4c5388bdeebe7d36ee9dc5fe7c5",
-    "manifest_sha256": "sha256:0633e6d98dd67fee6a2aad12cfd491a6d14e5344d5d2d78d91c059e62ec0fe7e",
+    "artifact_sha256": "sha256:4dc00643195df736cfa31a3cde5a43bde4c2586ef8aa9a36c4cecf104ed3a084",
+    "artifact_source_commit": "eeb67fa475d7cf51cd8d08835a03c4cc6558e0a4",
+    "campaign_source_commit": "eeb67fa475d7cf51cd8d08835a03c4cc6558e0a4",
+    "manifest_sha256": "sha256:01b1598760962311be630a2bbc5ac0e259ac211ed6bcd4b9e29933201a83cfc7",
     "host": {
-      "goos": "darwin",
-      "goarch": "arm64",
-      "go_version": "go1.26.0",
-      "kernel": "Darwin 25.4.0 Darwin Kernel Version 25.4.0: Thu Mar 19 19:31:09 PDT 2026; root:xnu-12377.101.15~1/RELEASE_ARM64_T8132"
+      "goos": "linux",
+      "goarch": "amd64",
+      "go_version": "go1.25.0",
+      "kernel": "Linux 6.17.0-35-generic #35~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Tue May 26 19:30:42 UTC 2"
     },
     "repetitions": 5
   },
@@ -20,14 +20,14 @@
       "max": 19
     },
     "wall_ms": {
-      "median": 25728.820333,
-      "min": 25337.92475,
-      "max": 26315.528667
+      "median": 35070.459073,
+      "min": 34385.749751,
+      "max": 38002.189786
     },
     "process_cpu_ms": {
-      "median": 70261.459,
-      "min": 68947.724,
-      "max": 71699.339
+      "median": 93303.814,
+      "min": 92007.536,
+      "max": 94951.142
     }
   },
   "qualified": {
@@ -37,14 +37,14 @@
       "max": 17
     },
     "wall_ms": {
-      "median": 22004.745333,
-      "min": 21700.499417,
-      "max": 22550.12975
+      "median": 29299.038253,
+      "min": 28905.109893,
+      "max": 32318.955311
     },
     "process_cpu_ms": {
-      "median": 66379.016,
-      "min": 65517.076,
-      "max": 67900.582
+      "median": 87213.85,
+      "min": 87085.978,
+      "max": 88476.018
     }
   },
   "paired": {
@@ -54,19 +54,19 @@
       "max": 2
     },
     "wall_reduction_ms": {
-      "median": 3724.0750000000007,
-      "min": 3637.4253329999992,
-      "max": 3830.9472499999974
+      "median": 5624.616202999998,
+      "min": 3886.426040999995,
+      "max": 7270.150416000004
     },
     "wall_reduction_pct": {
-      "median": 14.456246706239014,
-      "min": 14.308657692755594,
-      "max": 14.609948267109097
+      "median": 16.28920017309829,
+      "min": 10.734387806096974,
+      "max": 19.130872344304553
     },
     "cpu_reduction_ms": {
-      "median": 3798.7570000000123,
-      "min": 3430.648000000001,
-      "max": 4066.3830000000016
+      "median": 5935.152999999991,
+      "min": 4793.685999999987,
+      "max": 6475.124000000011
     }
   },
   "runs": [
@@ -74,71 +74,71 @@
       "repetition": 0,
       "treatment": "baseline",
       "physical_executions": 19,
-      "wall_ms": 25337.92475,
-      "process_cpu_ms": 68947.724
+      "wall_ms": 35070.459073,
+      "process_cpu_ms": 94951.142
     },
     {
       "repetition": 0,
       "treatment": "qualified",
       "physical_executions": 17,
-      "wall_ms": 21700.499417,
-      "process_cpu_ms": 65517.076
+      "wall_ms": 29299.038253,
+      "process_cpu_ms": 88476.018
     },
     {
       "repetition": 1,
       "treatment": "qualified",
       "physical_executions": 17,
-      "wall_ms": 22390.550458,
-      "process_cpu_ms": 67447.258
+      "wall_ms": 32318.955311,
+      "process_cpu_ms": 87213.85
     },
     {
       "repetition": 1,
       "treatment": "baseline",
       "physical_executions": 19,
-      "wall_ms": 26221.497708,
-      "process_cpu_ms": 71513.641
+      "wall_ms": 36205.381352,
+      "process_cpu_ms": 92007.536
     },
     {
       "repetition": 2,
       "treatment": "baseline",
       "physical_executions": 19,
-      "wall_ms": 25562.730708,
-      "process_cpu_ms": 69619.711
+      "wall_ms": 38002.189786,
+      "process_cpu_ms": 92984.299
     },
     {
       "repetition": 2,
       "treatment": "qualified",
       "physical_executions": 17,
-      "wall_ms": 21867.319292,
-      "process_cpu_ms": 65985.34
+      "wall_ms": 30732.03937,
+      "process_cpu_ms": 87196.559
     },
     {
       "repetition": 3,
       "treatment": "qualified",
       "physical_executions": 17,
-      "wall_ms": 22550.12975,
-      "process_cpu_ms": 67900.582
+      "wall_ms": 28905.109893,
+      "process_cpu_ms": 87085.978
     },
     {
       "repetition": 3,
       "treatment": "baseline",
       "physical_executions": 19,
-      "wall_ms": 26315.528667,
-      "process_cpu_ms": 71699.339
+      "wall_ms": 34529.726096,
+      "process_cpu_ms": 93303.814
     },
     {
       "repetition": 4,
       "treatment": "baseline",
       "physical_executions": 19,
-      "wall_ms": 25728.820333,
-      "process_cpu_ms": 70261.459
+      "wall_ms": 34385.749751,
+      "process_cpu_ms": 93548.154
     },
     {
       "repetition": 4,
       "treatment": "qualified",
       "physical_executions": 17,
-      "wall_ms": 22004.745333,
-      "process_cpu_ms": 66379.016
+      "wall_ms": 28949.269324,
+      "process_cpu_ms": 87613.001
     }
   ],
   "programs": [
@@ -146,7 +146,7 @@
       "id": "P01",
       "family": "authority_bifurcation",
       "release_offset_ms": 0,
-      "plan_sha256": "sha256:0fc7b440ce8c45cdcd2259efa1dca83309db5977860f6b4e1dd28edaec315fba",
+      "plan_sha256": "sha256:916a0e8c6dffae5ff952ad37ffbb3167567720af5509854c49d2a72ecaada4a6",
       "grant_set_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "privacy_partition": "private-shared",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -162,7 +162,7 @@
       "id": "P02",
       "family": "authority_bifurcation",
       "release_offset_ms": 4,
-      "plan_sha256": "sha256:e429677b7e24b752a4e409d11bd2a44d02f6f7cfd58a2111253ae989a02c8f93",
+      "plan_sha256": "sha256:b2fe618c7bc1282a6a9d9aaba446debd3642fac472237e6c037670ba6302136f",
       "grant_set_sha256": "sha256:cccd6ba34820c5657cc0b07d2776829d9cff844c3e11a8cecf4451fade0b81b6",
       "privacy_partition": "private-a",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -179,7 +179,7 @@
       "id": "P03",
       "family": "authority_bifurcation",
       "release_offset_ms": 4,
-      "plan_sha256": "sha256:7abfa24e50690b509129013d88401b450cf607b1701828e5c7175a1b95db97da",
+      "plan_sha256": "sha256:056786cf778788056cdca687f44b72c97a4b6849deaca1a0c07132c302c574e0",
       "grant_set_sha256": "sha256:5119d1f5d6fee89b4aa830f3c3ef912fb5bd48090bccbafaab31f8c85071aab1",
       "privacy_partition": "private-a",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -196,7 +196,7 @@
       "id": "P04",
       "family": "authority_bifurcation",
       "release_offset_ms": 6,
-      "plan_sha256": "sha256:e429677b7e24b752a4e409d11bd2a44d02f6f7cfd58a2111253ae989a02c8f93",
+      "plan_sha256": "sha256:b2fe618c7bc1282a6a9d9aaba446debd3642fac472237e6c037670ba6302136f",
       "grant_set_sha256": "sha256:cccd6ba34820c5657cc0b07d2776829d9cff844c3e11a8cecf4451fade0b81b6",
       "privacy_partition": "private-a",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -213,23 +213,7 @@
       "id": "P05",
       "family": "exact_sharing",
       "release_offset_ms": 10,
-      "plan_sha256": "sha256:0fc7b440ce8c45cdcd2259efa1dca83309db5977860f6b4e1dd28edaec315fba",
-      "grant_set_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-      "privacy_partition": "private-a",
-      "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
-      "execution": {
-        "kind": "exact_request",
-        "cancel_point": "none"
-      },
-      "admission": "admitted",
-      "sharing": "exact_shared",
-      "disposition": "complete"
-    },
-    {
-      "id": "P06",
-      "family": "exact_sharing",
-      "release_offset_ms": 10,
-      "plan_sha256": "sha256:0fc7b440ce8c45cdcd2259efa1dca83309db5977860f6b4e1dd28edaec315fba",
+      "plan_sha256": "sha256:916a0e8c6dffae5ff952ad37ffbb3167567720af5509854c49d2a72ecaada4a6",
       "grant_set_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "privacy_partition": "private-a",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -242,10 +226,26 @@
       "disposition": "complete"
     },
     {
+      "id": "P06",
+      "family": "exact_sharing",
+      "release_offset_ms": 10,
+      "plan_sha256": "sha256:916a0e8c6dffae5ff952ad37ffbb3167567720af5509854c49d2a72ecaada4a6",
+      "grant_set_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "privacy_partition": "private-a",
+      "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
+      "execution": {
+        "kind": "exact_request",
+        "cancel_point": "none"
+      },
+      "admission": "admitted",
+      "sharing": "exact_shared",
+      "disposition": "complete"
+    },
+    {
       "id": "P07",
       "family": "exact_sharing",
       "release_offset_ms": 11,
-      "plan_sha256": "sha256:0fc7b440ce8c45cdcd2259efa1dca83309db5977860f6b4e1dd28edaec315fba",
+      "plan_sha256": "sha256:916a0e8c6dffae5ff952ad37ffbb3167567720af5509854c49d2a72ecaada4a6",
       "grant_set_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "privacy_partition": "private-a",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -261,7 +261,7 @@
       "id": "P08",
       "family": "exact_sharing",
       "release_offset_ms": 12,
-      "plan_sha256": "sha256:0fc7b440ce8c45cdcd2259efa1dca83309db5977860f6b4e1dd28edaec315fba",
+      "plan_sha256": "sha256:916a0e8c6dffae5ff952ad37ffbb3167567720af5509854c49d2a72ecaada4a6",
       "grant_set_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "privacy_partition": "private-a",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -277,7 +277,7 @@
       "id": "P09",
       "family": "exact_sharing",
       "release_offset_ms": 13,
-      "plan_sha256": "sha256:0fc7b440ce8c45cdcd2259efa1dca83309db5977860f6b4e1dd28edaec315fba",
+      "plan_sha256": "sha256:916a0e8c6dffae5ff952ad37ffbb3167567720af5509854c49d2a72ecaada4a6",
       "grant_set_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "privacy_partition": "private-b",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -293,7 +293,7 @@
       "id": "P10",
       "family": "root_verification",
       "release_offset_ms": 18,
-      "plan_sha256": "sha256:0fc7b440ce8c45cdcd2259efa1dca83309db5977860f6b4e1dd28edaec315fba",
+      "plan_sha256": "sha256:916a0e8c6dffae5ff952ad37ffbb3167567720af5509854c49d2a72ecaada4a6",
       "grant_set_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "privacy_partition": "private-a",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -316,7 +316,7 @@
       "id": "P11",
       "family": "root_verification",
       "release_offset_ms": 19,
-      "plan_sha256": "sha256:0fc7b440ce8c45cdcd2259efa1dca83309db5977860f6b4e1dd28edaec315fba",
+      "plan_sha256": "sha256:916a0e8c6dffae5ff952ad37ffbb3167567720af5509854c49d2a72ecaada4a6",
       "grant_set_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "privacy_partition": "private-a",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -339,7 +339,7 @@
       "id": "P12",
       "family": "root_verification",
       "release_offset_ms": 20,
-      "plan_sha256": "sha256:0fc7b440ce8c45cdcd2259efa1dca83309db5977860f6b4e1dd28edaec315fba",
+      "plan_sha256": "sha256:916a0e8c6dffae5ff952ad37ffbb3167567720af5509854c49d2a72ecaada4a6",
       "grant_set_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
       "privacy_partition": "private-a",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -362,7 +362,7 @@
       "id": "P13",
       "family": "authority_resume",
       "release_offset_ms": 25,
-      "plan_sha256": "sha256:80866832d08b8fb13de1bab63b87ed64504eb5534d460cf5013153e29282a32e",
+      "plan_sha256": "sha256:45becb9b597d2c43e518a3525bbad15a0b1b70c96979c31f307db3dffa448017",
       "grant_set_sha256": "sha256:afa6c369d17254185f7ce78fc8e16cc33dde749e5921c024950862ce681f3352",
       "privacy_partition": "private-a",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -379,7 +379,7 @@
       "id": "P14",
       "family": "authority_resume",
       "release_offset_ms": 26,
-      "plan_sha256": "sha256:80866832d08b8fb13de1bab63b87ed64504eb5534d460cf5013153e29282a32e",
+      "plan_sha256": "sha256:45becb9b597d2c43e518a3525bbad15a0b1b70c96979c31f307db3dffa448017",
       "grant_set_sha256": "sha256:afa6c369d17254185f7ce78fc8e16cc33dde749e5921c024950862ce681f3352",
       "privacy_partition": "private-a",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -400,7 +400,7 @@
       "id": "P15",
       "family": "authority_resume",
       "release_offset_ms": 27,
-      "plan_sha256": "sha256:f204cffd4d8da346c570ca01398f4dfeb30ca0ec3d0f0e969ed39c3ddd5d78c5",
+      "plan_sha256": "sha256:3386bbd65712ae54488ef00ef8fc551a6d8997207acdac5b3fdf2bf1fbc8b4ac",
       "grant_set_sha256": "sha256:a1fddb5bd9b9a14af9cf827d02f90001f3895886c8a91628c74c44d5ea6d11ca",
       "privacy_partition": "private-a",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -421,7 +421,7 @@
       "id": "P16",
       "family": "authority_resume",
       "release_offset_ms": 28,
-      "plan_sha256": "sha256:80866832d08b8fb13de1bab63b87ed64504eb5534d460cf5013153e29282a32e",
+      "plan_sha256": "sha256:45becb9b597d2c43e518a3525bbad15a0b1b70c96979c31f307db3dffa448017",
       "grant_set_sha256": "sha256:afa6c369d17254185f7ce78fc8e16cc33dde749e5921c024950862ce681f3352",
       "privacy_partition": "private-a",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -442,7 +442,7 @@
       "id": "P17",
       "family": "delegation_attenuation",
       "release_offset_ms": 32,
-      "plan_sha256": "sha256:e429677b7e24b752a4e409d11bd2a44d02f6f7cfd58a2111253ae989a02c8f93",
+      "plan_sha256": "sha256:b2fe618c7bc1282a6a9d9aaba446debd3642fac472237e6c037670ba6302136f",
       "grant_set_sha256": "sha256:cccd6ba34820c5657cc0b07d2776829d9cff844c3e11a8cecf4451fade0b81b6",
       "privacy_partition": "private-a",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -451,7 +451,7 @@
         "delegation": {
           "group_id": "delegation-main",
           "parent_plan_role": "consumer-left",
-          "parent_plan_sha256": "sha256:e429677b7e24b752a4e409d11bd2a44d02f6f7cfd58a2111253ae989a02c8f93",
+          "parent_plan_sha256": "sha256:b2fe618c7bc1282a6a9d9aaba446debd3642fac472237e6c037670ba6302136f",
           "max_delegated_calls": 1,
           "child_reserved_calls": 1
         },
@@ -465,7 +465,7 @@
       "id": "P18",
       "family": "delegation_attenuation",
       "release_offset_ms": 33,
-      "plan_sha256": "sha256:ea27b25440db809bbc1e46158056ac9ffc92dcc67cad19c652aec2a6efb93218",
+      "plan_sha256": "sha256:ff089b24234f2a6c866eb4797f1d3834b27388f4bcd1b9bf82bf445b4246860d",
       "grant_set_sha256": "sha256:ee1f907a1ded19fdb10bbd9aad8d94313872a22d791ad41d5bf24687c33b4e41",
       "privacy_partition": "private-a",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -474,7 +474,7 @@
         "delegation": {
           "group_id": "delegation-widening",
           "parent_plan_role": "consumer-left",
-          "parent_plan_sha256": "sha256:e429677b7e24b752a4e409d11bd2a44d02f6f7cfd58a2111253ae989a02c8f93",
+          "parent_plan_sha256": "sha256:b2fe618c7bc1282a6a9d9aaba446debd3642fac472237e6c037670ba6302136f",
           "max_delegated_calls": 1,
           "child_reserved_calls": 1
         },
@@ -488,7 +488,7 @@
       "id": "P19",
       "family": "delegation_attenuation",
       "release_offset_ms": 34,
-      "plan_sha256": "sha256:e429677b7e24b752a4e409d11bd2a44d02f6f7cfd58a2111253ae989a02c8f93",
+      "plan_sha256": "sha256:b2fe618c7bc1282a6a9d9aaba446debd3642fac472237e6c037670ba6302136f",
       "grant_set_sha256": "sha256:cccd6ba34820c5657cc0b07d2776829d9cff844c3e11a8cecf4451fade0b81b6",
       "privacy_partition": "private-a",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -497,7 +497,7 @@
         "delegation": {
           "group_id": "delegation-main",
           "parent_plan_role": "consumer-left",
-          "parent_plan_sha256": "sha256:e429677b7e24b752a4e409d11bd2a44d02f6f7cfd58a2111253ae989a02c8f93",
+          "parent_plan_sha256": "sha256:b2fe618c7bc1282a6a9d9aaba446debd3642fac472237e6c037670ba6302136f",
           "max_delegated_calls": 1,
           "child_reserved_calls": 1
         },
@@ -511,7 +511,7 @@
       "id": "P20",
       "family": "delegation_attenuation",
       "release_offset_ms": 35,
-      "plan_sha256": "sha256:e429677b7e24b752a4e409d11bd2a44d02f6f7cfd58a2111253ae989a02c8f93",
+      "plan_sha256": "sha256:b2fe618c7bc1282a6a9d9aaba446debd3642fac472237e6c037670ba6302136f",
       "grant_set_sha256": "sha256:cccd6ba34820c5657cc0b07d2776829d9cff844c3e11a8cecf4451fade0b81b6",
       "privacy_partition": "private-a",
       "workspace_fixture_sha256": "sha256:25504d4c2ef21ba7c7cb3ef0a0ba859dde51deae0018edfb7c072515586c9178",
@@ -520,7 +520,7 @@
         "delegation": {
           "group_id": "delegation-main",
           "parent_plan_role": "consumer-left",
-          "parent_plan_sha256": "sha256:e429677b7e24b752a4e409d11bd2a44d02f6f7cfd58a2111253ae989a02c8f93",
+          "parent_plan_sha256": "sha256:b2fe618c7bc1282a6a9d9aaba446debd3642fac472237e6c037670ba6302136f",
           "max_delegated_calls": 1,
           "child_reserved_calls": 1
         },
@@ -536,27 +536,27 @@
       "sequence": 1,
       "program_id": "P01",
       "type": "logical.released",
-      "at_ns": 3750,
+      "at_ns": 13050,
       "reason": "manifest_offset"
     },
     {
       "sequence": 2,
       "program_id": "P01",
       "type": "admission.accepted",
-      "at_ns": 15584,
+      "at_ns": 27660,
       "reason": "admitted"
     },
     {
       "sequence": 3,
       "program_id": "P01",
       "type": "logical.started",
-      "at_ns": 15750
+      "at_ns": 27830
     },
     {
       "sequence": 4,
       "program_id": "P01",
       "type": "physical.queued",
-      "at_ns": 16459,
+      "at_ns": 29330,
       "reason": "fifo",
       "physical_execution_id": "campaign-guest-1"
     },
@@ -564,824 +564,824 @@
       "sequence": 5,
       "program_id": "P01",
       "type": "physical.started",
-      "at_ns": 16875,
+      "at_ns": 29650,
       "physical_execution_id": "campaign-guest-1"
     },
     {
       "sequence": 6,
       "program_id": "P02",
       "type": "logical.released",
-      "at_ns": 4508792,
+      "at_ns": 4115795,
       "reason": "manifest_offset"
     },
     {
       "sequence": 7,
       "program_id": "P03",
       "type": "logical.released",
-      "at_ns": 4510292,
+      "at_ns": 4120865,
       "reason": "manifest_offset"
     },
     {
       "sequence": 8,
       "program_id": "P04",
       "type": "logical.released",
-      "at_ns": 6195875,
+      "at_ns": 6242378,
       "reason": "manifest_offset"
     },
     {
       "sequence": 9,
       "program_id": "P05",
       "type": "logical.released",
-      "at_ns": 10485584,
+      "at_ns": 10366313,
       "reason": "manifest_offset"
     },
     {
       "sequence": 10,
       "program_id": "P06",
       "type": "logical.released",
-      "at_ns": 10487042,
+      "at_ns": 10369073,
       "reason": "manifest_offset"
     },
     {
       "sequence": 11,
       "program_id": "P06",
       "type": "admission.accepted",
-      "at_ns": 10492125,
+      "at_ns": 10373234,
       "reason": "admitted"
     },
     {
       "sequence": 12,
       "program_id": "P06",
       "type": "logical.started",
-      "at_ns": 10492209
+      "at_ns": 10373314
     },
     {
       "sequence": 13,
       "program_id": "P05",
       "type": "admission.accepted",
-      "at_ns": 10496167,
+      "at_ns": 10376314,
       "reason": "admitted"
     },
     {
       "sequence": 14,
       "program_id": "P05",
       "type": "logical.started",
-      "at_ns": 10496209
+      "at_ns": 10376384
     },
     {
       "sequence": 15,
-      "program_id": "P06",
-      "type": "physical.queued",
-      "at_ns": 10537792,
-      "reason": "fifo",
-      "physical_execution_id": "campaign-exact-2"
+      "program_id": "P07",
+      "type": "logical.released",
+      "at_ns": 11447155,
+      "reason": "manifest_offset"
     },
     {
       "sequence": 16,
-      "program_id": "P06",
-      "type": "physical.started",
-      "at_ns": 10538042,
-      "physical_execution_id": "campaign-exact-2"
+      "program_id": "P07",
+      "type": "admission.accepted",
+      "at_ns": 11452065,
+      "reason": "admitted"
     },
     {
       "sequence": 17,
       "program_id": "P07",
-      "type": "logical.released",
-      "at_ns": 11074875,
-      "reason": "manifest_offset"
+      "type": "logical.started",
+      "at_ns": 11452135
     },
     {
       "sequence": 18,
-      "program_id": "P07",
-      "type": "admission.accepted",
-      "at_ns": 11079459,
-      "reason": "admitted"
-    },
-    {
-      "sequence": 19,
-      "program_id": "P07",
-      "type": "logical.started",
-      "at_ns": 11087959
-    },
-    {
-      "sequence": 20,
-      "program_id": "P07",
-      "type": "physical.queued",
-      "at_ns": 11117625,
-      "reason": "fifo",
-      "physical_execution_id": "campaign-exact-3"
-    },
-    {
-      "sequence": 21,
-      "program_id": "P07",
-      "type": "physical.started",
-      "at_ns": 11117709,
-      "physical_execution_id": "campaign-exact-3"
-    },
-    {
-      "sequence": 22,
       "program_id": "P08",
       "type": "logical.released",
-      "at_ns": 12130125,
+      "at_ns": 12512997,
       "reason": "manifest_offset"
     },
     {
-      "sequence": 23,
+      "sequence": 19,
       "program_id": "P08",
       "type": "admission.accepted",
-      "at_ns": 12134542,
+      "at_ns": 12517597,
       "reason": "admitted"
     },
     {
-      "sequence": 24,
+      "sequence": 20,
       "program_id": "P08",
       "type": "logical.started",
-      "at_ns": 12134584
+      "at_ns": 12517667
+    },
+    {
+      "sequence": 21,
+      "program_id": "P09",
+      "type": "logical.released",
+      "at_ns": 13460747,
+      "reason": "manifest_offset"
+    },
+    {
+      "sequence": 22,
+      "program_id": "P09",
+      "type": "admission.accepted",
+      "at_ns": 13462827,
+      "reason": "admitted"
+    },
+    {
+      "sequence": 23,
+      "program_id": "P09",
+      "type": "logical.started",
+      "at_ns": 13462877
+    },
+    {
+      "sequence": 24,
+      "program_id": "P05",
+      "type": "physical.queued",
+      "at_ns": 15772743,
+      "reason": "fifo",
+      "physical_execution_id": "campaign-exact-2"
     },
     {
       "sequence": 25,
-      "program_id": "P08",
-      "type": "physical.queued",
-      "at_ns": 12160334,
-      "reason": "fifo",
-      "physical_execution_id": "campaign-exact-4"
+      "program_id": "P05",
+      "type": "physical.started",
+      "at_ns": 15773513,
+      "physical_execution_id": "campaign-exact-2"
     },
     {
       "sequence": 26,
-      "program_id": "P09",
+      "program_id": "P10",
       "type": "logical.released",
-      "at_ns": 13123292,
+      "at_ns": 18697285,
       "reason": "manifest_offset"
     },
     {
       "sequence": 27,
-      "program_id": "P09",
+      "program_id": "P10",
       "type": "admission.accepted",
-      "at_ns": 13126000,
+      "at_ns": 18705305,
       "reason": "admitted"
     },
     {
       "sequence": 28,
-      "program_id": "P09",
+      "program_id": "P10",
       "type": "logical.started",
-      "at_ns": 13126042
+      "at_ns": 18705355
     },
     {
       "sequence": 29,
+      "program_id": "P07",
+      "type": "physical.queued",
+      "at_ns": 19513264,
+      "reason": "fifo",
+      "physical_execution_id": "campaign-exact-3"
+    },
+    {
+      "sequence": 30,
+      "program_id": "P07",
+      "type": "physical.started",
+      "at_ns": 19513994,
+      "physical_execution_id": "campaign-exact-3"
+    },
+    {
+      "sequence": 31,
+      "program_id": "P11",
+      "type": "logical.released",
+      "at_ns": 19604325,
+      "reason": "manifest_offset"
+    },
+    {
+      "sequence": 32,
+      "program_id": "P11",
+      "type": "admission.accepted",
+      "at_ns": 19613325,
+      "reason": "admitted"
+    },
+    {
+      "sequence": 33,
+      "program_id": "P11",
+      "type": "logical.started",
+      "at_ns": 19613395
+    },
+    {
+      "sequence": 34,
+      "program_id": "P12",
+      "type": "logical.released",
+      "at_ns": 20825938,
+      "reason": "manifest_offset"
+    },
+    {
+      "sequence": 35,
+      "program_id": "P12",
+      "type": "admission.accepted",
+      "at_ns": 20830438,
+      "reason": "admitted"
+    },
+    {
+      "sequence": 36,
+      "program_id": "P12",
+      "type": "logical.started",
+      "at_ns": 20830498
+    },
+    {
+      "sequence": 37,
+      "program_id": "P08",
+      "type": "physical.queued",
+      "at_ns": 21847509,
+      "reason": "fifo",
+      "physical_execution_id": "campaign-exact-4"
+    },
+    {
+      "sequence": 38,
       "program_id": "P09",
       "type": "physical.queued",
-      "at_ns": 13143625,
+      "at_ns": 23277045,
       "reason": "fifo",
       "physical_execution_id": "campaign-exact-5"
     },
     {
-      "sequence": 30,
-      "program_id": "P10",
-      "type": "logical.released",
-      "at_ns": 18139292,
-      "reason": "manifest_offset"
-    },
-    {
-      "sequence": 31,
-      "program_id": "P10",
-      "type": "admission.accepted",
-      "at_ns": 18146959,
-      "reason": "admitted"
-    },
-    {
-      "sequence": 32,
-      "program_id": "P10",
-      "type": "logical.started",
-      "at_ns": 18147000
-    },
-    {
-      "sequence": 33,
-      "program_id": "P10",
-      "type": "workspace.forked",
-      "at_ns": 18328750,
-      "reason": "private_attempt"
-    },
-    {
-      "sequence": 34,
-      "program_id": "P10",
-      "type": "physical.queued",
-      "at_ns": 18329167,
-      "reason": "fifo",
-      "physical_execution_id": "campaign-workspace-6"
-    },
-    {
-      "sequence": 35,
-      "program_id": "P11",
-      "type": "logical.released",
-      "at_ns": 19124709,
-      "reason": "manifest_offset"
-    },
-    {
-      "sequence": 36,
-      "program_id": "P11",
-      "type": "admission.accepted",
-      "at_ns": 19129667,
-      "reason": "admitted"
-    },
-    {
-      "sequence": 37,
-      "program_id": "P11",
-      "type": "logical.started",
-      "at_ns": 19129709
-    },
-    {
-      "sequence": 38,
-      "program_id": "P11",
-      "type": "workspace.forked",
-      "at_ns": 19269709,
-      "reason": "private_attempt"
-    },
-    {
       "sequence": 39,
-      "program_id": "P11",
-      "type": "physical.queued",
-      "at_ns": 19270292,
-      "reason": "fifo",
-      "physical_execution_id": "campaign-workspace-7"
+      "program_id": "P13",
+      "type": "logical.released",
+      "at_ns": 25952505,
+      "reason": "manifest_offset"
     },
     {
       "sequence": 40,
-      "program_id": "P12",
-      "type": "logical.released",
-      "at_ns": 20132334,
-      "reason": "manifest_offset"
-    },
-    {
-      "sequence": 41,
-      "program_id": "P12",
+      "program_id": "P13",
       "type": "admission.accepted",
-      "at_ns": 20138959,
+      "at_ns": 25963765,
       "reason": "admitted"
     },
     {
-      "sequence": 42,
-      "program_id": "P12",
+      "sequence": 41,
+      "program_id": "P13",
       "type": "logical.started",
-      "at_ns": 20138959
+      "at_ns": 25963835
+    },
+    {
+      "sequence": 42,
+      "program_id": "P14",
+      "type": "logical.released",
+      "at_ns": 26023995,
+      "reason": "manifest_offset"
     },
     {
       "sequence": 43,
-      "program_id": "P12",
-      "type": "workspace.forked",
-      "at_ns": 20305542,
-      "reason": "private_attempt"
+      "program_id": "P13",
+      "type": "physical.queued",
+      "at_ns": 26026455,
+      "reason": "fifo",
+      "physical_execution_id": "campaign-workflow-6"
     },
     {
       "sequence": 44,
-      "program_id": "P12",
-      "type": "physical.queued",
-      "at_ns": 20306250,
-      "reason": "fifo",
-      "physical_execution_id": "campaign-workspace-8"
+      "program_id": "P15",
+      "type": "logical.released",
+      "at_ns": 27060077,
+      "reason": "manifest_offset"
     },
     {
       "sequence": 45,
-      "program_id": "P13",
+      "program_id": "P16",
       "type": "logical.released",
-      "at_ns": 25626209,
+      "at_ns": 28129859,
       "reason": "manifest_offset"
     },
     {
       "sequence": 46,
-      "program_id": "P13",
-      "type": "admission.accepted",
-      "at_ns": 25629042,
-      "reason": "admitted"
+      "program_id": "P10",
+      "type": "workspace.forked",
+      "at_ns": 29265761,
+      "reason": "private_attempt"
     },
     {
       "sequence": 47,
-      "program_id": "P13",
-      "type": "logical.started",
-      "at_ns": 25629084
+      "program_id": "P10",
+      "type": "physical.queued",
+      "at_ns": 29267861,
+      "reason": "fifo",
+      "physical_execution_id": "campaign-workspace-7"
     },
     {
       "sequence": 48,
-      "program_id": "P13",
-      "type": "physical.queued",
-      "at_ns": 25657084,
-      "reason": "fifo",
-      "physical_execution_id": "campaign-workflow-9"
+      "program_id": "P17",
+      "type": "logical.released",
+      "at_ns": 32249304,
+      "reason": "manifest_offset"
     },
     {
       "sequence": 49,
-      "program_id": "P14",
+      "program_id": "P18",
       "type": "logical.released",
-      "at_ns": 26056709,
+      "at_ns": 33322725,
       "reason": "manifest_offset"
     },
     {
       "sequence": 50,
-      "program_id": "P15",
+      "program_id": "P19",
       "type": "logical.released",
-      "at_ns": 27127625,
+      "at_ns": 34387137,
       "reason": "manifest_offset"
     },
     {
       "sequence": 51,
-      "program_id": "P16",
+      "program_id": "P20",
       "type": "logical.released",
-      "at_ns": 28117542,
+      "at_ns": 35507569,
       "reason": "manifest_offset"
     },
     {
       "sequence": 52,
-      "program_id": "P17",
-      "type": "logical.released",
-      "at_ns": 32512959,
-      "reason": "manifest_offset"
+      "program_id": "P11",
+      "type": "workspace.forked",
+      "at_ns": 40054159,
+      "reason": "private_attempt"
     },
     {
       "sequence": 53,
-      "program_id": "P17",
-      "type": "admission.accepted",
-      "at_ns": 33010875,
-      "reason": "admitted"
+      "program_id": "P11",
+      "type": "physical.queued",
+      "at_ns": 40055879,
+      "reason": "fifo",
+      "physical_execution_id": "campaign-workspace-8"
     },
     {
       "sequence": 54,
-      "program_id": "P17",
-      "type": "logical.started",
-      "at_ns": 33011084
+      "program_id": "P12",
+      "type": "workspace.forked",
+      "at_ns": 49687405,
+      "reason": "private_attempt"
     },
     {
       "sequence": 55,
-      "program_id": "P17",
-      "type": "delegation.child_started",
-      "at_ns": 33012000,
-      "reason": "delegation-main"
+      "program_id": "P12",
+      "type": "physical.queued",
+      "at_ns": 49697235,
+      "reason": "fifo",
+      "physical_execution_id": "campaign-workspace-9"
     },
     {
       "sequence": 56,
-      "program_id": "P18",
-      "type": "logical.released",
-      "at_ns": 33013792,
-      "reason": "manifest_offset"
+      "program_id": "P17",
+      "type": "admission.accepted",
+      "at_ns": 64881442,
+      "reason": "admitted"
     },
     {
       "sequence": 57,
       "program_id": "P17",
-      "type": "physical.queued",
-      "at_ns": 33028459,
-      "reason": "fifo",
-      "physical_execution_id": "campaign-child-11"
+      "type": "logical.started",
+      "at_ns": 64881772
     },
     {
       "sequence": 58,
       "program_id": "P18",
       "type": "admission.rejected",
-      "at_ns": 33123334,
+      "at_ns": 69390911,
       "reason": "authority_widening"
     },
     {
       "sequence": 59,
       "program_id": "P18",
       "type": "logical.terminal",
-      "at_ns": 33123500,
+      "at_ns": 69391341,
       "reason": "rejected"
     },
     {
       "sequence": 60,
       "program_id": "P19",
-      "type": "logical.released",
-      "at_ns": 34128542,
-      "reason": "manifest_offset"
+      "type": "admission.rejected",
+      "at_ns": 69406502,
+      "reason": "delegation_budget"
     },
     {
       "sequence": 61,
       "program_id": "P19",
-      "type": "admission.rejected",
-      "at_ns": 34173459,
-      "reason": "delegation_budget"
-    },
-    {
-      "sequence": 62,
-      "program_id": "P19",
       "type": "logical.terminal",
-      "at_ns": 34173500,
+      "at_ns": 69406712,
       "reason": "rejected"
     },
     {
+      "sequence": 62,
+      "program_id": "P17",
+      "type": "delegation.child_started",
+      "at_ns": 69408492,
+      "reason": "delegation-main"
+    },
+    {
       "sequence": 63,
-      "program_id": "P20",
-      "type": "logical.released",
-      "at_ns": 35120834,
-      "reason": "manifest_offset"
+      "program_id": "P17",
+      "type": "physical.queued",
+      "at_ns": 69412552,
+      "reason": "fifo",
+      "physical_execution_id": "campaign-child-13"
     },
     {
       "sequence": 64,
-      "program_id": "P07",
-      "type": "physical.ended",
-      "at_ns": 3896287417,
-      "physical_execution_id": "campaign-exact-3"
-    },
-    {
-      "sequence": 65,
-      "program_id": "P08",
-      "type": "physical.started",
-      "at_ns": 3896296875,
-      "physical_execution_id": "campaign-exact-4"
-    },
-    {
-      "sequence": 66,
       "program_id": "P01",
       "type": "physical.ended",
-      "at_ns": 3901506709,
+      "at_ns": 5788421318,
       "physical_execution_id": "campaign-guest-1"
     },
     {
-      "sequence": 67,
+      "sequence": 65,
       "program_id": "P01",
       "type": "logical.terminal",
-      "at_ns": 3901509084,
+      "at_ns": 5788426648,
       "reason": "complete",
       "physical_execution_id": "campaign-guest-1"
     },
     {
-      "sequence": 68,
-      "program_id": "P09",
-      "type": "physical.started",
-      "at_ns": 3901516167,
-      "physical_execution_id": "campaign-exact-5"
-    },
-    {
-      "sequence": 69,
+      "sequence": 66,
       "program_id": "P03",
       "type": "admission.accepted",
-      "at_ns": 3901521875,
+      "at_ns": 5788431858,
       "reason": "admitted"
     },
     {
-      "sequence": 70,
+      "sequence": 67,
       "program_id": "P03",
       "type": "logical.started",
-      "at_ns": 3901521917
+      "at_ns": 5788431898
     },
     {
-      "sequence": 71,
+      "sequence": 68,
       "program_id": "P03",
       "type": "physical.queued",
-      "at_ns": 3901523500,
+      "at_ns": 5788435078,
       "reason": "fifo",
       "physical_execution_id": "campaign-guest-14"
     },
     {
-      "sequence": 72,
+      "sequence": 69,
       "program_id": "P04",
       "type": "admission.accepted",
-      "at_ns": 3901527125,
+      "at_ns": 5788438768,
+      "reason": "admitted"
+    },
+    {
+      "sequence": 70,
+      "program_id": "P04",
+      "type": "logical.started",
+      "at_ns": 5788438798
+    },
+    {
+      "sequence": 71,
+      "program_id": "P08",
+      "type": "physical.started",
+      "at_ns": 5788439158,
+      "physical_execution_id": "campaign-exact-4"
+    },
+    {
+      "sequence": 72,
+      "program_id": "P02",
+      "type": "admission.accepted",
+      "at_ns": 5788451458,
       "reason": "admitted"
     },
     {
       "sequence": 73,
-      "program_id": "P04",
+      "program_id": "P02",
       "type": "logical.started",
-      "at_ns": 3901527209
+      "at_ns": 5788451678
     },
     {
       "sequence": 74,
       "program_id": "P02",
-      "type": "admission.accepted",
-      "at_ns": 3901549667,
-      "reason": "admitted"
-    },
-    {
-      "sequence": 75,
-      "program_id": "P02",
-      "type": "logical.started",
-      "at_ns": 3901549875
-    },
-    {
-      "sequence": 76,
-      "program_id": "P02",
       "type": "physical.queued",
-      "at_ns": 3901554500,
+      "at_ns": 5788468618,
       "reason": "fifo",
       "physical_execution_id": "campaign-guest-15"
     },
     {
-      "sequence": 77,
+      "sequence": 75,
       "program_id": "P04",
       "type": "workspace.forked",
-      "at_ns": 3902470667,
+      "at_ns": 5799093815,
       "reason": "private_attempt"
     },
     {
-      "sequence": 78,
+      "sequence": 76,
       "program_id": "P04",
       "type": "physical.queued",
-      "at_ns": 3902472459,
+      "at_ns": 5799096765,
       "reason": "fifo",
       "physical_execution_id": "campaign-workspace-16"
     },
     {
+      "sequence": 77,
+      "program_id": "P05",
+      "type": "physical.ended",
+      "at_ns": 5801206968,
+      "physical_execution_id": "campaign-exact-2"
+    },
+    {
+      "sequence": 78,
+      "program_id": "P09",
+      "type": "physical.started",
+      "at_ns": 5801224288,
+      "physical_execution_id": "campaign-exact-5"
+    },
+    {
       "sequence": 79,
-      "program_id": "P07",
+      "program_id": "P05",
       "type": "sharing.decided",
-      "at_ns": 3902657042,
+      "at_ns": 5811354650,
       "reason": "independent",
-      "physical_execution_id": "campaign-exact-3"
+      "physical_execution_id": "campaign-exact-2"
     },
     {
       "sequence": 80,
-      "program_id": "P07",
+      "program_id": "P05",
       "type": "logical.terminal",
-      "at_ns": 3902657292,
+      "at_ns": 5811355890,
       "reason": "complete",
-      "physical_execution_id": "campaign-exact-3"
+      "physical_execution_id": "campaign-exact-2"
     },
     {
       "sequence": 81,
       "program_id": "P06",
-      "type": "physical.ended",
-      "at_ns": 3918653042,
-      "physical_execution_id": "campaign-exact-2"
-    },
-    {
-      "sequence": 82,
-      "program_id": "P10",
-      "type": "physical.started",
-      "at_ns": 3918664959,
-      "physical_execution_id": "campaign-workspace-6"
-    },
-    {
-      "sequence": 83,
-      "program_id": "P06",
       "type": "sharing.decided",
-      "at_ns": 3922530209,
-      "reason": "independent",
-      "physical_execution_id": "campaign-exact-2"
-    },
-    {
-      "sequence": 84,
-      "program_id": "P06",
-      "type": "logical.terminal",
-      "at_ns": 3922530750,
-      "reason": "complete",
-      "physical_execution_id": "campaign-exact-2"
-    },
-    {
-      "sequence": 85,
-      "program_id": "P05",
-      "type": "sharing.decided",
-      "at_ns": 3922536625,
+      "at_ns": 5811360880,
       "reason": "exact_shared",
       "physical_execution_id": "campaign-exact-2"
     },
     {
-      "sequence": 86,
-      "program_id": "P05",
+      "sequence": 82,
+      "program_id": "P06",
       "type": "logical.terminal",
-      "at_ns": 3922536875,
+      "at_ns": 5811361500,
       "reason": "complete",
       "physical_execution_id": "campaign-exact-2"
     },
     {
-      "sequence": 87,
-      "program_id": "P08",
+      "sequence": 83,
+      "program_id": "P07",
       "type": "physical.ended",
-      "at_ns": 8183738417,
-      "physical_execution_id": "campaign-exact-4"
+      "at_ns": 5813393212,
+      "physical_execution_id": "campaign-exact-3"
+    },
+    {
+      "sequence": 84,
+      "program_id": "P13",
+      "type": "physical.started",
+      "at_ns": 5813403982,
+      "physical_execution_id": "campaign-workflow-6"
+    },
+    {
+      "sequence": 85,
+      "program_id": "P07",
+      "type": "sharing.decided",
+      "at_ns": 5825881529,
+      "reason": "independent",
+      "physical_execution_id": "campaign-exact-3"
+    },
+    {
+      "sequence": 86,
+      "program_id": "P07",
+      "type": "logical.terminal",
+      "at_ns": 5825883109,
+      "reason": "complete",
+      "physical_execution_id": "campaign-exact-3"
+    },
+    {
+      "sequence": 87,
+      "program_id": "P09",
+      "type": "physical.ended",
+      "at_ns": 11560475841,
+      "physical_execution_id": "campaign-exact-5"
     },
     {
       "sequence": 88,
-      "program_id": "P11",
+      "program_id": "P10",
       "type": "physical.started",
-      "at_ns": 8183750625,
+      "at_ns": 11560491591,
       "physical_execution_id": "campaign-workspace-7"
     },
     {
       "sequence": 89,
-      "program_id": "P08",
-      "type": "sharing.decided",
-      "at_ns": 8186965875,
-      "reason": "independent",
-      "physical_execution_id": "campaign-exact-4"
-    },
-    {
-      "sequence": 90,
-      "program_id": "P08",
-      "type": "logical.terminal",
-      "at_ns": 8186966125,
-      "reason": "complete",
-      "physical_execution_id": "campaign-exact-4"
-    },
-    {
-      "sequence": 91,
       "program_id": "P09",
-      "type": "physical.ended",
-      "at_ns": 8238337584,
+      "type": "sharing.decided",
+      "at_ns": 11572272131,
+      "reason": "independent",
       "physical_execution_id": "campaign-exact-5"
     },
     {
+      "sequence": 90,
+      "program_id": "P09",
+      "type": "logical.terminal",
+      "at_ns": 11572273381,
+      "reason": "complete",
+      "physical_execution_id": "campaign-exact-5"
+    },
+    {
+      "sequence": 91,
+      "program_id": "P08",
+      "type": "physical.ended",
+      "at_ns": 11582421532,
+      "physical_execution_id": "campaign-exact-4"
+    },
+    {
       "sequence": 92,
-      "program_id": "P12",
+      "program_id": "P11",
       "type": "physical.started",
-      "at_ns": 8238347709,
+      "at_ns": 11582438492,
       "physical_execution_id": "campaign-workspace-8"
     },
     {
       "sequence": 93,
-      "program_id": "P09",
+      "program_id": "P08",
       "type": "sharing.decided",
-      "at_ns": 8242065250,
+      "at_ns": 11595778699,
       "reason": "independent",
-      "physical_execution_id": "campaign-exact-5"
+      "physical_execution_id": "campaign-exact-4"
     },
     {
       "sequence": 94,
-      "program_id": "P09",
+      "program_id": "P08",
       "type": "logical.terminal",
-      "at_ns": 8242066042,
+      "at_ns": 11595780089,
       "reason": "complete",
-      "physical_execution_id": "campaign-exact-5"
+      "physical_execution_id": "campaign-exact-4"
     },
     {
       "sequence": 95,
-      "program_id": "P10",
+      "program_id": "P13",
       "type": "physical.ended",
-      "at_ns": 8374975709,
-      "physical_execution_id": "campaign-workspace-6"
+      "at_ns": 11708225643,
+      "physical_execution_id": "campaign-workflow-6"
     },
     {
       "sequence": 96,
-      "program_id": "P13",
+      "program_id": "P12",
       "type": "physical.started",
-      "at_ns": 8374986750,
-      "physical_execution_id": "campaign-workflow-9"
+      "at_ns": 11708236773,
+      "physical_execution_id": "campaign-workspace-9"
     },
     {
       "sequence": 97,
-      "program_id": "P10",
-      "type": "workspace.sealed",
-      "at_ns": 8375131459,
-      "reason": "sha256:293b270693cf7c885c5d05f7f8734dfbbbd92f38a7ebf1b2bd6f8144b484d0e0"
-    },
-    {
-      "sequence": 98,
-      "program_id": "P10",
-      "type": "physical.queued",
-      "at_ns": 8375229542,
-      "reason": "fifo",
-      "physical_execution_id": "campaign-verifier-17"
-    },
-    {
-      "sequence": 99,
-      "program_id": "P13",
-      "type": "physical.ended",
-      "at_ns": 12774961542,
-      "physical_execution_id": "campaign-workflow-9"
-    },
-    {
-      "sequence": 100,
-      "program_id": "P17",
-      "type": "physical.started",
-      "at_ns": 12774972584,
-      "physical_execution_id": "campaign-child-11"
-    },
-    {
-      "sequence": 101,
       "program_id": "P13",
       "type": "workflow.waiting",
-      "at_ns": 12774988042,
+      "at_ns": 11708270134,
       "reason": "workflow-main"
     },
     {
-      "sequence": 102,
+      "sequence": 98,
       "program_id": "P13",
       "type": "logical.terminal",
-      "at_ns": 12774989625,
+      "at_ns": 11708272634,
       "reason": "complete",
-      "physical_execution_id": "campaign-workflow-9"
+      "physical_execution_id": "campaign-workflow-6"
+    },
+    {
+      "sequence": 99,
+      "program_id": "P14",
+      "type": "admission.accepted",
+      "at_ns": 11708284554,
+      "reason": "admitted"
+    },
+    {
+      "sequence": 100,
+      "program_id": "P14",
+      "type": "logical.started",
+      "at_ns": 11708284684
+    },
+    {
+      "sequence": 101,
+      "program_id": "P14",
+      "type": "workflow.resumed",
+      "at_ns": 11708313614,
+      "reason": "freshness_changed"
+    },
+    {
+      "sequence": 102,
+      "program_id": "P15",
+      "type": "admission.accepted",
+      "at_ns": 11708327604,
+      "reason": "admitted"
     },
     {
       "sequence": 103,
-      "program_id": "P14",
-      "type": "admission.accepted",
-      "at_ns": 12774999959,
-      "reason": "admitted"
+      "program_id": "P15",
+      "type": "logical.started",
+      "at_ns": 11708327954
     },
     {
       "sequence": 104,
       "program_id": "P14",
-      "type": "logical.started",
-      "at_ns": 12775000000
+      "type": "physical.queued",
+      "at_ns": 11708350035,
+      "reason": "fifo",
+      "physical_execution_id": "campaign-workflow-17"
     },
     {
       "sequence": 105,
-      "program_id": "P14",
-      "type": "workflow.resumed",
-      "at_ns": 12775026167,
-      "reason": "freshness_changed"
+      "program_id": "P16",
+      "type": "admission.rejected",
+      "at_ns": 11708377785,
+      "reason": "authority_expired"
     },
     {
       "sequence": 106,
-      "program_id": "P14",
-      "type": "physical.queued",
-      "at_ns": 12775046375,
-      "reason": "fifo",
-      "physical_execution_id": "campaign-workflow-18"
+      "program_id": "P16",
+      "type": "logical.terminal",
+      "at_ns": 11708378035,
+      "reason": "rejected"
     },
     {
       "sequence": 107,
       "program_id": "P15",
-      "type": "admission.accepted",
-      "at_ns": 12775050209,
-      "reason": "admitted"
+      "type": "workflow.resumed",
+      "at_ns": 11708385265,
+      "reason": "plan_grant_changed"
     },
     {
       "sequence": 108,
       "program_id": "P15",
-      "type": "logical.started",
-      "at_ns": 12775050375
+      "type": "authority.refreshed",
+      "at_ns": 11708385385,
+      "reason": "sha256:3386bbd65712ae54488ef00ef8fc551a6d8997207acdac5b3fdf2bf1fbc8b4ac"
     },
     {
       "sequence": 109,
-      "program_id": "P16",
-      "type": "admission.rejected",
-      "at_ns": 12775083750,
-      "reason": "authority_expired"
+      "program_id": "P15",
+      "type": "physical.queued",
+      "at_ns": 11708417715,
+      "reason": "fifo",
+      "physical_execution_id": "campaign-workflow-18"
     },
     {
       "sequence": 110,
-      "program_id": "P16",
-      "type": "logical.terminal",
-      "at_ns": 12775083917,
-      "reason": "rejected"
+      "program_id": "P10",
+      "type": "physical.ended",
+      "at_ns": 17612337242,
+      "physical_execution_id": "campaign-workspace-7"
     },
     {
       "sequence": 111,
-      "program_id": "P15",
-      "type": "workflow.resumed",
-      "at_ns": 12775108000,
-      "reason": "plan_grant_changed"
+      "program_id": "P17",
+      "type": "physical.started",
+      "at_ns": 17612353642,
+      "physical_execution_id": "campaign-child-13"
     },
     {
       "sequence": 112,
-      "program_id": "P15",
-      "type": "authority.refreshed",
-      "at_ns": 12775108042,
-      "reason": "sha256:f204cffd4d8da346c570ca01398f4dfeb30ca0ec3d0f0e969ed39c3ddd5d78c5"
+      "program_id": "P10",
+      "type": "workspace.sealed",
+      "at_ns": 17620577792,
+      "reason": "sha256:293b270693cf7c885c5d05f7f8734dfbbbd92f38a7ebf1b2bd6f8144b484d0e0"
     },
     {
       "sequence": 113,
-      "program_id": "P15",
+      "program_id": "P10",
       "type": "physical.queued",
-      "at_ns": 12775123084,
+      "at_ns": 17628149006,
       "reason": "fifo",
-      "physical_execution_id": "campaign-workflow-19"
+      "physical_execution_id": "campaign-verifier-19"
     },
     {
       "sequence": 114,
       "program_id": "P11",
       "type": "physical.ended",
-      "at_ns": 12811563209,
-      "physical_execution_id": "campaign-workspace-7"
+      "at_ns": 17638164186,
+      "physical_execution_id": "campaign-workspace-8"
     },
     {
       "sequence": 115,
       "program_id": "P03",
       "type": "physical.started",
-      "at_ns": 12811573917,
+      "at_ns": 17638178736,
       "physical_execution_id": "campaign-guest-14"
     },
     {
       "sequence": 116,
       "program_id": "P11",
       "type": "workspace.sealed",
-      "at_ns": 12811713334,
+      "at_ns": 17646713439,
       "reason": "sha256:293b270693cf7c885c5d05f7f8734dfbbbd92f38a7ebf1b2bd6f8144b484d0e0"
     },
     {
       "sequence": 117,
       "program_id": "P12",
       "type": "physical.ended",
-      "at_ns": 12859983584,
-      "physical_execution_id": "campaign-workspace-8"
+      "at_ns": 17727340894,
+      "physical_execution_id": "campaign-workspace-9"
     },
     {
       "sequence": 118,
       "program_id": "P02",
       "type": "physical.started",
-      "at_ns": 12859997584,
+      "at_ns": 17727355745,
       "physical_execution_id": "campaign-guest-15"
     },
     {
       "sequence": 119,
       "program_id": "P12",
       "type": "workspace.sealed",
-      "at_ns": 12860132125,
+      "at_ns": 17736068230,
       "reason": "sha256:904bf5c9bc6e36ce99bfd934365839e122b4534ab577a8552282e641305fd5ad"
     },
     {
       "sequence": 120,
       "program_id": "P12",
       "type": "physical.queued",
-      "at_ns": 12860224417,
+      "at_ns": 17744542453,
       "reason": "fifo",
       "physical_execution_id": "campaign-verifier-20"
     },
@@ -1389,207 +1389,207 @@
       "sequence": 121,
       "program_id": "P17",
       "type": "physical.ended",
-      "at_ns": 17209349042,
-      "physical_execution_id": "campaign-child-11"
+      "at_ns": 23398295400,
+      "physical_execution_id": "campaign-child-13"
     },
     {
       "sequence": 122,
       "program_id": "P17",
       "type": "logical.terminal",
-      "at_ns": 17209355042,
+      "at_ns": 23398307320,
       "reason": "complete",
-      "physical_execution_id": "campaign-child-11"
+      "physical_execution_id": "campaign-child-13"
     },
     {
       "sequence": 123,
       "program_id": "P04",
       "type": "physical.started",
-      "at_ns": 17209359875,
+      "at_ns": 23398311620,
       "physical_execution_id": "campaign-workspace-16"
     },
     {
       "sequence": 124,
-      "program_id": "P20",
-      "type": "admission.rejected",
-      "at_ns": 17209502625,
-      "reason": "parent_terminal"
-    },
-    {
-      "sequence": 125,
-      "program_id": "P20",
-      "type": "logical.terminal",
-      "at_ns": 17209502750,
-      "reason": "cancelled"
-    },
-    {
-      "sequence": 126,
       "program_id": "P03",
       "type": "physical.ended",
-      "at_ns": 17254232834,
+      "at_ns": 23399523733,
       "physical_execution_id": "campaign-guest-14"
     },
     {
-      "sequence": 127,
+      "sequence": 125,
       "program_id": "P03",
       "type": "logical.terminal",
-      "at_ns": 17254235125,
+      "at_ns": 23399527113,
       "reason": "complete",
       "physical_execution_id": "campaign-guest-14"
     },
     {
-      "sequence": 128,
-      "program_id": "P10",
+      "sequence": 126,
+      "program_id": "P14",
       "type": "physical.started",
-      "at_ns": 17254237292,
-      "physical_execution_id": "campaign-verifier-17"
+      "at_ns": 23399531073,
+      "physical_execution_id": "campaign-workflow-17"
+    },
+    {
+      "sequence": 127,
+      "program_id": "P20",
+      "type": "admission.rejected",
+      "at_ns": 23413658868,
+      "reason": "parent_terminal"
+    },
+    {
+      "sequence": 128,
+      "program_id": "P20",
+      "type": "logical.terminal",
+      "at_ns": 23413659598,
+      "reason": "cancelled"
     },
     {
       "sequence": 129,
-      "program_id": "P10",
+      "program_id": "P02",
       "type": "physical.ended",
-      "at_ns": 17254240625,
-      "physical_execution_id": "campaign-verifier-17"
+      "at_ns": 23493360813,
+      "physical_execution_id": "campaign-guest-15"
     },
     {
       "sequence": 130,
-      "program_id": "P14",
-      "type": "physical.started",
-      "at_ns": 17254244042,
-      "physical_execution_id": "campaign-workflow-18"
+      "program_id": "P02",
+      "type": "logical.terminal",
+      "at_ns": 23493366543,
+      "reason": "complete",
+      "physical_execution_id": "campaign-guest-15"
     },
     {
       "sequence": 131,
-      "program_id": "P10",
-      "type": "verification.completed",
-      "at_ns": 17256664334,
-      "reason": "sha256:293b270693cf7c885c5d05f7f8734dfbbbd92f38a7ebf1b2bd6f8144b484d0e0:sha256:b2bdd0b343d2663ddaea8b1505fa44f16ad81fcb3d930ac039ee9ad435914e72:independent",
-      "physical_execution_id": "campaign-verifier-17"
+      "program_id": "P15",
+      "type": "physical.started",
+      "at_ns": 23493373233,
+      "physical_execution_id": "campaign-workflow-18"
     },
     {
       "sequence": 132,
-      "program_id": "P11",
-      "type": "verification.completed",
-      "at_ns": 17256719459,
-      "reason": "sha256:293b270693cf7c885c5d05f7f8734dfbbbd92f38a7ebf1b2bd6f8144b484d0e0:sha256:b2bdd0b343d2663ddaea8b1505fa44f16ad81fcb3d930ac039ee9ad435914e72:root_exact_shared",
-      "physical_execution_id": "campaign-verifier-17"
+      "program_id": "P14",
+      "type": "physical.ended",
+      "at_ns": 29153394034,
+      "physical_execution_id": "campaign-workflow-17"
     },
     {
       "sequence": 133,
       "program_id": "P10",
-      "type": "logical.terminal",
-      "at_ns": 17256965500,
-      "reason": "complete",
-      "physical_execution_id": "campaign-workspace-6"
+      "type": "physical.started",
+      "at_ns": 29153405855,
+      "physical_execution_id": "campaign-verifier-19"
     },
     {
       "sequence": 134,
-      "program_id": "P11",
-      "type": "logical.terminal",
-      "at_ns": 17257094959,
-      "reason": "complete",
-      "physical_execution_id": "campaign-workspace-7"
+      "program_id": "P10",
+      "type": "physical.ended",
+      "at_ns": 29153422605,
+      "physical_execution_id": "campaign-verifier-19"
     },
     {
       "sequence": 135,
-      "program_id": "P02",
-      "type": "physical.ended",
-      "at_ns": 17273453750,
-      "physical_execution_id": "campaign-guest-15"
+      "program_id": "P14",
+      "type": "logical.terminal",
+      "at_ns": 29153440205,
+      "reason": "complete",
+      "physical_execution_id": "campaign-workflow-17"
     },
     {
       "sequence": 136,
-      "program_id": "P02",
-      "type": "logical.terminal",
-      "at_ns": 17273457542,
-      "reason": "complete",
-      "physical_execution_id": "campaign-guest-15"
+      "program_id": "P12",
+      "type": "physical.started",
+      "at_ns": 29153444315,
+      "physical_execution_id": "campaign-verifier-20"
     },
     {
       "sequence": 137,
-      "program_id": "P15",
-      "type": "physical.started",
-      "at_ns": 17273460000,
-      "physical_execution_id": "campaign-workflow-19"
+      "program_id": "P12",
+      "type": "physical.ended",
+      "at_ns": 29153448325,
+      "physical_execution_id": "campaign-verifier-20"
     },
     {
       "sequence": 138,
-      "program_id": "P04",
-      "type": "physical.ended",
-      "at_ns": 21685283709,
-      "physical_execution_id": "campaign-workspace-16"
+      "program_id": "P10",
+      "type": "verification.completed",
+      "at_ns": 29163190252,
+      "reason": "sha256:293b270693cf7c885c5d05f7f8734dfbbbd92f38a7ebf1b2bd6f8144b484d0e0:sha256:b2bdd0b343d2663ddaea8b1505fa44f16ad81fcb3d930ac039ee9ad435914e72:independent",
+      "physical_execution_id": "campaign-verifier-19"
     },
     {
       "sequence": 139,
-      "program_id": "P12",
-      "type": "physical.started",
-      "at_ns": 21685299917,
-      "physical_execution_id": "campaign-verifier-20"
+      "program_id": "P11",
+      "type": "verification.completed",
+      "at_ns": 29163206692,
+      "reason": "sha256:293b270693cf7c885c5d05f7f8734dfbbbd92f38a7ebf1b2bd6f8144b484d0e0:sha256:b2bdd0b343d2663ddaea8b1505fa44f16ad81fcb3d930ac039ee9ad435914e72:root_exact_shared",
+      "physical_execution_id": "campaign-verifier-19"
     },
     {
       "sequence": 140,
       "program_id": "P12",
-      "type": "physical.ended",
-      "at_ns": 21685311542,
-      "physical_execution_id": "campaign-verifier-20"
-    },
-    {
-      "sequence": 141,
-      "program_id": "P04",
-      "type": "workspace.discarded",
-      "at_ns": 21685333459,
-      "reason": "after_workspace_fork"
-    },
-    {
-      "sequence": 142,
-      "program_id": "P04",
-      "type": "logical.terminal",
-      "at_ns": 21685334042,
-      "reason": "cancelled",
-      "physical_execution_id": "campaign-workspace-16"
-    },
-    {
-      "sequence": 143,
-      "program_id": "P12",
       "type": "verification.completed",
-      "at_ns": 21689635084,
+      "at_ns": 29174821420,
       "reason": "sha256:904bf5c9bc6e36ce99bfd934365839e122b4534ab577a8552282e641305fd5ad:sha256:b2bdd0b343d2663ddaea8b1505fa44f16ad81fcb3d930ac039ee9ad435914e72:independent",
       "physical_execution_id": "campaign-verifier-20"
     },
     {
-      "sequence": 144,
-      "program_id": "P12",
+      "sequence": 141,
+      "program_id": "P10",
       "type": "logical.terminal",
-      "at_ns": 21690950500,
+      "at_ns": 29187666181,
+      "reason": "complete",
+      "physical_execution_id": "campaign-workspace-7"
+    },
+    {
+      "sequence": 142,
+      "program_id": "P11",
+      "type": "logical.terminal",
+      "at_ns": 29196740110,
       "reason": "complete",
       "physical_execution_id": "campaign-workspace-8"
     },
     {
-      "sequence": 145,
-      "program_id": "P15",
+      "sequence": 143,
+      "program_id": "P12",
+      "type": "logical.terminal",
+      "at_ns": 29232379921,
+      "reason": "complete",
+      "physical_execution_id": "campaign-workspace-9"
+    },
+    {
+      "sequence": 144,
+      "program_id": "P04",
       "type": "physical.ended",
-      "at_ns": 21694320792,
-      "physical_execution_id": "campaign-workflow-19"
+      "at_ns": 29234605716,
+      "physical_execution_id": "campaign-workspace-16"
+    },
+    {
+      "sequence": 145,
+      "program_id": "P04",
+      "type": "workspace.discarded",
+      "at_ns": 29236809190,
+      "reason": "after_workspace_fork"
     },
     {
       "sequence": 146,
-      "program_id": "P15",
+      "program_id": "P04",
       "type": "logical.terminal",
-      "at_ns": 21694354000,
-      "reason": "complete",
-      "physical_execution_id": "campaign-workflow-19"
+      "at_ns": 29236810230,
+      "reason": "cancelled",
+      "physical_execution_id": "campaign-workspace-16"
     },
     {
       "sequence": 147,
-      "program_id": "P14",
+      "program_id": "P15",
       "type": "physical.ended",
-      "at_ns": 21700452334,
+      "at_ns": 29298968662,
       "physical_execution_id": "campaign-workflow-18"
     },
     {
       "sequence": 148,
-      "program_id": "P14",
+      "program_id": "P15",
       "type": "logical.terminal",
-      "at_ns": 21700479875,
+      "at_ns": 29299009283,
       "reason": "complete",
       "physical_execution_id": "campaign-workflow-18"
     }

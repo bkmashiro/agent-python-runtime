@@ -32,7 +32,7 @@ class ArtifactVerifierTests(unittest.TestCase):
         self.artifact.write_bytes(b"\x00asm\x01\x00\x00\x00")
         self.manifest = {
             "schema_version": 2,
-            "abi_version": "v1",
+            "abi_version": "v2",
             "artifact_profile": "base",
             "target": "wasm32-wasip1",
             "artifact": {
@@ -50,11 +50,13 @@ class ArtifactVerifierTests(unittest.TestCase):
             "wasm": {
                 "imports": [
                     {"module": "wasi_snapshot_preview1", "name": "fd_write"},
-                    {"module": "agent_runtime_v1", "name": "host_call"},
-                    {"module": "agent_runtime_v1", "name": "materialize_value"},
-                    {"module": "agent_runtime_v1", "name": "submit_call"},
-                    {"module": "agent_runtime_v1", "name": "materialize_call"},
-                    {"module": "agent_runtime_v1", "name": "materialize_slot"},
+                    {"module": "agent_runtime_v2", "name": "host_call"},
+                    {"module": "agent_runtime_v2", "name": "materialize_value"},
+                    {"module": "agent_runtime_v2", "name": "submit_call"},
+                    {"module": "agent_runtime_v2", "name": "materialize_call"},
+                    {"module": "agent_runtime_v2", "name": "prepare_plm_call"},
+                    {"module": "agent_runtime_v2", "name": "linearize_plm_call"},
+                    {"module": "agent_runtime_v2", "name": "materialize_slot"},
                 ],
                 "exports": [
                     "_initialize",
@@ -99,7 +101,7 @@ class ArtifactVerifierTests(unittest.TestCase):
 
     def test_rejects_forbidden_import_name_in_capability_module(self):
         manifest = copy.deepcopy(self.manifest)
-        manifest["wasm"]["imports"].append({"module": "agent_runtime_v1", "name": "raw_socket"})
+        manifest["wasm"]["imports"].append({"module": "agent_runtime_v2", "name": "raw_socket"})
         with self.assertRaisesRegex(ValueError, "forbidden import"):
             self.verifier.verify(self.artifact, manifest)
 

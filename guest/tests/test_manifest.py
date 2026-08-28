@@ -119,7 +119,7 @@ class ManifestWriterTests(unittest.TestCase):
             qualified = json.loads((root / "import-qualification.json").read_text())["qualified_roots"]
             self.assertEqual(qualified, manifest["python_import_qualification"]["qualified_roots"])
             self.assertEqual("import-qualification.json", manifest["python_import_qualification"]["filename"])
-            self.assertEqual("v1", manifest["abi_version"])
+            self.assertEqual("v2", manifest["abi_version"])
             self.assertEqual(8, manifest["artifact"]["size"])
             self.assertEqual(
                 "93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476",

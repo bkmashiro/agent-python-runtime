@@ -345,7 +345,7 @@ func distributionManifestFixture(t *testing.T, artifact []byte, profile string) 
 	}
 	return map[string]any{
 		"schema_version":    4,
-		"abi_version":       "v1",
+		"abi_version":       "v2",
 		"artifact_profile":  profile,
 		"target":            "wasm32-wasip1",
 		"artifact":          map[string]any{"filename": filename, "size": len(artifact), "sha256": hex.EncodeToString(artifactSum[:])},

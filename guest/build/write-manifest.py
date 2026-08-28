@@ -256,7 +256,7 @@ def build_manifest(
 
     return {
         "schema_version": 4,
-        "abi_version": "v1",
+        "abi_version": "v2",
         "artifact_profile": artifact_profile,
         "target": lock["target"],
         "artifact": {

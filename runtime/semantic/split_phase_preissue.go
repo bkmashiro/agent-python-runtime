@@ -3,6 +3,7 @@ package semantic
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
@@ -108,7 +109,7 @@ func (sink *splitPhaseIssueSink) Snapshot() StreamingPreDispatchSnapshot {
 }
 
 // IssueQualifiedSplitPhase moves one already-qualified source-time read into
-// the same Run-private table later used by compiler-emitted runtime issue.
+// the same Run-private table later used by the historical compiler bridge.
 func IssueQualifiedSplitPhase(ctx context.Context, table *capability.SplitPhaseTable, call QualifiedCall) error {
 	if ctx == nil || table == nil || !call.valid() || call.binding.PlanSHA256 != table.PlanIdentity() {
 		return ErrPreDispatchInvalid
@@ -128,6 +129,35 @@ func IssueQualifiedSplitPhase(ctx context.Context, table *capability.SplitPhaseT
 		return ErrPreDispatchInvalid
 	}
 	if err := table.IssueOrReuse(ctx, slot+"-1", request); err != nil {
+		return err
+	}
+	return nil
+}
+
+// PrepareQualifiedPLM converts one complete-source semantic proof into the
+// versioned Host PLM runtime identity. It is used only after SourceSHA256 is the
+// final sealed source; pre-seal streaming candidates remain disabled.
+func PrepareQualifiedPLM(ctx context.Context, table *capability.SplitPhaseTable, call QualifiedCall) error {
+	if ctx == nil || table == nil || !call.valid() || call.binding.PlanSHA256 != table.PlanIdentity() {
+		return ErrPreDispatchInvalid
+	}
+	baseSlot, _, ok := call.SplitPhaseSiteIDs()
+	if !ok {
+		return ErrPreDispatchInvalid
+	}
+	siteID := strings.TrimPrefix(baseSlot, "slot-")
+	dynamicSlot := baseSlot + "-1"
+	request, err := json.Marshal(struct {
+		CallID     string          `json:"call_id"`
+		Capability string          `json:"capability"`
+		Arguments  json.RawMessage `json:"arguments"`
+	}{
+		CallID: "plm-" + siteID + "-1", Capability: call.Capability(), Arguments: call.CanonicalArguments(),
+	})
+	if err != nil {
+		return ErrPreDispatchInvalid
+	}
+	if err := table.PrepareRuntimePLM(ctx, dynamicSlot, request, call.SourceSHA256()); err != nil {
 		return err
 	}
 	return nil

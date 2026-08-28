@@ -302,7 +302,7 @@ func validateDistributionManifest(manifest distributionArtifactManifest, artifac
 		"numpy-core": "agent-python-runtime-numpy-core.wasm",
 		"attrs-770":  "agent-python-runtime-attrs-770.wasm",
 	}[manifest.ArtifactProfile]
-	if expectedFilename == "" || (manifest.SchemaVersion != 2 && manifest.SchemaVersion != 3 && manifest.SchemaVersion != 4) || manifest.ABIVersion != "v1" || manifest.Target != "wasm32-wasip1" ||
+	if expectedFilename == "" || (manifest.SchemaVersion != 2 && manifest.SchemaVersion != 3 && manifest.SchemaVersion != 4) || manifest.ABIVersion != "v2" || manifest.Target != "wasm32-wasip1" ||
 		manifest.Artifact.Filename != expectedFilename || artifactFilename != expectedFilename || manifest.Artifact.Size != int64(len(artifact)) ||
 		!artifactHexDigestPattern.MatchString(manifest.Artifact.SHA256) || !artifactCommitPattern.MatchString(manifest.Build.RepositoryCommit) ||
 		manifest.Build.SourceDateEpoch == "" || manifest.Build.CompilerTarget != "wasm32-wasip1" || manifest.Build.ExecutionModel != "reactor" ||

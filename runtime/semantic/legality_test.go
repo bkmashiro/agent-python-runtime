@@ -94,6 +94,33 @@ func TestIssueQualifiedSplitPhaseUsesSpanStableDynamicSlot(t *testing.T) {
 	}
 }
 
+func TestPrepareQualifiedPLMUsesFinalSemanticSourceIdentity(t *testing.T) {
+	adapter := &legalityPLMAdapter{}
+	plan := legalityPLMPlan(t, adapter)
+	verified, site := legalityVerifiedAnalysis(t, plan, true)
+	call, ok := CanPreissue(verified, plan, site.ID, legalityContext()).QualifiedCall()
+	if !ok {
+		t.Fatal("PLM qualified call unavailable")
+	}
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "semantic-plm", Plan: plan})
+	if err != nil {
+		t.Fatal(err)
+	}
+	table, err := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := PrepareQualifiedPLM(context.Background(), table, call); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot := table.Snapshot(); snapshot.CandidatesPrepared != 1 || snapshot.Submitted != 1 || broker.Calls() != 0 {
+		t.Fatalf("snapshot=%+v calls=%d", snapshot, broker.Calls())
+	}
+	if err := broker.Finalize(false); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCanClaimStagedObservationRequiresExactIdentityAndReadyState(t *testing.T) {
 	plan := legalityTestPlan(t, true)
 	verified, site := legalityVerifiedAnalysis(t, plan, true)
@@ -276,6 +303,60 @@ func legalityVerifiedAnalysis(t *testing.T, plan *capability.Plan, necessarilyRe
 		t.Fatal(err)
 	}
 	return VerifiedAnalysis{analysisJSON: encoded}, site
+}
+
+type legalityPLMAdapter struct{}
+
+func (*legalityPLMAdapter) Call(context.Context, json.RawMessage) (json.RawMessage, error) {
+	return json.RawMessage(`{"value":"ok"}`), nil
+}
+
+func (*legalityPLMAdapter) PLMValidatorIdentities() capability.PLMValidatorIdentities {
+	return capability.PLMValidatorIdentities{
+		Temporal: "semantic-plm-temporal.v1", ProviderNonInterference: "semantic-plm-provider.v1",
+	}
+}
+
+func (*legalityPLMAdapter) ValidatePLM(_ context.Context, request capability.PLMValidationRequest) (capability.PLMValidationResult, error) {
+	return capability.PLMValidationResult{
+		Temporal: request.Certificate.Temporal, TemporalValid: true, ProviderNonInterferenceValid: true,
+	}, nil
+}
+
+func (*legalityPLMAdapter) PLMProviderSessionIdentity(context.Context) string {
+	return "semantic-provider-session.v1"
+}
+
+func legalityPLMPlan(t *testing.T, adapter *legalityPLMAdapter) *capability.Plan {
+	t.Helper()
+	registry := capability.NewRegistry()
+	grant, err := capability.NewGrant(json.RawMessage(`{"principal":"test-plm"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := capability.Spec{
+		Name: "sources.read", Version: "sources.read.plm.v1", Description: "Read one immutable PLM source.",
+		EffectClass: capability.EffectExternalRead, Playback: capability.PlaybackLiveOnly, HandlerIdentity: "sources-read-plm-v1",
+		InputSchema:  json.RawMessage(`{"type":"object","properties":{"key":{"type":"string"}},"required":["key"],"additionalProperties":false}`),
+		OutputSchema: json.RawMessage(`{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}`),
+		Python:       &capability.PythonProjection{Module: "sources", Method: "read", Arguments: []string{"key"}},
+		ReadOnly:     true, Idempotent: true,
+		PLM: &capability.PLMContract{
+			Version: capability.PLMContractVersionV1, Temporal: capability.TemporalImmutable, PrepareEffect: capability.PrepareSilentRead,
+			Speculation: capability.SpeculationBudgeted, Failure: capability.FailureRetryAtLinearize, Authority: capability.AuthorityRecheckAtLinearize,
+			Resource:          capability.ResourceReference{Namespace: "source", Argument: "key"},
+			TemporalValidator: "semantic-plm-temporal.v1", ProviderNonInterferenceValidator: "semantic-plm-provider.v1",
+			MaxResultBytes: 1 << 20, CostUnits: 1,
+		},
+	}
+	if err := registry.Register(spec, grant, adapter); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return plan
 }
 
 func legalityTestPlan(t *testing.T, qualified bool) *capability.Plan {

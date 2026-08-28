@@ -1,5 +1,5 @@
-#ifndef AGENT_RUNTIME_V1_H
-#define AGENT_RUNTIME_V1_H
+#ifndef AGENT_RUNTIME_V2_H
+#define AGENT_RUNTIME_V2_H
 
 #include <stdint.h>
 
@@ -12,37 +12,37 @@
 #define AGENT_RUNTIME_IMPORT(module_name, import_name_value)
 #endif
 
-AGENT_RUNTIME_IMPORT("agent_runtime_v1", "host_call")
+AGENT_RUNTIME_IMPORT("agent_runtime_v2", "host_call")
 int32_t agent_runtime_host_call(const char *request,
                                 int32_t request_len,
                                 char *response,
                                 int32_t response_cap);
 
-AGENT_RUNTIME_IMPORT("agent_runtime_v1", "materialize_value")
+AGENT_RUNTIME_IMPORT("agent_runtime_v2", "materialize_value")
 int32_t agent_runtime_materialize_value(const char *decision,
                                         int32_t decision_len,
                                         char *response,
                                         int32_t response_cap);
 
-AGENT_RUNTIME_IMPORT("agent_runtime_v1", "submit_call")
+AGENT_RUNTIME_IMPORT("agent_runtime_v2", "submit_call")
 int32_t agent_runtime_submit_call(const char *slot,
                                   int32_t slot_len,
                                   const char *request,
                                   int32_t request_len);
 
-AGENT_RUNTIME_IMPORT("agent_runtime_v1", "materialize_call")
+AGENT_RUNTIME_IMPORT("agent_runtime_v2", "materialize_call")
 int32_t agent_runtime_materialize_call(const char *slot,
                                        int32_t slot_len,
                                        char *response,
                                        int32_t response_cap);
 
-AGENT_RUNTIME_IMPORT("agent_runtime_v1", "prepare_plm_call")
+AGENT_RUNTIME_IMPORT("agent_runtime_v2", "prepare_plm_call")
 int32_t agent_runtime_prepare_plm_call(const char *slot,
                                        int32_t slot_len,
                                        const char *request,
                                        int32_t request_len);
 
-AGENT_RUNTIME_IMPORT("agent_runtime_v1", "linearize_plm_call")
+AGENT_RUNTIME_IMPORT("agent_runtime_v2", "linearize_plm_call")
 int32_t agent_runtime_linearize_plm_call(const char *slot,
                                          int32_t slot_len,
                                          const char *request,
@@ -50,7 +50,7 @@ int32_t agent_runtime_linearize_plm_call(const char *slot,
                                          char *response,
                                          int32_t response_cap);
 
-AGENT_RUNTIME_IMPORT("agent_runtime_v1", "materialize_slot")
+AGENT_RUNTIME_IMPORT("agent_runtime_v2", "materialize_slot")
 int32_t agent_runtime_materialize_slot(const char *slot,
                                        int32_t slot_len,
                                        char *response,

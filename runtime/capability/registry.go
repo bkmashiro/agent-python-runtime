@@ -380,7 +380,9 @@ func (plan *Plan) StreamingObservationBinding(name string) (StreamingObservation
 	}
 	registered, ok := plan.registrations[name]
 	qualification, qualified := preDispatchQualification(registered.spec)
-	if !ok || !qualified || !qualification.Eligible() {
+	legacyEligible := qualified && qualification.Eligible()
+	plmEligible := registered.spec.PLM != nil && registered.spec.PLM.Validate() == nil && registered.spec.PLM.PrepareEffect != PrepareNone
+	if !ok || (!legacyEligible && !plmEligible) {
 		return StreamingObservationBinding{}, false
 	}
 	specBytes, err := json.Marshal(registered.spec)
@@ -420,6 +422,14 @@ func (plan *Plan) PreDispatchEligible(name string) bool {
 	registered, ok := plan.lookup(name)
 	qualification, qualified := preDispatchQualification(registered.spec)
 	return ok && qualified && qualification.Eligible()
+}
+
+func (plan *Plan) PLMPrepareEligible(name string) bool {
+	if plan == nil {
+		return false
+	}
+	registered, ok := plan.lookup(name)
+	return ok && registered.spec.PLM != nil && registered.spec.PLM.Validate() == nil && registered.spec.PLM.PrepareEffect != PrepareNone
 }
 
 func (plan *Plan) ToolSchemas() []ToolSchema {

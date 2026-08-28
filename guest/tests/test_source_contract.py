@@ -3,7 +3,7 @@ import re
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-HEADER = ROOT / "guest" / "include" / "agent_runtime_v1.h"
+HEADER = ROOT / "guest" / "include" / "agent_runtime_v2.h"
 SOURCE = ROOT / "guest" / "src" / "runtime.c"
 BOOTSTRAP = ROOT / "guest" / "bootstrap" / "agent_runtime" / "__init__.py"
 
@@ -154,10 +154,12 @@ class GuestSourceContractTests(unittest.TestCase):
     def test_host_call_import_is_narrow_and_bounded(self):
         header = HEADER.read_text()
         source = SOURCE.read_text()
-        self.assertIn('AGENT_RUNTIME_IMPORT("agent_runtime_v1", "host_call")', header)
+        self.assertIn('AGENT_RUNTIME_IMPORT("agent_runtime_v2", "host_call")', header)
         self.assertIn("agent_runtime_host_call", header)
-        self.assertIn('AGENT_RUNTIME_IMPORT("agent_runtime_v1", "materialize_value")', header)
+        self.assertIn('AGENT_RUNTIME_IMPORT("agent_runtime_v2", "materialize_value")', header)
         self.assertIn("agent_runtime_materialize_value", header)
+        self.assertIn('AGENT_RUNTIME_IMPORT("agent_runtime_v2", "prepare_plm_call")', header)
+        self.assertIn('AGENT_RUNTIME_IMPORT("agent_runtime_v2", "linearize_plm_call")', header)
         self.assertIn('PyImport_AppendInittab("_agent_runtime_host"', source)
         self.assertIn("AGENT_RUNTIME_TOOL_RESPONSE_MAX", source)
         self.assertIn("AGENT_RUNTIME_MATERIALIZED_RESPONSE_MAX", source)

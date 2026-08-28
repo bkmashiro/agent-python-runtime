@@ -34,13 +34,15 @@ ALLOWED_SUPPORT_EXPORTS = {
     "__wasi_vfs_rt_init",
     "wasi_vfs_pack_fs",
 }
-ALLOWED_IMPORT_MODULES = {"wasi_snapshot_preview1", "agent_runtime_v1"}
+ALLOWED_IMPORT_MODULES = {"wasi_snapshot_preview1", "agent_runtime_v2"}
 REQUIRED_CUSTOM_IMPORTS = {
-    ("agent_runtime_v1", "host_call"),
-    ("agent_runtime_v1", "materialize_value"),
-    ("agent_runtime_v1", "submit_call"),
-    ("agent_runtime_v1", "materialize_call"),
-    ("agent_runtime_v1", "materialize_slot"),
+    ("agent_runtime_v2", "host_call"),
+    ("agent_runtime_v2", "materialize_value"),
+    ("agent_runtime_v2", "submit_call"),
+    ("agent_runtime_v2", "materialize_call"),
+    ("agent_runtime_v2", "prepare_plm_call"),
+    ("agent_runtime_v2", "linearize_plm_call"),
+    ("agent_runtime_v2", "materialize_slot"),
 }
 MAX_JSON_BYTES = 1 << 20
 MANIFEST_FIELDS = {
@@ -182,7 +184,7 @@ def verify(
     if artifact.read_bytes()[:4] != b"\x00asm":
         raise ValueError("artifact does not have the WASM magic")
     schema_version = manifest.get("schema_version")
-    if schema_version not in {2, 3, 4} or manifest.get("abi_version") != "v1":
+    if schema_version not in {2, 3, 4} or manifest.get("abi_version") != "v2":
         raise ValueError("unsupported manifest or ABI version")
     profile = manifest.get("artifact_profile")
     if profile not in ARTIFACT_FILENAMES:

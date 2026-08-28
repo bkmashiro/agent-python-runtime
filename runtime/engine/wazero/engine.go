@@ -1565,7 +1565,7 @@ type valueSlotContextKey struct{}
 const hostCallPayloadMax = 1024 * 1024
 
 func instantiateCapabilityHost(ctx context.Context, runtime wazerort.Runtime) error {
-	_, err := runtime.NewHostModuleBuilder("agent_runtime_v1").
+	_, err := runtime.NewHostModuleBuilder("agent_runtime_v2").
 		NewFunctionBuilder().
 		WithFunc(hostCall).
 		Export("host_call").

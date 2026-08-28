@@ -294,7 +294,9 @@ func canPreissue(verified VerifiedAnalysis, plan *capability.Plan, callSiteID st
 		return rejected(reasons...)
 	}
 	qualification, qualified := plan.PreDispatch(site.Capability)
-	if !qualified || !qualification.Eligible() {
+	legacyEligible := qualified && qualification.Eligible()
+	plmEligible := plan.PLMPrepareEligible(site.Capability)
+	if !legacyEligible && !plmEligible {
 		reasons = append(reasons, RejectCapabilityUnqualified)
 	}
 	binding, bound := plan.StreamingObservationBinding(site.Capability)
@@ -305,8 +307,14 @@ func canPreissue(verified VerifiedAnalysis, plan *capability.Plan, callSiteID st
 		reasons = append(reasons, RejectCanonicalArgumentsInvalid)
 	}
 	var resourceSHA string
-	if qualified && site.ArgumentsCanonical {
-		resourceSHA, err = resourceIdentity(qualification.Contract().Resource, site.CanonicalArguments)
+	if site.ArgumentsCanonical {
+		var resource capability.ResourceReference
+		if legacyEligible {
+			resource = qualification.Contract().Resource
+		} else if plmContract, ok := plan.PLMContract(site.Capability); ok {
+			resource = plmContract.Resource
+		}
+		resourceSHA, err = resourceIdentity(resource, site.CanonicalArguments)
 		if err != nil {
 			reasons = append(reasons, RejectResourceArgumentMissing)
 		}

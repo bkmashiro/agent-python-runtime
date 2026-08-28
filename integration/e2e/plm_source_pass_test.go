@@ -88,8 +88,209 @@ func TestRealGuestPLMSourceTimeCandidateReusesAndLinearizesAtOriginalCall(t *tes
 	}
 }
 
+func TestRealGuestPLMRuntimeDerivedCallsPreserveCodeAndReceipts(t *testing.T) {
+	artifact, err := osReadGuestArtifact(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var getCalls atomic.Uint32
+	var priceCalls atomic.Uint32
+	getAdapter := &e2ePLMAdapter{handler: capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		getCalls.Add(1)
+		return json.RawMessage(`{"value":5}`), nil
+	})}
+	priceAdapter := &e2ePLMAdapter{handler: capability.HandlerFunc(func(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
+		priceCalls.Add(1)
+		var arguments struct {
+			Value int `json:"value"`
+		}
+		if json.Unmarshal(raw, &arguments) != nil {
+			return nil, capability.ErrInvalidTool
+		}
+		return json.Marshal(map[string]int{"quote": arguments.Value * 2})
+	})}
+	plan := plmTwoE2EPlan(t, getAdapter, priceAdapter)
+	source := "a = tools.get(\"alpha\")\nx = a + 1\nindependent = 3 * 4\nb = tools.price(x)\nresult = [a, b, independent]\n"
+	request, _ := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "plm-runtime-derived", Code: source, Inputs: json.RawMessage(`{}`)})
+	plugins := unifiedPassCatalog(t)
+	plugins, err = plugins.Enable(sourcepatch.PLMCapabilityCallsName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var broker *capability.Broker
+	config := runtimeconfig.DefaultRunConfig()
+	config.Timeout = 90 * time.Second
+	runner, err := (wazeroengine.Factory{Passes: plugins, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+		created, createErr := capability.NewBroker(capability.Config{RunIdentity: "plm-runtime-derived", Plan: plan})
+		broker = created
+		return created, createErr
+	}}).New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	session, closeAnalysis := splitPhaseAnalysisSession(t, artifact, 1)
+	defer closeAnalysis()
+	execution, err := plugins.ExecuteCapabilityHostScheduled(
+		context.Background(), sourcepatch.PLMCapabilityCallsName, session, trustedSemanticRunner(t, runner), request,
+		plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan),
+	)
+	if err != nil || !execution.Applied || strings.Contains(execution.Patch.DerivedSource, "_pysolate_call_") {
+		t.Fatalf("execution=%+v err=%v", execution, err)
+	}
+	result, err := decodeSuccessfulGuestResult(execution.Payload)
+	if err != nil || string(result) != `[5,12,12]` {
+		t.Fatalf("result=%s payload=%s err=%v", result, execution.Payload, err)
+	}
+	evidence := trustedSemanticRunner(t, runner).SplitPhaseEvidence()
+	if getCalls.Load() != 1 || priceCalls.Load() != 1 || broker.CallCount() != 2 ||
+		evidence.CandidatesAdopted != 2 || evidence.JobsMaterialized != 2 {
+		t.Fatalf("get=%d price=%d calls=%d evidence=%+v", getCalls.Load(), priceCalls.Load(), broker.CallCount(), evidence)
+	}
+}
+
+func TestRealGuestPLMPreservesBranchLoopInvalidationAndFallback(t *testing.T) {
+	artifact, err := osReadGuestArtifact(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Run("branch and loop", func(t *testing.T) {
+		var physical atomic.Uint32
+		adapter := &e2ePLMAdapter{handler: capability.HandlerFunc(func(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
+			physical.Add(1)
+			var arguments struct {
+				Path string `json:"path"`
+			}
+			_ = json.Unmarshal(raw, &arguments)
+			return json.Marshal(map[string]string{"body": arguments.Path + "-body"})
+		})}
+		plan := plmE2EPlan(t, 3, adapter)
+		source := "values = []\nif inputs[\"take\"]:\n    branch = sources.read(\"branch\")\n    values.append(branch)\nfor item in inputs[\"items\"]:\n    value = sources.read(item)\n    values.append(value)\nresult = values\n"
+		result, broker, evidence, patch := runPLMExact(t, artifact, plan, adapter, "plm-control", source, json.RawMessage(`{"take":true,"items":["a","b"]}`))
+		if string(result) != `["branch-body","a-body","b-body"]` || physical.Load() != 3 || broker.CallCount() != 3 ||
+			evidence.CandidatesAdopted != 3 || evidence.JobsMaterialized != 3 || patch.ReplacementCount != 2 {
+			t.Fatalf("result=%s physical=%d calls=%d evidence=%+v patch=%+v", result, physical.Load(), broker.CallCount(), evidence, patch)
+		}
+	})
+	t.Run("validator invalidation", func(t *testing.T) {
+		var physical atomic.Uint32
+		adapter := &e2ePLMAdapter{invalidate: true, handler: capability.HandlerFunc(func(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
+			physical.Add(1)
+			var arguments struct {
+				Path string `json:"path"`
+			}
+			_ = json.Unmarshal(raw, &arguments)
+			return json.Marshal(map[string]string{"body": arguments.Path + "-body"})
+		})}
+		plan := plmE2EPlan(t, 1, adapter)
+		result, broker, evidence, _ := runPLMExact(t, artifact, plan, adapter, "plm-invalidate", "result = sources.read(\"alpha\")\n", json.RawMessage(`{}`))
+		if string(result) != `"alpha-body"` || physical.Load() == 0 || physical.Load() > 2 || broker.CallCount() != 1 ||
+			evidence.CandidatesRejected != 1 || evidence.CanonicalStarts != 1 || evidence.CandidatesAdopted != 0 {
+			t.Fatalf("result=%s physical=%d calls=%d evidence=%+v", result, physical.Load(), broker.CallCount(), evidence)
+		}
+	})
+	t.Run("unsupported fallback", func(t *testing.T) {
+		var physical atomic.Uint32
+		adapter := &e2ePLMAdapter{handler: capability.HandlerFunc(func(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
+			physical.Add(1)
+			var arguments struct {
+				Path string `json:"path"`
+			}
+			_ = json.Unmarshal(raw, &arguments)
+			return json.Marshal(map[string]string{"body": arguments.Path + "-body"})
+		})}
+		plan := plmE2EPlan(t, 1, adapter)
+		result, broker, evidence, patch := runPLMExact(t, artifact, plan, adapter, "plm-fallback", "result = sources.read(inputs[\"key\"])\n", json.RawMessage(`{"key":"alpha"}`))
+		if string(result) != `"alpha-body"` || physical.Load() != 1 || broker.CallCount() != 1 || patch.Applied() ||
+			evidence.CandidatesPrepared != 0 {
+			t.Fatalf("result=%s physical=%d calls=%d evidence=%+v patch=%+v", result, physical.Load(), broker.CallCount(), evidence, patch)
+		}
+	})
+}
+
+func runPLMExact(t *testing.T, artifact []byte, plan *capability.Plan, _ *e2ePLMAdapter, runID, source string, inputs json.RawMessage) (json.RawMessage, *capability.Broker, capability.SplitPhaseSnapshot, sourcepatch.Patch) {
+	t.Helper()
+	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: runID, Code: source, Inputs: inputs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plugins := unifiedPassCatalog(t)
+	plugins, err = plugins.Enable(sourcepatch.PLMCapabilityCallsName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var broker *capability.Broker
+	config := runtimeconfig.DefaultRunConfig()
+	config.Timeout = 90 * time.Second
+	runner, err := (wazeroengine.Factory{Passes: plugins, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+		created, createErr := capability.NewBroker(capability.Config{RunIdentity: runID, Plan: plan})
+		broker = created
+		return created, createErr
+	}}).New(context.Background(), artifact, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	session, closeAnalysis := splitPhaseAnalysisSession(t, artifact, 1)
+	defer closeAnalysis()
+	execution, err := plugins.ExecuteCapabilityHostScheduled(
+		context.Background(), sourcepatch.PLMCapabilityCallsName, session, trustedSemanticRunner(t, runner), request,
+		plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, decodeErr := decodeSuccessfulGuestResult(execution.Payload)
+	if decodeErr != nil {
+		t.Fatalf("payload=%s err=%v", execution.Payload, decodeErr)
+	}
+	return result, broker, trustedSemanticRunner(t, runner).SplitPhaseEvidence(), execution.Patch
+}
+
+func plmTwoE2EPlan(t *testing.T, getAdapter, priceAdapter *e2ePLMAdapter) *capability.Plan {
+	t.Helper()
+	registry := capability.NewRegistry()
+	grant, err := capability.NewGrant(json.RawMessage(`{"scope":"plm-two-e2e"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	specs := []struct {
+		name, method, argument, result, namespace, handlerIdentity string
+		input, output                                              json.RawMessage
+		adapter                                                    *e2ePLMAdapter
+	}{
+		{"tools.get", "get", "key", "value", "tools-get", "plm-tools-get-e2e.v1", json.RawMessage(`{"type":"object","properties":{"key":{"type":"string"}},"required":["key"],"additionalProperties":false}`), json.RawMessage(`{"type":"object","properties":{"value":{"type":"integer"}},"required":["value"],"additionalProperties":false}`), getAdapter},
+		{"tools.price", "price", "value", "quote", "tools-price", "plm-tools-price-e2e.v1", json.RawMessage(`{"type":"object","properties":{"value":{"type":"integer"}},"required":["value"],"additionalProperties":false}`), json.RawMessage(`{"type":"object","properties":{"quote":{"type":"integer"}},"required":["quote"],"additionalProperties":false}`), priceAdapter},
+	}
+	for _, item := range specs {
+		spec := capability.Spec{
+			Name: item.name, Version: "pysolate." + strings.ReplaceAll(item.name, ".", "-") + ".plm-e2e.v1", Description: "PLM two-call fixture.",
+			EffectClass: capability.EffectExternalRead, Playback: capability.PlaybackLiveOnly, HandlerIdentity: item.handlerIdentity,
+			InputSchema: item.input, OutputSchema: item.output,
+			Python:   &capability.PythonProjection{Module: "tools", Method: item.method, Arguments: []string{item.argument}, ResultField: item.result},
+			ReadOnly: true, Idempotent: true,
+			PLM: &capability.PLMContract{
+				Version: capability.PLMContractVersionV1, Temporal: capability.TemporalImmutable, PrepareEffect: capability.PrepareSilentRead,
+				Speculation: capability.SpeculationBudgeted, Failure: capability.FailureRetryAtLinearize, Authority: capability.AuthorityRecheckAtLinearize,
+				Resource:          capability.ResourceReference{Namespace: item.namespace, Argument: item.argument},
+				TemporalValidator: "pysolate.e2e.immutable-validator.v1", ProviderNonInterferenceValidator: "pysolate.e2e.provider-validator.v1",
+				MaxResultBytes: 4096, CostUnits: 1,
+			},
+		}
+		if err := registry.Register(spec, grant, item.adapter); err != nil {
+			t.Fatal(err)
+		}
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return plan
+}
+
 type e2ePLMAdapter struct {
-	handler capability.Handler
+	handler    capability.Handler
+	invalidate bool
 }
 
 func (adapter *e2ePLMAdapter) Call(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
@@ -107,8 +308,12 @@ func (adapter *e2ePLMAdapter) PLMProviderSessionIdentity(context.Context) string
 }
 
 func (adapter *e2ePLMAdapter) ValidatePLM(_ context.Context, request capability.PLMValidationRequest) (capability.PLMValidationResult, error) {
+	temporal := request.Certificate.Temporal
+	if adapter.invalidate {
+		temporal.ResourceIdentity += ":changed"
+	}
 	return capability.PLMValidationResult{
-		Temporal: request.Certificate.Temporal, TemporalValid: true, ProviderNonInterferenceValid: true,
+		Temporal: temporal, TemporalValid: true, ProviderNonInterferenceValid: true,
 		ValidationCostUnits: 1,
 	}, nil
 }

@@ -1,0 +1,320 @@
+{
+  "artifact_sha256": "sha256:e9e2416f0cd34b397222267ec18637b6973597a2ec9ec4bb9e9bb526eca40585",
+  "artifact_source_commit": "5bc36725f13034fa5418d6396d1c503820b513d4",
+  "economics_recalculated": [
+    {
+      "baseline_median_nanos": 4018421375,
+      "delta_percent": 32.00546321501687,
+      "plm_median_nanos": 5304535750,
+      "profile": "cold_end_to_end"
+    },
+    {
+      "baseline_median_nanos": 2690161042,
+      "delta_percent": 48.27027314448783,
+      "plm_median_nanos": 3988709125,
+      "profile": "engine_precompiled"
+    }
+  ],
+  "host_private_projection": [
+    "candidate_disposition",
+    "job_disposition",
+    "validation_cost_units",
+    "bounded_event_count"
+  ],
+  "provider_economic_projection": [
+    "physical_starts",
+    "canonical_restart_decisions",
+    "provider_validation_physical_events"
+  ],
+  "raw_bodies_stored": false,
+  "required_rows": {
+    "authority_and_quota": [
+      "TestPLMLinearizationRejectsChangedHostContextAndProviderQuota"
+    ],
+    "branch_loop_exception_failure_discard": [
+      "TestRealGuestPLMPreservesBranchLoopInvalidationAndFallback",
+      "TestRealGuestPLMEarlierExceptionDiscardsUnclaimedCandidate",
+      "TestRealGuestPLMPrepareFailureRetriesOnlyAtLinearization"
+    ],
+    "cancellation_and_late_completion": [
+      "TestPLMCancellationAndLateCompletionRemainRunOwned"
+    ],
+    "current_transport_and_order": [
+      "TestPLMCurrentPreparesTransportButReadsFinalValueOnlyAtLinearization",
+      "TestPLMCurrentReadsRemainOrderedAndStartOnlyAtTheirLogicalPoints"
+    ],
+    "foreign_identity": [
+      "TestSplitPhaseTableIsAtomicallyOwnedByOneRunBroker",
+      "TestPLMPrepareRejectsResourceAndSealedContractDrift"
+    ],
+    "immutable_ready_and_not_ready": [
+      "TestPLMImmutableCandidateAdoptsAtOriginalLinearizationPoint",
+      "TestPLMImmutableCandidateMayCompleteAfterLinearizationStarts"
+    ],
+    "lease_expiry_revocation_clock": [
+      "TestPLMVersionedAndLeasedCandidatesRequireCurrentEvidence",
+      "TestPLMLeaseRevocationAndClockEpochMismatchRestartCanonically"
+    ],
+    "pass_disabled": [
+      "TestRealGuestPLMPassDisabledExecutesUnchangedSource"
+    ],
+    "setup_failure": [
+      "TestSplitPhaseSetupFailureFinalizesSourceTimeCandidate"
+    ],
+    "snapshot_exact_and_mismatch": [
+      "TestPLMTemporalModesAdoptOnlyUnderSoundEvidence"
+    ],
+    "uncertain_provider_outcome": [
+      "TestPLMUncertainProviderOutcomeIsNeverReplayed"
+    ],
+    "version_changes": [
+      "TestPLMVersionChangeAfterValidationDoesNotMoveTheLogicalPoint",
+      "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder"
+    ]
+  },
+  "required_rows_passed": 12,
+  "runs": [
+    {
+      "command": [
+        "go",
+        "test",
+        "-json",
+        "./runtime/capability",
+        "-run",
+        "TestPLM|TestSplitPhaseTableIsAtomicallyOwned|TestSplitPhaseTableRejectsNil",
+        "-count=1"
+      ],
+      "name": "capability_temporal_faults",
+      "package_passes": [
+        "github.com/bkmashiro/agent-python-runtime/runtime/capability"
+      ],
+      "returncode": 0,
+      "test_pass_events": 71,
+      "unique_tests": [
+        "TestPLMCancellationAndLateCompletionRemainRunOwned",
+        "TestPLMCancellationAndLateCompletionRemainRunOwned/during_validation",
+        "TestPLMCancellationAndLateCompletionRemainRunOwned/late_completion_after_finalize_starts",
+        "TestPLMCandidateAndJobStateMachinesHaveExplicitTerminalDisposition",
+        "TestPLMContractV1AcceptsOnlyExplicitTemporalCombinations",
+        "TestPLMCurrentAndPrepareFailuresRestartAtLinearization",
+        "TestPLMCurrentPreparesTransportButReadsFinalValueOnlyAtLinearization",
+        "TestPLMCurrentReadsRemainOrderedAndStartOnlyAtTheirLogicalPoints",
+        "TestPLMFakeWorldInvalidationReturnsTheLinearizationPointValue",
+        "TestPLMImmutableCandidateAdoptsAtOriginalLinearizationPoint",
+        "TestPLMImmutableCandidateMayCompleteAfterLinearizationStarts",
+        "TestPLMInvalidCandidateRestartsCanonicallyInsideOneLogicalCall",
+        "TestPLMLeaseRevocationAndClockEpochMismatchRestartCanonically",
+        "TestPLMLeaseRevocationAndClockEpochMismatchRestartCanonically/clock_epoch_mismatch",
+        "TestPLMLeaseRevocationAndClockEpochMismatchRestartCanonically/revoked",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/Plan",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/Run",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/arguments",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/authority",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/capability",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/handler",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/occurrence",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/provider_session",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/resource",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/site",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/source_seal",
+        "TestPLMLinearizationRejectsChangedHostContextAndProviderQuota",
+        "TestPLMLinearizationRejectsChangedHostContextAndProviderQuota/actual_arguments",
+        "TestPLMLinearizationRejectsChangedHostContextAndProviderQuota/authority",
+        "TestPLMLinearizationRejectsChangedHostContextAndProviderQuota/provider_quota",
+        "TestPLMLinearizationRejectsChangedHostContextAndProviderQuota/provider_session",
+        "TestPLMLinearizationRejectsChangedHostContextAndProviderQuota/source_seal",
+        "TestPLMPrepareFailureIsHiddenAndRetriesAtLinearization",
+        "TestPLMPrepareRejectsResourceAndSealedContractDrift",
+        "TestPLMProviderVisibleQuotaChangeRejectsCandidate",
+        "TestPLMRuntimeBridgeBuildsCertificateAndLogicalContextFromHostState",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-00",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-01",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-02",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-03",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-04",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-05",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-06",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-07",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-08",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-09",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-10",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-11",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-12",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-13",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-14",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-15",
+        "TestPLMSnapshotAndProviderProofsAreRequiredAtLinearization",
+        "TestPLMStableFailureRequiresValidatorProof",
+        "TestPLMStableFailureRequiresValidatorProof/validated=false",
+        "TestPLMStableFailureRequiresValidatorProof/validated=true",
+        "TestPLMTemporalModesAdoptOnlyUnderSoundEvidence",
+        "TestPLMTemporalModesAdoptOnlyUnderSoundEvidence/lease_expired",
+        "TestPLMTemporalModesAdoptOnlyUnderSoundEvidence/lease_valid",
+        "TestPLMTemporalModesAdoptOnlyUnderSoundEvidence/snapshot_changed",
+        "TestPLMTemporalModesAdoptOnlyUnderSoundEvidence/snapshot_valid",
+        "TestPLMTemporalModesAdoptOnlyUnderSoundEvidence/version_changed",
+        "TestPLMTemporalModesAdoptOnlyUnderSoundEvidence/version_valid",
+        "TestPLMUncertainProviderOutcomeIsNeverReplayed",
+        "TestPLMVersionChangeAfterValidationDoesNotMoveTheLogicalPoint",
+        "TestPLMVersionedAndLeasedCandidatesRequireCurrentEvidence",
+        "TestPLMWallclockObservingRejectsPreparationAndRunsSequentially",
+        "TestSplitPhaseTableIsAtomicallyOwnedByOneRunBroker",
+        "TestSplitPhaseTableRejectsNilDuplicateAndLateOwners"
+      ]
+    },
+    {
+      "command": [
+        "go",
+        "test",
+        "-race",
+        "-json",
+        "./runtime/capability",
+        "-run",
+        "TestPLM|TestSplitPhaseTableIsAtomicallyOwned|TestSplitPhaseTableRejectsNil",
+        "-count=10"
+      ],
+      "name": "capability_repeated_race",
+      "package_passes": [
+        "github.com/bkmashiro/agent-python-runtime/runtime/capability"
+      ],
+      "returncode": 0,
+      "test_pass_events": 710,
+      "unique_tests": [
+        "TestPLMCancellationAndLateCompletionRemainRunOwned",
+        "TestPLMCancellationAndLateCompletionRemainRunOwned/during_validation",
+        "TestPLMCancellationAndLateCompletionRemainRunOwned/late_completion_after_finalize_starts",
+        "TestPLMCandidateAndJobStateMachinesHaveExplicitTerminalDisposition",
+        "TestPLMContractV1AcceptsOnlyExplicitTemporalCombinations",
+        "TestPLMCurrentAndPrepareFailuresRestartAtLinearization",
+        "TestPLMCurrentPreparesTransportButReadsFinalValueOnlyAtLinearization",
+        "TestPLMCurrentReadsRemainOrderedAndStartOnlyAtTheirLogicalPoints",
+        "TestPLMFakeWorldInvalidationReturnsTheLinearizationPointValue",
+        "TestPLMImmutableCandidateAdoptsAtOriginalLinearizationPoint",
+        "TestPLMImmutableCandidateMayCompleteAfterLinearizationStarts",
+        "TestPLMInvalidCandidateRestartsCanonicallyInsideOneLogicalCall",
+        "TestPLMLeaseRevocationAndClockEpochMismatchRestartCanonically",
+        "TestPLMLeaseRevocationAndClockEpochMismatchRestartCanonically/clock_epoch_mismatch",
+        "TestPLMLeaseRevocationAndClockEpochMismatchRestartCanonically/revoked",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/Plan",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/Run",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/arguments",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/authority",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/capability",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/handler",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/occurrence",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/provider_session",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/resource",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/site",
+        "TestPLMLinearizationAdoptsImmutableAndRejectsChangedBindings/source_seal",
+        "TestPLMLinearizationRejectsChangedHostContextAndProviderQuota",
+        "TestPLMLinearizationRejectsChangedHostContextAndProviderQuota/actual_arguments",
+        "TestPLMLinearizationRejectsChangedHostContextAndProviderQuota/authority",
+        "TestPLMLinearizationRejectsChangedHostContextAndProviderQuota/provider_quota",
+        "TestPLMLinearizationRejectsChangedHostContextAndProviderQuota/provider_session",
+        "TestPLMLinearizationRejectsChangedHostContextAndProviderQuota/source_seal",
+        "TestPLMPrepareFailureIsHiddenAndRetriesAtLinearization",
+        "TestPLMPrepareRejectsResourceAndSealedContractDrift",
+        "TestPLMProviderVisibleQuotaChangeRejectsCandidate",
+        "TestPLMRuntimeBridgeBuildsCertificateAndLogicalContextFromHostState",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-00",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-01",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-02",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-03",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-04",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-05",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-06",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-07",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-08",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-09",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-10",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-11",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-12",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-13",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-14",
+        "TestPLMSeededTwoCallProgramsRefineSequentialVisibleOrder/seed-15",
+        "TestPLMSnapshotAndProviderProofsAreRequiredAtLinearization",
+        "TestPLMStableFailureRequiresValidatorProof",
+        "TestPLMStableFailureRequiresValidatorProof/validated=false",
+        "TestPLMStableFailureRequiresValidatorProof/validated=true",
+        "TestPLMTemporalModesAdoptOnlyUnderSoundEvidence",
+        "TestPLMTemporalModesAdoptOnlyUnderSoundEvidence/lease_expired",
+        "TestPLMTemporalModesAdoptOnlyUnderSoundEvidence/lease_valid",
+        "TestPLMTemporalModesAdoptOnlyUnderSoundEvidence/snapshot_changed",
+        "TestPLMTemporalModesAdoptOnlyUnderSoundEvidence/snapshot_valid",
+        "TestPLMTemporalModesAdoptOnlyUnderSoundEvidence/version_changed",
+        "TestPLMTemporalModesAdoptOnlyUnderSoundEvidence/version_valid",
+        "TestPLMUncertainProviderOutcomeIsNeverReplayed",
+        "TestPLMVersionChangeAfterValidationDoesNotMoveTheLogicalPoint",
+        "TestPLMVersionedAndLeasedCandidatesRequireCurrentEvidence",
+        "TestPLMWallclockObservingRejectsPreparationAndRunsSequentially",
+        "TestSplitPhaseTableIsAtomicallyOwnedByOneRunBroker",
+        "TestSplitPhaseTableRejectsNilDuplicateAndLateOwners"
+      ]
+    },
+    {
+      "command": [
+        "go",
+        "test",
+        "-json",
+        "./runtime/engine/wazero",
+        "-run",
+        "TestSplitPhaseSetupFailureFinalizesSourceTimeCandidate",
+        "-count=10"
+      ],
+      "name": "setup_failure",
+      "package_passes": [
+        "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+      ],
+      "returncode": 0,
+      "test_pass_events": 10,
+      "unique_tests": [
+        "TestSplitPhaseSetupFailureFinalizesSourceTimeCandidate"
+      ]
+    },
+    {
+      "command": [
+        "go",
+        "test",
+        "-json",
+        "./integration/e2e",
+        "-run",
+        "TestRealGuestPLM",
+        "-count=1"
+      ],
+      "name": "exact_guest",
+      "package_passes": [
+        "github.com/bkmashiro/agent-python-runtime/integration/e2e"
+      ],
+      "returncode": 0,
+      "test_pass_events": 9,
+      "unique_tests": [
+        "TestRealGuestPLMEarlierExceptionDiscardsUnclaimedCandidate",
+        "TestRealGuestPLMPassDisabledExecutesUnchangedSource",
+        "TestRealGuestPLMPrepareFailureRetriesOnlyAtLinearization",
+        "TestRealGuestPLMPreservesBranchLoopInvalidationAndFallback",
+        "TestRealGuestPLMPreservesBranchLoopInvalidationAndFallback/branch_and_loop",
+        "TestRealGuestPLMPreservesBranchLoopInvalidationAndFallback/unsupported_fallback",
+        "TestRealGuestPLMPreservesBranchLoopInvalidationAndFallback/validator_invalidation",
+        "TestRealGuestPLMRuntimeDerivedCallsPreserveCodeAndReceipts",
+        "TestRealGuestPLMSourceTimeCandidateReusesAndLinearizesAtOriginalCall"
+      ]
+    }
+  ],
+  "schema_version": "pysolate.plm-fault-matrix.v1",
+  "seed_range": {
+    "count": 16,
+    "first": 0,
+    "last": 15
+  },
+  "target_commit": "ecfbb6aa22da1b331bc962c36f9be5fa22f6159c",
+  "visible_projection": [
+    "return_or_exception",
+    "logical_call_count",
+    "receipt_order",
+    "final_external_state"
+  ]
+}

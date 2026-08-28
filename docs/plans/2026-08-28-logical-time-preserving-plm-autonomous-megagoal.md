@@ -533,14 +533,14 @@ Required cases:
 
 Tasks:
 
-- [ ] Generate bounded small programs over the admitted subset.
-- [ ] Randomize provider completion order and version invalidation points deterministically by seed.
-- [ ] Compare visible return/exception, logical calls, receipt order and final external state.
-- [ ] Separately compare provider/economic and Host-private lifecycle projections.
-- [ ] Run race and repeated teardown tests.
-- [ ] Independently recalculate body-safe aggregates.
+- [x] Generate bounded small programs over the admitted subset.
+- [x] Randomize provider completion order and version invalidation points deterministically by seed.
+- [x] Compare visible return/exception, logical calls, receipt order and final external state.
+- [x] Separately compare provider/economic and Host-private lifecycle projections.
+- [x] Run race and repeated teardown tests.
+- [x] Independently recalculate body-safe aggregates.
 
-**Gate G7:** Transformed visible traces refine the baseline model for every admitted row; all other rows fall back or reject before unsafe execution. Provider/economic differences remain explicit.
+**Gate G7 result:** Transformed visible traces refined the baseline model for every admitted row; all other rows fell back or rejected before unsafe execution. Provider/economic differences remain explicit in `plm-v1-fault-matrix.json`.
 
 ## Gate 8: Formal core and claim calibration
 
@@ -600,8 +600,8 @@ Tasks:
 
 ## Current execution pointer
 
-**Current:** Gates 0 through 6 are complete. PLM uses one final Guest, exact Guest correctness passes and the controlled economics fixture is negative in both profiles, so PLM remains default-off without a third runtime framework.
+**Current:** Gates 0 through 7 are complete. PLM uses one final Guest, stays default-off after the negative controlled economics result, and passes deterministic temporal/fault evidence including typed uncertain-provider no-replay.
 
-**Next:** Execute Gate 7 differential, temporal and fault evidence, then proceed to the small-core artefact and closeout.
+**Next:** Execute Gate 8 formal core and claim calibration, then close the optional reserve decision and documentation.
 
 **Blocked:** No blocker.

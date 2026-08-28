@@ -261,6 +261,7 @@ type Engine struct {
 	valueSlots          *valueslot.Table
 	valueSlotEvidence   valueSlotEvidenceStore
 	splitPhaseEvidence  splitPhaseEvidenceStore
+	plmRunLifecycle     plmRunLifecycleStore
 }
 
 type valueSlotEvidenceStore struct {
@@ -1179,11 +1180,15 @@ type derivedSelection struct {
 	sourceValidationExport string
 	plmSourceSealIdentity  string
 	inlineCapability       *inlineCapabilitySelection
+	inlineLoweringNanos    uint64
+	inlineSelectionNanos   uint64
 }
 
 func (engine *Engine) prepareInlineCapabilitySelection(ctx context.Context, module api.Module, runRequest runtimeconfig.RunRequest, selection *derivedSelection) error {
 	inline := selection.inlineCapability
+	loweringStarted := time.Now()
 	payload, err := callGuestResponse(ctx, module, "runtime_transform_source_pass", inline.request, engine.config.MaxResponseBytes)
+	selection.inlineLoweringNanos = uint64(time.Since(loweringStarted))
 	if err != nil {
 		inline.passErr = err
 		return nil
@@ -1206,10 +1211,23 @@ func (engine *Engine) prepareInlineCapabilitySelection(ctx context.Context, modu
 	selection.payload = append(patchRaw, '\n')
 	selection.plmSourceSealIdentity = patch.OriginalSourceSHA256
 	inline.applied = true
-	return callStatusWithBytes(ctx, module, selection.export, selection.payload)
+	selectionStarted := time.Now()
+	err = callStatusWithBytes(ctx, module, selection.export, selection.payload)
+	selection.inlineSelectionNanos = uint64(time.Since(selectionStarted))
+	return err
 }
 
 func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepares <-chan string, streaming bool, selection *derivedSelection) (payload []byte, runErr error) {
+	var plmLifecycle *PLMRunLifecycleEvidence
+	if selection != nil && selection.inlineCapability != nil {
+		evidence := PLMRunLifecycleEvidence{SchemaVersion: PLMRunLifecycleSchemaVersion}
+		plmLifecycle = &evidence
+		started := time.Now()
+		defer func() {
+			plmLifecycle.TotalNanos = uint64(time.Since(started))
+			engine.plmRunLifecycle.set(*plmLifecycle)
+		}()
+	}
 	if len(request) == 0 || uint64(len(request)) > uint64(engine.config.MaxRequestBytes) {
 		return nil, errors.New("request exceeds configured bounds")
 	}
@@ -1401,6 +1419,9 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 	var module api.Module
 	initialized := false
 	if prepared != nil {
+		if plmLifecycle != nil {
+			plmLifecycle.PreparedModule = true
+		}
 		stderr = prepared.stderr
 		stdout = prepared.stdout
 		temporary = prepared.temporary
@@ -1412,7 +1433,13 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 			return nil, moduleErr
 		}
 		temporary = moduleTemporary
+		instantiateStarted := time.Now()
 		module, err = engine.runtime.InstantiateModule(runContext, engine.compiled, moduleConfig)
+		if plmLifecycle != nil {
+			plmLifecycle.ModuleInstantiations = 1
+			plmLifecycle.FreshModule = true
+			plmLifecycle.InstantiateNanos = uint64(time.Since(instantiateStarted))
+		}
 		if err != nil {
 			if temporary != nil {
 				_ = temporary.Close()
@@ -1434,11 +1461,21 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		defer func() { engine.coldEvidence.set(prepared.cold.finish()) }()
 	}
 	if !initialized {
+		initializeStarted := time.Now()
 		if err := callNoArgs(runContext, module, "_initialize"); err != nil {
 			return nil, withGuestDiagnostic(err, stderr.String())
 		}
+		if plmLifecycle != nil {
+			plmLifecycle.InitializeCalls = 1
+			plmLifecycle.InitializeNanos = uint64(time.Since(initializeStarted))
+		}
+		runtimeInitStarted := time.Now()
 		if err := callStatusWithBytes(runContext, module, "runtime_init", []byte("{}")); err != nil {
 			return nil, withGuestDiagnostic(err, stderr.String())
+		}
+		if plmLifecycle != nil {
+			plmLifecycle.RuntimeInitCalls = 1
+			plmLifecycle.RuntimeInitNanos = uint64(time.Since(runtimeInitStarted))
 		}
 	}
 	if engine.preparedNumpyInput != nil {
@@ -1450,12 +1487,25 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 	if selection != nil && selection.sourceValidationExport != "" {
 		validationExport = selection.sourceValidationExport
 	}
+	sourceValidationStarted := time.Now()
 	if err := callSourceValidation(runContext, module, validationExport, request); err != nil {
 		return nil, withGuestDiagnostic(err, stderr.String())
+	}
+	if plmLifecycle != nil {
+		plmLifecycle.SourceValidationCalls = 1
+		plmLifecycle.SourceValidationNanos = uint64(time.Since(sourceValidationStarted))
 	}
 	if selection != nil && selection.inlineCapability != nil {
 		if err := engine.prepareInlineCapabilitySelection(runContext, module, runRequest, selection); err != nil {
 			return nil, withGuestDiagnostic(err, stderr.String())
+		}
+		if plmLifecycle != nil {
+			plmLifecycle.LoweringCalls = 1
+			plmLifecycle.LoweringNanos = selection.inlineLoweringNanos
+			plmLifecycle.SelectionNanos = selection.inlineSelectionNanos
+			if selection.inlineSelectionNanos > 0 {
+				plmLifecycle.SelectionCalls = 1
+			}
 		}
 	} else if selection != nil {
 		if err := callStatusWithBytes(runContext, module, selection.export, selection.payload); err != nil {
@@ -1483,6 +1533,7 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		runContext = context.WithValue(runContext, brokerContextKey{}, broker)
 	}
 	runContext = context.WithValue(runContext, streamingContextKey{}, streaming)
+	prepareStarted := time.Now()
 	for {
 		select {
 		case <-runContext.Done():
@@ -1501,7 +1552,15 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 	}
 
 prepareComplete:
+	if plmLifecycle != nil {
+		plmLifecycle.PrepareNanos = uint64(time.Since(prepareStarted))
+	}
+	executeStarted := time.Now()
 	payload, err = callExecute(runContext, module, request, engine.config.MaxResponseBytes)
+	if plmLifecycle != nil {
+		plmLifecycle.ExecuteCalls = 1
+		plmLifecycle.ExecuteNanos = uint64(time.Since(executeStarted))
+	}
 	if err != nil {
 		return nil, withGuestDiagnostic(err, stderr.String())
 	}

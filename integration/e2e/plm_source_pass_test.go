@@ -80,9 +80,12 @@ func TestRealGuestPLMSourceTimeCandidateReusesAndLinearizesAtOriginalCall(t *tes
 	}
 	receipts := broker.SnapshotReceipts()
 	evidence := engine.SplitPhaseEvidence()
+	lifecycle := engine.PLMRunLifecycleEvidence()
 	if physical.Load() != 1 || broker.CallCount() != 1 || len(receipts) != 1 || receipts[0].CallID != "plm-s1c8-e1c29-1" ||
-		evidence.Submitted != 1 || evidence.Reused != 1 || evidence.CandidatesAdopted != 1 || evidence.JobsLinearized != 1 || evidence.JobsMaterialized != 1 {
-		t.Fatalf("physical=%d calls=%d receipts=%#v evidence=%+v", physical.Load(), broker.CallCount(), receipts, evidence)
+		evidence.Submitted != 1 || evidence.Reused != 1 || evidence.CandidatesAdopted != 1 || evidence.JobsLinearized != 1 || evidence.JobsMaterialized != 1 ||
+		evidence.ProviderNanos == 0 || evidence.ValidationNanos == 0 || evidence.LinearizationNanos == 0 || evidence.MaterializationNanos == 0 ||
+		lifecycle.ModuleInstantiations != 1 || lifecycle.LoweringCalls != 1 || lifecycle.SelectionCalls != 1 || lifecycle.ExecuteCalls != 1 || lifecycle.TotalNanos == 0 {
+		t.Fatalf("physical=%d calls=%d receipts=%#v evidence=%+v lifecycle=%+v", physical.Load(), broker.CallCount(), receipts, evidence, lifecycle)
 	}
 }
 

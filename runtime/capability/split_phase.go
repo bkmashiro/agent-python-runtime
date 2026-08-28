@@ -61,6 +61,10 @@ type SplitPhaseSnapshot struct {
 	ValidationFailures               uint32
 	ValidationCostUnits              uint64
 	ProviderValidationPhysicalEvents uint32
+	ProviderNanos                    uint64
+	ValidationNanos                  uint64
+	LinearizationNanos               uint64
+	MaterializationNanos             uint64
 	Events                           []SplitPhaseEvent
 }
 
@@ -85,7 +89,7 @@ type splitPhaseEntry struct {
 	stableFailureValidated bool
 }
 
-// SplitPhaseTable owns a bounded set of physical Future attempts for one Run.
+// SplitPhaseTable owns a bounded set of physical candidate attempts for one Run.
 // Broker.Call remains the only owner of logical operation indices and receipts.
 type SplitPhaseTable struct {
 	mu                  sync.Mutex
@@ -307,9 +311,12 @@ func (table *SplitPhaseTable) execute(ctx context.Context, entry *splitPhaseEntr
 	table.recordLocked(entry, "running")
 	table.mu.Unlock()
 
+	providerStarted := time.Now()
 	outcome, runErr := entry.preparedPLM.Call(ctx)
+	providerNanos := uint64(time.Since(providerStarted))
 
 	table.mu.Lock()
+	table.snapshot.ProviderNanos = saturatingAdd64(table.snapshot.ProviderNanos, providerNanos)
 	table.active--
 	table.snapshot.PhysicalFinishes++
 	table.snapshot.PhysicalResultBytes += outcome.PhysicalResultBytes
@@ -351,6 +358,7 @@ func (table *SplitPhaseTable) LinearizeAndMaterialize(ctx context.Context, slotI
 	if table == nil || table.owner == nil || ctx == nil {
 		return nil, ErrSplitPhaseUnavailable
 	}
+	linearizationStarted := time.Now()
 	table.mu.Lock()
 	entry, ok := table.entriesBySlot[slotID]
 	if !ok || table.closed || entry.plmContract == nil || entry.certificate == nil || entry.preparedPLM == nil {
@@ -392,11 +400,13 @@ func (table *SplitPhaseTable) LinearizeAndMaterialize(ctx context.Context, slotI
 
 	validation := PLMValidationResult{}
 	var validationErr error
+	validationStarted := time.Now()
 	if argumentsErr == nil && providerSessionErr == nil && actualBinding == candidate.Binding {
 		validation, validationErr = prepared.Validate(ctx, PLMValidationRequest{
 			Contract: contract, Certificate: candidate, Logical: logical, Outcome: candidate.Outcome,
 		})
 	}
+	validationNanos := uint64(time.Since(validationStarted))
 	current := LinearizationContext{
 		Binding: actualBinding, Temporal: validation.Temporal,
 		TemporalValidated:                validationErr == nil && validation.TemporalValid,
@@ -406,6 +416,7 @@ func (table *SplitPhaseTable) LinearizeAndMaterialize(ctx context.Context, slotI
 
 	table.mu.Lock()
 	table.snapshot.Validations++
+	table.snapshot.ValidationNanos = saturatingAdd64(table.snapshot.ValidationNanos, validationNanos)
 	if validationErr != nil || argumentsErr != nil || providerSessionErr != nil || actualBinding != candidate.Binding || !validation.TemporalValid ||
 		!validation.ProviderNonInterferenceValid || (candidate.Outcome == CandidateFailure && contract.Failure == FailureStable && !validation.StableFailureValid) {
 		table.snapshot.ValidationFailures++
@@ -419,11 +430,15 @@ func (table *SplitPhaseTable) LinearizeAndMaterialize(ctx context.Context, slotI
 	} else {
 		table.recordLocked(entry, "candidate_validated")
 	}
+	table.snapshot.LinearizationNanos = saturatingAdd64(table.snapshot.LinearizationNanos, uint64(time.Since(linearizationStarted)))
 	table.mu.Unlock()
 
+	materializationStarted := time.Now()
 	encoded, callErr := table.owner.Call(ctx, requestCopy)
+	materializationNanos := uint64(time.Since(materializationStarted))
 
 	table.mu.Lock()
+	table.snapshot.MaterializationNanos = saturatingAdd64(table.snapshot.MaterializationNanos, materializationNanos)
 	if callErr != nil {
 		entry.jobState = JobFailed
 		table.recordLocked(entry, "job_failed")

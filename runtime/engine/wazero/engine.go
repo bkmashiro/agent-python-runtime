@@ -1069,7 +1069,11 @@ func (engine *Engine) RunSourcePatchDerived(ctx context.Context, request []byte,
 	}
 	prepares := make(chan string)
 	close(prepares)
-	return engine.runWithPrepares(ctx, request, prepares, false, &derivedSelection{export: "runtime_select_source_pass_execution", payload: append(patchRaw, '\n')})
+	selection := &derivedSelection{export: "runtime_select_source_pass_execution", payload: append(patchRaw, '\n')}
+	if registration.Name() == sourcepatch.PLMCapabilityCallsName {
+		selection.plmSourceSealIdentity = patch.OriginalSourceSHA256
+	}
+	return engine.runWithPrepares(ctx, request, prepares, false, selection)
 }
 
 // RunHostScheduledSourcePatchDerived executes the plan-bound V1 capability-call
@@ -1083,7 +1087,7 @@ func (engine *Engine) RunHostScheduledSourcePatchDerived(ctx context.Context, re
 	if err != nil {
 		return nil, err
 	}
-	if registration.Name() != sourcepatch.SplitPhaseCapabilityCallsName || registration.Stage() != passregistration.StageWholeProgramPatch ||
+	if (registration.Name() != sourcepatch.SplitPhaseCapabilityCallsName && registration.Name() != sourcepatch.PLMCapabilityCallsName) || registration.Stage() != passregistration.StageWholeProgramPatch ||
 		!patch.Applied() || patch.Validate(runRequest.Code, registration) != nil {
 		return nil, sourcepatch.ErrInvalidPatch
 	}
@@ -1093,7 +1097,11 @@ func (engine *Engine) RunHostScheduledSourcePatchDerived(ctx context.Context, re
 	}
 	prepares := make(chan string)
 	close(prepares)
-	return engine.runWithPrepares(ctx, request, prepares, false, &derivedSelection{export: "runtime_select_source_pass_execution", payload: append(patchRaw, '\n')})
+	selection := &derivedSelection{export: "runtime_select_source_pass_execution", payload: append(patchRaw, '\n')}
+	if registration.Name() == sourcepatch.PLMCapabilityCallsName {
+		selection.plmSourceSealIdentity = patch.OriginalSourceSHA256
+	}
+	return engine.runWithPrepares(ctx, request, prepares, false, selection)
 }
 
 // RunValueSlotSourcePatchDerived executes the single v1 data-local reduction adapter.
@@ -1158,6 +1166,7 @@ type derivedSelection struct {
 	export                 string
 	payload                []byte
 	sourceValidationExport string
+	plmSourceSealIdentity  string
 }
 
 func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepares <-chan string, streaming bool, selection *derivedSelection) (payload []byte, runErr error) {
@@ -1424,6 +1433,9 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		if splitPhaseTable != nil {
 			runContext = context.WithValue(runContext, splitPhaseContextKey{}, splitPhaseTable)
 		}
+		if selection != nil && selection.plmSourceSealIdentity != "" {
+			runContext = context.WithValue(runContext, plmSourceSealContextKey{}, selection.plmSourceSealIdentity)
+		}
 		runContext = context.WithValue(runContext, brokerContextKey{}, broker)
 	}
 	runContext = context.WithValue(runContext, streamingContextKey{}, streaming)
@@ -1547,6 +1559,7 @@ type brokerContextKey struct{}
 type streamingContextKey struct{}
 type preparedRegionContextKey struct{}
 type splitPhaseContextKey struct{}
+type plmSourceSealContextKey struct{}
 type valueSlotContextKey struct{}
 
 const hostCallPayloadMax = 1024 * 1024
@@ -1565,6 +1578,12 @@ func instantiateCapabilityHost(ctx context.Context, runtime wazerort.Runtime) er
 		NewFunctionBuilder().
 		WithFunc(hostMaterializeCall).
 		Export("materialize_call").
+		NewFunctionBuilder().
+		WithFunc(hostPreparePLMCall).
+		Export("prepare_plm_call").
+		NewFunctionBuilder().
+		WithFunc(hostLinearizePLMCall).
+		Export("linearize_plm_call").
 		NewFunctionBuilder().
 		WithFunc(hostMaterializeSlot).
 		Export("materialize_slot").
@@ -1630,6 +1649,57 @@ func hostMaterializeCall(ctx context.Context, module api.Module, slotPointer, sl
 		return -1
 	}
 	response, err := table.Materialize(ctx, string(append([]byte(nil), slotView...)))
+	if err != nil || len(response) == 0 || len(response) > int(responseCapacity) {
+		return -1
+	}
+	if !module.Memory().Write(responsePointer, response) {
+		return -1
+	}
+	return int32(len(response))
+}
+
+func hostPreparePLMCall(ctx context.Context, module api.Module, slotPointer, slotLength, requestPointer, requestLength uint32) int32 {
+	enginecontract.MarkHostCallAttempt(ctx)
+	if slotLength == 0 || slotLength > 96 || requestLength == 0 || requestLength > hostCallPayloadMax {
+		return -1
+	}
+	table, ok := ctx.Value(splitPhaseContextKey{}).(*capability.SplitPhaseTable)
+	sourceSeal, sealOK := ctx.Value(plmSourceSealContextKey{}).(string)
+	if !ok || table == nil || !sealOK || sourceSeal == "" {
+		return -1
+	}
+	slotView, ok := module.Memory().Read(slotPointer, slotLength)
+	if !ok {
+		return -1
+	}
+	requestView, ok := module.Memory().Read(requestPointer, requestLength)
+	if !ok {
+		return -1
+	}
+	if err := table.PrepareRuntimePLM(ctx, string(append([]byte(nil), slotView...)), append([]byte(nil), requestView...), sourceSeal); err != nil {
+		return -1
+	}
+	return 0
+}
+
+func hostLinearizePLMCall(ctx context.Context, module api.Module, slotPointer, slotLength, requestPointer, requestLength, responsePointer, responseCapacity uint32) int32 {
+	if slotLength == 0 || slotLength > 96 || requestLength == 0 || requestLength > hostCallPayloadMax || responseCapacity == 0 || responseCapacity > hostCallPayloadMax {
+		return -1
+	}
+	table, ok := ctx.Value(splitPhaseContextKey{}).(*capability.SplitPhaseTable)
+	sourceSeal, sealOK := ctx.Value(plmSourceSealContextKey{}).(string)
+	if !ok || table == nil || !sealOK || sourceSeal == "" {
+		return -1
+	}
+	slotView, ok := module.Memory().Read(slotPointer, slotLength)
+	if !ok {
+		return -1
+	}
+	requestView, ok := module.Memory().Read(requestPointer, requestLength)
+	if !ok {
+		return -1
+	}
+	response, err := table.LinearizeRuntimePLM(ctx, string(append([]byte(nil), slotView...)), append([]byte(nil), requestView...), sourceSeal)
 	if err != nil || len(response) == 0 || len(response) > int(responseCapacity) {
 		return -1
 	}

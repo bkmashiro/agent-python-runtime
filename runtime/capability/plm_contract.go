@@ -174,12 +174,11 @@ type LinearizationContext struct {
 // the original call. Run, Plan, capability, handler and argument identities are
 // rebuilt by the table and cannot be supplied by the Guest.
 type PLMLogicalContext struct {
-	SourceSealIdentity      string
-	SiteID                  string
-	Occurrence              uint32
-	AuthorityEpoch          string
-	ProviderSessionIdentity string
-	ActualArguments         json.RawMessage
+	SourceSealIdentity string
+	SiteID             string
+	Occurrence         uint32
+	AuthorityEpoch     string
+	ActualArguments    json.RawMessage
 }
 
 type PLMValidatorIdentities struct {
@@ -215,6 +214,12 @@ type PLMValidator interface {
 // It must not read or return the operation's final value.
 type PLMTransportPreparer interface {
 	PreparePLMTransport(context.Context, json.RawMessage) error
+}
+
+// PLMProviderSession exposes the Host adapter's current provider/session epoch.
+// It is bound into every candidate and re-read at linearization.
+type PLMProviderSession interface {
+	PLMProviderSessionIdentity(context.Context) string
 }
 
 type LinearizationAction string

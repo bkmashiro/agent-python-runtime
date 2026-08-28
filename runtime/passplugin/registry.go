@@ -189,13 +189,17 @@ func NewUnifiedCatalog(config UnifiedCatalogConfig) (*Registry, error) {
 	if err != nil {
 		return nil, err
 	}
+	plmCapabilities, err := sourcepatch.NewPLMCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
+	if err != nil {
+		return nil, err
+	}
 	dataLocal, err := sourcepatch.NewDataLocalNumpySum(passregistration.SemanticAnalyzerSHA256)
 	if err != nil {
 		return nil, err
 	}
 	plugins := []Plugin{
 		semanticAdapter, preparedPureAdapter, preparedNumpyAdapter, preparedValue,
-		cse, fold, splitCapabilities, dataLocal,
+		cse, fold, splitCapabilities, plmCapabilities, dataLocal,
 	}
 	for _, definition := range passregistration.RuntimeOptimizationDefinitions() {
 		registration, registerErr := definition.Register("", runtimeOptimizationConfigSHA256(definition))
@@ -320,6 +324,28 @@ func CapabilityProjections(plan *capability.Plan) []sourcepatch.CapabilityProjec
 	return projections
 }
 
+func PLMCapabilityProjections(plan *capability.Plan) []sourcepatch.CapabilityProjection {
+	if plan == nil {
+		return nil
+	}
+	projections := make([]sourcepatch.CapabilityProjection, 0)
+	for _, spec := range plan.Specs() {
+		if spec.PLM == nil || spec.PLM.PrepareEffect == capability.PrepareNone || spec.Python == nil {
+			continue
+		}
+		projections = append(projections, sourcepatch.CapabilityProjection{
+			Capability: spec.Name, Module: spec.Python.Module, Method: spec.Python.Method,
+			Arguments: append([]string(nil), spec.Python.Arguments...), ResultField: spec.Python.ResultField,
+		})
+	}
+	sort.Slice(projections, func(left, right int) bool {
+		leftName := projections[left].Module + "." + projections[left].Method
+		rightName := projections[right].Module + "." + projections[right].Method
+		return leftName < rightName
+	})
+	return projections
+}
+
 func runtimeOptimizationConfigSHA256(definition passregistration.Definition) string {
 	digest := sha256.Sum256([]byte(definition.Version() + "\x00" + string(definition.Name()) + "\x00runtime-lowering"))
 	return "sha256:" + hex.EncodeToString(digest[:])
@@ -339,6 +365,7 @@ func unifiedRequirements() map[passregistration.Name]runtimeconfig.MechanismSet 
 		sourcepatch.PureScalarCSEName:                 {SemanticAnalysis: true},
 		sourcepatch.PureScalarFoldName:                {SemanticAnalysis: true},
 		sourcepatch.SplitPhaseCapabilityCallsName:     {SplitPhaseCalls: true},
+		sourcepatch.PLMCapabilityCallsName:            {SplitPhaseCalls: true},
 		sourcepatch.DataLocalNumpySumName:             {ValueSlots: true},
 		passregistration.SourceStreamingExecution:     {Streaming: true, PrivateWorkspace: true},
 		passregistration.StreamedChildFanout:          {Streaming: true, PrivateWorkspace: true, ImmutableBranches: true, ChildFanout: true},

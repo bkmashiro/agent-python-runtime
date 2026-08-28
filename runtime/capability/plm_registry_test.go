@@ -73,6 +73,10 @@ func (adapter *plmRegistryNoTransportAdapter) ValidatePLM(context.Context, capab
 	return capability.PLMValidationResult{}, nil
 }
 
+func (adapter *plmRegistryNoTransportAdapter) PLMProviderSessionIdentity(context.Context) string {
+	return "provider-session-v1"
+}
+
 type plmRegistryAdapter struct {
 	identities capability.PLMValidatorIdentities
 	transport  bool
@@ -88,6 +92,10 @@ func (adapter *plmRegistryAdapter) PLMValidatorIdentities() capability.PLMValida
 
 func (adapter *plmRegistryAdapter) ValidatePLM(context.Context, capability.PLMValidationRequest) (capability.PLMValidationResult, error) {
 	return capability.PLMValidationResult{}, nil
+}
+
+func (adapter *plmRegistryAdapter) PLMProviderSessionIdentity(context.Context) string {
+	return "provider-session-v1"
 }
 
 func (adapter *plmRegistryAdapter) PreparePLMTransport(context.Context, json.RawMessage) error {

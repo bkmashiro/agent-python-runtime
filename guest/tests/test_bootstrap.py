@@ -50,6 +50,24 @@ class BootstrapTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.runtime._collect_split_phase_capability("slot-s1c0-e1c20")
 
+    def test_plm_helpers_recompute_actual_request_at_original_linearization_point(self):
+        prepared = []
+        linearized = []
+        setattr(self.native_stub, "prepare_plm_call", lambda slot, request: prepared.append((slot, json.loads(request))))
+        setattr(self.native_stub, "linearize_plm_call", lambda slot, request: (
+            linearized.append((slot, json.loads(request)))
+            or json.dumps({"status": "ok", "result": {"body": "linearized"}})
+        ))
+        self.runtime._prepare_plm_capability("slot-s2c0-e2c18", "plm-s2c0-e2c18", "sources.read", {"path": "alpha"})
+        result = self.runtime._linearize_plm_capability("slot-s2c0-e2c18", "sources.read", {"path": "beta"})
+        self.assertEqual("linearized", result["body"])
+        self.assertEqual("slot-s2c0-e2c18-1", prepared[0][0])
+        self.assertEqual("plm-s2c0-e2c18-1", prepared[0][1]["call_id"])
+        self.assertEqual({"path": "alpha"}, prepared[0][1]["arguments"])
+        self.assertEqual({"path": "beta"}, linearized[0][1]["arguments"])
+        with self.assertRaises(RuntimeError):
+            self.runtime._linearize_plm_capability("slot-s2c0-e2c18", "sources.read", {"path": "beta"})
+
     def setUp(self):
         self._native_module = sys.modules.get("_agent_runtime_host")
         native_stub = types.ModuleType("_agent_runtime_host")
@@ -361,6 +379,8 @@ class BootstrapTests(unittest.TestCase):
         for helper in (
             "_pysolate_call_issue",
             "_pysolate_call_collect",
+            "_pysolate_plm_prepare",
+            "_pysolate_plm_linearize",
             "_pysolate_materialize_slot",
         ):
             with self.subTest(helper=helper):

@@ -106,6 +106,35 @@ func TestPLMPrepareFailureIsHiddenAndRetriesAtLinearization(t *testing.T) {
 	}
 }
 
+func TestPLMRuntimeBridgeBuildsCertificateAndLogicalContextFromHostState(t *testing.T) {
+	var physical atomic.Uint32
+	adapter := &plmVerticalAdapter{handler: func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		physical.Add(1)
+		return json.RawMessage(`{"text":"runtime-bridge"}`), nil
+	}, temporal: capability.TemporalEvidence{Mode: capability.TemporalImmutable}, temporalValid: true, providerValid: true}
+	plan, _ := plmVerticalPlan(t, capability.TemporalImmutable, adapter)
+	broker, _ := capability.NewBroker(capability.Config{RunIdentity: "plm-runtime-bridge", Plan: plan})
+	table, _ := capability.NewSplitPhaseTable(broker, ownerLimits())
+	sourceSeal := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	request := []byte(`{"call_id":"plm-s1c0-e1c19-1","capability":"workspace.read_text","arguments":{"path":"a.txt"}}`)
+	if err := table.PrepareRuntimePLM(context.Background(), "slot-s1c0-e1c19-1", request, sourceSeal); err != nil {
+		t.Fatal(err)
+	}
+	resourceIdentity, _ := plan.PLMResourceIdentity("workspace.read_text", json.RawMessage(`{"path":"a.txt"}`))
+	adapter.temporal.ResourceIdentity = resourceIdentity
+	response, err := table.LinearizeRuntimePLM(context.Background(), "slot-s1c0-e1c19-1", request, sourceSeal)
+	if err != nil || !containsResult(response, "runtime-bridge") || physical.Load() != 1 || broker.Calls() != 1 {
+		t.Fatalf("physical=%d logical=%d response=%s err=%v", physical.Load(), broker.Calls(), response, err)
+	}
+	malformed := []byte(`{"call_id":"split-s1c0-e1c19-2","capability":"workspace.read_text","arguments":{"path":"a.txt"}}`)
+	if err := table.PrepareRuntimePLM(context.Background(), "slot-s1c0-e1c19-2", malformed, sourceSeal); err == nil {
+		t.Fatal("mismatched PLM call identity admitted")
+	}
+	if err := broker.Finalize(true); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestPLMInvalidCandidateRestartsCanonicallyInsideOneLogicalCall(t *testing.T) {
 	var physical atomic.Uint32
 	candidateStarted := make(chan struct{})
@@ -161,6 +190,7 @@ type plmVerticalAdapter struct {
 	providerValid   bool
 	stableValidator bool
 	stableValid     bool
+	providerSession string
 	transportRuns   atomic.Uint32
 	transportReady  chan struct{}
 }
@@ -191,6 +221,13 @@ func (adapter *plmVerticalAdapter) ValidatePLM(context.Context, capability.PLMVa
 		ProviderNonInterferenceValid: adapter.providerValid, StableFailureValid: adapter.stableValid,
 		ValidationCostUnits: 1, ProviderValidationPhysicalEvents: 1,
 	}, nil
+}
+
+func (adapter *plmVerticalAdapter) PLMProviderSessionIdentity(context.Context) string {
+	if adapter.providerSession != "" {
+		return adapter.providerSession
+	}
+	return "provider-plm-v1"
 }
 
 func (adapter *plmVerticalAdapter) PreparePLMTransport(context.Context, json.RawMessage) error {
@@ -258,7 +295,6 @@ func plmVerticalLogical(certificate capability.CandidateCertificate, path string
 	return capability.PLMLogicalContext{
 		SourceSealIdentity: certificate.Binding.SourceSealIdentity, SiteID: certificate.Binding.SiteID,
 		Occurrence: certificate.Binding.Occurrence, AuthorityEpoch: certificate.Binding.AuthorityEpoch,
-		ProviderSessionIdentity: certificate.Binding.ProviderSessionIdentity,
-		ActualArguments:         json.RawMessage(fmt.Sprintf(`{"path":%q}`, path)),
+		ActualArguments: json.RawMessage(fmt.Sprintf(`{"path":%q}`, path)),
 	}
 }

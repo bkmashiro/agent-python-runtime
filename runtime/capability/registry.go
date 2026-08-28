@@ -602,6 +602,9 @@ func validPLMValidatorBinding(spec Spec, handler Handler) bool {
 	if !ok {
 		return false
 	}
+	if _, ok := handler.(PLMProviderSession); !ok {
+		return false
+	}
 	identities := validator.PLMValidatorIdentities()
 	if identities.Temporal != contract.TemporalValidator || identities.ProviderNonInterference != contract.ProviderNonInterferenceValidator ||
 		identities.StableFailure != contract.StableFailureValidator {

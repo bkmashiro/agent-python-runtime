@@ -48,9 +48,12 @@ _PREPARED_REGION_HELPER = "__pysolate_materialize_value__"
 _PREPARED_REGION_PAYLOAD_MAX = 256
 _SPLIT_PHASE_ISSUE_HELPER = "_pysolate_call_issue"
 _SPLIT_PHASE_COLLECT_HELPER = "_pysolate_call_collect"
+_PLM_PREPARE_HELPER = "_pysolate_plm_prepare"
+_PLM_LINEARIZE_HELPER = "_pysolate_plm_linearize"
 _VALUE_SLOT_HELPER = "_pysolate_materialize_slot"
 _split_phase_occurrence_counts: dict[str, int] = {}
 _split_phase_pending_slots: dict[str, list[str]] = {}
+_plm_pending_slots: dict[str, list[tuple[str, str, str]]] = {}
 _FUTURE_FLAGS = sum(getattr(__future__, name).compiler_flag for name in __future__.all_feature_names)
 
 
@@ -965,6 +968,11 @@ def _prepare_source_pass_execution(patch_json: str) -> None:
     ):
         allowed_runtime_names = frozenset({_SPLIT_PHASE_ISSUE_HELPER, _SPLIT_PHASE_COLLECT_HELPER})
     elif (
+        patch.get("pass_name") == "plm_capability_calls"
+        and patch.get("pass_version") == "pysolate.plm-capability-calls-pass.v1"
+    ):
+        allowed_runtime_names = frozenset({_PLM_PREPARE_HELPER, _PLM_LINEARIZE_HELPER})
+    elif (
         patch.get("pass_name") == "data_local_numpy_sum"
         and patch.get("pass_version") == "pysolate.data-local-numpy-sum-pass.v2"
     ):
@@ -1073,6 +1081,85 @@ def _collect_split_phase_capability(slot_id: str) -> dict[str, Any]:
     return _materialize_split_phase_call(slot_id)
 
 
+def _prepare_plm_capability(slot_id: str, call_id: str, capability: str, arguments: dict[str, Any]) -> None:
+    if (
+        not isinstance(slot_id, str)
+        or not slot_id.startswith("slot-s")
+        or len(slot_id) > 80
+        or not isinstance(call_id, str)
+        or not call_id.startswith("plm-s")
+        or len(call_id) > 80
+        or not isinstance(capability, str)
+        or not capability
+        or len(capability) > 128
+        or not isinstance(arguments, dict)
+    ):
+        raise RuntimeError("PLM capability preparation is invalid")
+    occurrence = _split_phase_occurrence_counts.get(slot_id, 0) + 1
+    _split_phase_occurrence_counts[slot_id] = occurrence
+    dynamic_slot = f"{slot_id}-{occurrence}"
+    dynamic_call_id = f"{call_id}-{occurrence}"
+    if len(dynamic_slot) > 96 or len(dynamic_call_id) > 96:
+        raise RuntimeError("PLM capability occurrence is invalid")
+    request = {"call_id": dynamic_call_id, "capability": capability, "arguments": arguments}
+    try:
+        dynamic_request = json.dumps(
+            request, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("PLM capability arguments are not canonical JSON") from exc
+    import _agent_runtime_host  # type: ignore[import-not-found]
+    _agent_runtime_host.prepare_plm_call(dynamic_slot, dynamic_request)
+    _plm_pending_slots.setdefault(slot_id, []).append((dynamic_slot, dynamic_call_id, capability))
+
+
+def _linearize_plm_capability(slot_id: str, capability: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    if (
+        not isinstance(slot_id, str)
+        or not slot_id.startswith("slot-s")
+        or len(slot_id) > 80
+        or not isinstance(capability, str)
+        or not capability
+        or len(capability) > 128
+        or not isinstance(arguments, dict)
+    ):
+        raise RuntimeError("PLM capability linearization is invalid")
+    pending = _plm_pending_slots.get(slot_id)
+    if not pending:
+        raise RuntimeError("PLM capability occurrence is missing")
+    dynamic_slot, dynamic_call_id, prepared_capability = pending.pop(0)
+    if not pending:
+        _plm_pending_slots.pop(slot_id, None)
+    if prepared_capability != capability:
+        raise RuntimeError("PLM capability identity changed before linearization")
+    request = {"call_id": dynamic_call_id, "capability": capability, "arguments": arguments}
+    try:
+        dynamic_request = json.dumps(
+            request, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("PLM capability arguments are not canonical JSON") from exc
+    import _agent_runtime_host  # type: ignore[import-not-found]
+    raw = _agent_runtime_host.linearize_plm_call(dynamic_slot, dynamic_request)
+    try:
+        response = json.loads(raw)
+        if not isinstance(response, dict) or response.get("status") not in {"ok", "denied", "error"}:
+            raise ValueError("invalid status")
+        if response["status"] != "ok":
+            error = response.get("error")
+            if not isinstance(error, dict) or not isinstance(error.get("message"), str):
+                raise ValueError("invalid error")
+            raise RuntimeError(error["message"])
+        result = response.get("result")
+        if not isinstance(result, dict):
+            raise ValueError("invalid result")
+        return result
+    except RuntimeError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("PLM Host response is invalid") from exc
+
+
 def _materialize_value_slot(slot_id: str) -> Any:
     if not isinstance(slot_id, str) or not slot_id.startswith("slot-") or len(slot_id) > 128:
         raise RuntimeError("value-slot materialization is invalid")
@@ -1122,6 +1209,7 @@ def _execute(request_json: str) -> str:
 
     _split_phase_occurrence_counts.clear()
     _split_phase_pending_slots.clear()
+    _plm_pending_slots.clear()
 
     started = time.monotonic()
     namespace = dict(_prepared_globals)
@@ -1152,6 +1240,8 @@ def _execute(request_json: str) -> str:
         namespace[_PREPARED_REGION_HELPER] = _materialize_prepared_region
         namespace[_SPLIT_PHASE_ISSUE_HELPER] = _issue_split_phase_capability
         namespace[_SPLIT_PHASE_COLLECT_HELPER] = _collect_split_phase_capability
+        namespace[_PLM_PREPARE_HELPER] = _prepare_plm_capability
+        namespace[_PLM_LINEARIZE_HELPER] = _linearize_plm_capability
         namespace[_VALUE_SLOT_HELPER] = _materialize_value_slot
         main = namespace.get(_WRAPPER_MAIN)
         if not isinstance(main, types.FunctionType):

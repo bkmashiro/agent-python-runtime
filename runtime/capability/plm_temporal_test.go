@@ -214,8 +214,8 @@ func TestPLMLinearizationRejectsChangedHostContextAndProviderQuota(t *testing.T)
 		{"authority", func(logical *capability.PLMLogicalContext, _ *plmVerticalAdapter) {
 			logical.AuthorityEpoch = "authority-revoked"
 		}},
-		{"provider session", func(logical *capability.PLMLogicalContext, _ *plmVerticalAdapter) {
-			logical.ProviderSessionIdentity = "provider-new"
+		{"provider session", func(_ *capability.PLMLogicalContext, adapter *plmVerticalAdapter) {
+			adapter.providerSession = "provider-new"
 		}},
 		{"source seal", func(logical *capability.PLMLogicalContext, _ *plmVerticalAdapter) {
 			logical.SourceSealIdentity = "seal-new"

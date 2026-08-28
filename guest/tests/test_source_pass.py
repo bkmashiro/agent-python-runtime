@@ -35,6 +35,16 @@ def capability_request(source, projections):
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
+def plm_capability_request(source, projections):
+    value = json.loads(request(
+        source,
+        "plm_capability_calls",
+        "pysolate.plm-capability-calls-pass.v1",
+    ))
+    value["capability_projections"] = projections
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
 CAPABILITY_PROJECTIONS = [
     {
         "capability": "tools.get",
@@ -54,6 +64,44 @@ CAPABILITY_PROJECTIONS = [
 
 
 class SourcePassTests(unittest.TestCase):
+    def test_plm_capability_calls_emits_prepare_and_original_point_linearize(self):
+        source = (
+            'a = tools.get("alpha")\n'
+            'x = a + 1\n'
+            'independent = 3 * 4\n'
+            'b = tools.price(x)\n'
+            'result = [a, b, independent]\n'
+        )
+        raw = emit_source_pass_patch_request_json(plm_capability_request(source, CAPABILITY_PROJECTIONS))
+        patch = json.loads(raw)
+        self.assertEqual("applied", patch["status"])
+        self.assertEqual(2, patch["replacement_count"])
+        lines = patch["derived_source"].splitlines()
+        self.assertIn("_pysolate_plm_prepare", lines[0])
+        self.assertIn("_pysolate_plm_linearize", lines[0])
+        self.assertIn("_pysolate_plm_prepare", lines[1])
+        self.assertNotIn("_pysolate_plm_linearize", lines[1])
+        self.assertIn("_pysolate_plm_linearize", lines[3])
+        self.assertIn("{'value': x}", lines[3])
+        self.assertNotIn("_pysolate_call_issue", patch["derived_source"])
+        self.assertNotIn("_pysolate_call_collect", patch["derived_source"])
+        validate_source_pass_execution_request(source, raw)
+
+    def test_plm_capability_calls_preserves_branch_loop_and_unsupported_fallback(self):
+        for source in (
+            'if inputs["take"]:\n    value = tools.get("alpha")\n    result = value\nelse:\n    result = 0\n',
+            'values = []\nfor item in inputs["items"]:\n    value = tools.get(item)\n    values.append(value)\nresult = values\n',
+        ):
+            patch = json.loads(emit_source_pass_patch_request_json(plm_capability_request(source, CAPABILITY_PROJECTIONS)))
+            self.assertEqual("applied", patch["status"])
+            self.assertIn("_pysolate_plm_prepare", patch["derived_source"])
+            self.assertIn("_pysolate_plm_linearize", patch["derived_source"])
+            validate_source_pass_execution_request(source, json.dumps(patch, sort_keys=True, separators=(",", ":")))
+        unsupported = 'value = tools.get(make_key())\nresult = value\n'
+        patch = json.loads(emit_source_pass_patch_request_json(plm_capability_request(unsupported, CAPABILITY_PROJECTIONS)))
+        self.assertEqual("not_applicable", patch["status"])
+        self.assertEqual("", patch["derived_source"])
+
     def test_split_phase_capability_calls_issues_runtime_dependency_after_value_is_ready(self):
         source = (
             'a = tools.get("alpha")\n'

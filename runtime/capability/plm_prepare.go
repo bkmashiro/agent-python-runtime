@@ -101,6 +101,21 @@ func (prepared *PreparedPLM) Validate(ctx context.Context, request PLMValidation
 	return validator.ValidatePLM(ctx, request)
 }
 
+func (prepared *PreparedPLM) ProviderSessionIdentity(ctx context.Context) (string, error) {
+	if prepared == nil || ctx == nil {
+		return "", ErrInvalidPLMContract
+	}
+	provider, ok := prepared.registered.handler.(PLMProviderSession)
+	if !ok {
+		return "", ErrInvalidPLMContract
+	}
+	identity := provider.PLMProviderSessionIdentity(ctx)
+	if !validIdentity(identity) {
+		return "", ErrInvalidPLMContract
+	}
+	return identity, nil
+}
+
 func (prepared *PreparedPLM) Call(ctx context.Context) (StagedCapabilityOutcome, error) {
 	if prepared == nil || ctx == nil {
 		return StagedCapabilityOutcome{}, ErrSplitPhaseUnavailable

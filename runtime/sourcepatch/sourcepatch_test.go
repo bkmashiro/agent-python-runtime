@@ -104,6 +104,28 @@ func TestSplitPhaseCapabilityCallsBindsHostProjectionManifest(t *testing.T) {
 	}
 }
 
+func TestPLMCapabilityCallsHasDistinctVersionedProjectionManifest(t *testing.T) {
+	pass, err := NewPLMCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := NewSplitPhaseCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registration := pass.Registration()
+	if registration.Name() != PLMCapabilityCallsName || registration.Version() != PLMCapabilityCallsVersion ||
+		registration.IdentitySHA256() == legacy.Registration().IdentitySHA256() || !pass.HostScheduled() {
+		t.Fatalf("registration=%+v legacy=%+v", registration, legacy.Registration())
+	}
+	projections := []CapabilityProjection{{Capability: "tools.get", Module: "tools", Method: "get", Arguments: []string{"key"}, ResultField: "value"}}
+	transformer := &capabilityTransformer{}
+	patch, err := pass.Transform(context.Background(), transformer, "value = tools.get('a')\nresult = value\n", projections)
+	if err != nil || patch.PassName != PLMCapabilityCallsName || len(patch.CapabilityProjections) != 1 {
+		t.Fatalf("request=%+v patch=%+v err=%v", transformer.request, patch, err)
+	}
+}
+
 func TestDataLocalNumpySumIsAStaticValueSlotPlugin(t *testing.T) {
 	pass, err := NewDataLocalNumpySum(passregistration.SemanticAnalyzerSHA256)
 	if err != nil {

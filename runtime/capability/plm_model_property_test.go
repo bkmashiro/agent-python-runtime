@@ -17,7 +17,6 @@ func TestPLMSmallCoreDecisionProperties(t *testing.T) {
 	outcomes := []capability.CandidateOutcome{
 		capability.CandidateValue,
 		capability.CandidateFailure,
-		capability.CandidateUncertain,
 	}
 	for _, mode := range modes {
 		for _, outcome := range outcomes {

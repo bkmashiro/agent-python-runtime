@@ -592,8 +592,8 @@ Tasks:
 - [x] Keep predecessor `+151.40%` result unchanged and report the new matched result independently.
 - [x] Do not update thesis/report/deck current-system claims until implementation, exact Guest and evidence gates pass.
 - [x] Run focused, full, race, vet, Python and exact Guest gates.
-- [ ] Run bounded independent Host ownership, compiler lowering, temporal contract and evidence reviews.
-- [ ] Fix every High/Medium causal defect or record a named stop decision.
+- [x] Run bounded independent Host ownership, compiler lowering, temporal contract and evidence reviews.
+- [x] Fix every High/Medium causal defect or record a named stop decision.
 - [ ] Sign final commits, push, verify upstream and leave a clean worktree.
 
 **Gate G10:** One active source of truth, no open High/Medium correctness findings, all required gates green, exact artifact/evidence linked, signed upstream clean.

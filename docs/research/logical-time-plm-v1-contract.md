@@ -1,6 +1,6 @@
 # Logical-time PLM V1 contract
 
-Status: **Frozen, implemented, exact-Guest verified and default-off after negative economics.**
+Status: **Frozen, implemented, exact-Guest verified and default-off after non-positive economics.**
 
 Architecture source: [Logical-Time-Preserving Split-Phase Execution](logical-time-preserving-split-phase-execution.md)
 
@@ -11,9 +11,12 @@ Evidence provenance:
 - [matched economics](../evidence/plm-v1-economics.json) is the frozen Gate 6 measurement at
   target `5bc36725f13034fa5418d6396d1c503820b513d4` with artifact
   `sha256:e9e2416f0cd34b397222267ec18637b6973597a2ec9ec4bb9e9bb526eca40585`;
+- [production-refactor economics](../evidence/plm-v1-production-economics.json) uses the same
+  protocol at target `57b8f3a0894cdd8a29b318096e09f32e9c37731b` with artifact
+  `sha256:fc0f034ba35ca11d87e18aeef2a93ee1fc33dd228a9c72c8708c2745b70a89a8`;
 - [body-safe temporal/fault matrix](../evidence/plm-v1-fault-matrix.json) is the final verification
-  at target `cfa8f4a0fe494a318619c7d05bd1030f92416873` with artifact
-  `sha256:f89f10170a6a2d4c412ed29db320b3b019b9efde09c135429e81845a3e9bda43`;
+  at target `57b8f3a0894cdd8a29b318096e09f32e9c37731b` with artifact
+  `sha256:fc0f034ba35ca11d87e18aeef2a93ee1fc33dd228a9c72c8708c2745b70a89a8`;
 - [bounded conditional small core](plm-v1-small-core.md)
 
 Executable schema and oracle:

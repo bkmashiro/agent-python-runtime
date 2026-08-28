@@ -4,9 +4,9 @@ Status: Gate 7 complete.
 
 Evidence: [`plm-v1-fault-matrix.json`](../evidence/plm-v1-fault-matrix.json)
 
-The checked-in aggregate is attributed to target `cfa8f4a0fe494a318619c7d05bd1030f92416873`
+The checked-in aggregate is attributed to target `57b8f3a0894cdd8a29b318096e09f32e9c37731b`
 and exact Guest artifact
-`sha256:f89f10170a6a2d4c412ed29db320b3b019b9efde09c135429e81845a3e9bda43`.
+`sha256:fc0f034ba35ca11d87e18aeef2a93ee1fc33dd228a9c72c8708c2745b70a89a8`.
 
 The gate passed 16 deterministic two-call seeds, 10 repeated race runs, 10 setup-failure teardown runs and six exact-Guest tests. The rows cover immutable, snapshot, versioned, leased, current and wall-clock modes; authority and quota changes; branch, loop, exception and failure paths; cancellation, late completion, foreign identity and disabled-pass fallback.
 

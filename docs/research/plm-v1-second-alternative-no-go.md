@@ -13,6 +13,8 @@ Inline final-Guest lowering preserves the PLM mechanism but remains slower on th
 
 The result is limited to five samples per arm, the exact artifact and source recorded in `docs/evidence/plm-v1-economics.json`.
 
+The later [production refactor](plm-v1-production-refactor.md) removed the structural duplicate work without adding another runtime. Under the same protocol it reduced the deltas to `+4.57%` cold and `+6.42%` precompiled. The original table remains the attributed Gate 6 decision input rather than being rewritten after the fact.
+
 The PLM medians attribute about 0.51 s to exact-Guest AST lowering and 0.79 s to validating and installing the derived tree. The provider itself is about 0.077 s. Median allocation increases by about 0.64 MiB in each profile. Every PLM sample records one physical start, one logical linearization, one materialization and no canonical restart.
 
 ## Bounded second-alternative assessment

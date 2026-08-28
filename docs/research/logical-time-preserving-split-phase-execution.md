@@ -55,7 +55,7 @@ It establishes the following bounded properties:
 - setup failure, cancellation, late completion and typed uncertain provider outcomes have bounded Run-owned dispositions;
 - unsupported source and a disabled pass execute unchanged.
 
-The predecessor `issue_or_reuse`/`collect` bridge is Removed. Its immutable-read evidence and `+151.40%` cold result remain historical facts. PLM's separate controlled result is also negative: `+32.01%` cold and `+48.27%` with engines precompiled on the V1 fixture. Neither result supports a broad speedup claim.
+The predecessor `issue_or_reuse`/`collect` bridge is Removed. Its immutable-read evidence and `+151.40%` cold result remain historical facts. PLM's initial Gate 6 result was `+32.01%` cold and `+48.27%` with Engines precompiled. The production refactor reduced those deltas to `+4.57%` and `+6.42%` under the same protocol. All remain fixture-scoped, non-positive results rather than broad speedup claims.
 
 ## Two time domains
 
@@ -311,14 +311,21 @@ unified median    9.441244409 s
 change            +151.40%
 ```
 
-That result remains permanent negative evidence for the predecessor. The implemented PLM path removed the extra analysis Guest and measured separately:
+That result remains permanent negative evidence for the predecessor. The initial PLM Gate 6 path removed the extra analysis Guest and measured separately:
 
 ```text
 cold end-to-end        4.018 s -> 5.305 s   +32.01%
 engines precompiled    2.690 s -> 3.989 s   +48.27%
 ```
 
-The residual cost is final-Guest AST lowering and derived-tree selection, not a hidden second execution. Correctness and economics remain separate; PLM stays default-off because both controlled profiles are negative.
+After removing duplicate transform replay, unverifiable AST digests, dual compilation, derived-source transport and a quadratic source scan, the same protocol measured:
+
+```text
+cold end-to-end        4.125 s -> 4.314 s    +4.57%
+engines precompiled    2.736 s -> 2.912 s    +6.42%
+```
+
+The remaining cost is bounded final-Guest compiler work, not a hidden second execution or temporal validation. Correctness and economics remain separate; PLM stays default-off because both controlled profiles remain negative.
 
 ## V1 scope
 

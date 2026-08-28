@@ -39,6 +39,7 @@ class HostWorkstationScriptContractTests(unittest.TestCase):
         self.assertIn("run-linux-evaluation-suite.sh", text)
         self.assertIn("./scripts/run-linux-evaluation-suite.sh", text)
         self.assertNotIn('$stage/scripts/run-linux-evaluation-suite.sh', text)
+        self.assertIn('pathlib.Path("evaluation").rglob("*")', text)
         self.assertNotIn("eval ", text)
         self.assertNotIn("$command", text)
 

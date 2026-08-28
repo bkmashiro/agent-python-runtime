@@ -126,6 +126,17 @@ PY
   cd "$output"
   evidence=(RESULT.READY test.log)
   if [[ -f acceptance-report.json ]]; then evidence+=(acceptance-report.json); fi
+  if [[ $suite == evaluation ]]; then
+    mapfile -d '' evaluation_files < <(python3 - <<'PY'
+import pathlib
+import sys
+
+for path in sorted(p for p in pathlib.Path("evaluation").rglob("*") if p.is_file()):
+    sys.stdout.buffer.write(path.as_posix().encode() + b"\0")
+PY
+    )
+    evidence+=("${evaluation_files[@]}")
+  fi
   sha256sum "${evidence[@]}" > SHA256SUMS
 )
 exit "$test_status"

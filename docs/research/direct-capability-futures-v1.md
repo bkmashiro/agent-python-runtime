@@ -1,5 +1,7 @@
 # Direct Capability Futures v1
 
+> **Historical result.** The direct Future lane and `_CapabilityFuture` projection were removed by the unified split-phase refactor. Its measurements remain attached to this exact mechanism and are not current-runtime claims. The retained model is [`split_phase_capability_calls`](../source-pass-plugins.md), which exposes only concrete Python values.
+
 ## Decision
 
 Retain the direct Future lane as Experimental and default-off. Reject the earlier

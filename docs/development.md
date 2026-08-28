@@ -7,6 +7,17 @@ go test ./...
 go vet ./...
 ```
 
+For the unified split-phase refactor, use the dedicated wrapper instead of
+reconstructing the focused, race, full or exact-Guest commands:
+
+```bash
+scripts/unified-split-phase-gate.sh focused
+scripts/unified-split-phase-gate.sh race
+scripts/unified-split-phase-gate.sh full
+AGENT_RUNTIME_GUEST=/absolute/path/to/agent-python-runtime.wasm \
+  scripts/unified-split-phase-gate.sh guest
+```
+
 For Track F semantic-region and Lab work, use the repository gate wrapper instead of
 reconstructing long commands by hand:
 

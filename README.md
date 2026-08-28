@@ -40,29 +40,12 @@ external-effect, and evidence dispositions. CPython/WASI is the current
 substrate, not the intended differentiator. See the
 [authority-lifecycle positioning decision](docs/authority-lifecycle-positioning.md),
 the [Cloudflare comparison reset](docs/research/cloudflare-code-mode-comparison.md),
-and the [proof-first roadmap](docs/proof-first-authority-roadmap.md). The completed
-experimental successor is the
-[Host-Scheduled Calls and Immutable Value Reuse Mega-Goal](docs/plans/2026-08-24-host-scheduled-python-reuse-autonomous-megagoal.md),
-which follows the completed
-[correctness-gated source-bound optimizer Mega-Goal](docs/plans/2026-08-23-correctness-gated-agent-python-optimizer-autonomous-megagoal.md).
-It preserved fresh Runs, but its analyzer-driven split-phase source pass, fixed NumPy
-source pass and broader shared-value cache lane failed their original end-to-end cost gates.
-Two direct successors remove the redundant analyzers. The
-[direct capability Future](docs/research/direct-capability-futures-v1.md) submits every
-non-approval live projected tool when Python reaches the call and materializes it on use or
-final output; its exact-Guest two-call fixture moved from a `196.60%` slowdown to a `5.17%`
-median speedup. The [direct prepared-value lane](docs/research/direct-prepared-values-v1.md)
-reuses one immutable ValueSlot template across fresh Guests through an explicit
-`prepared_value` binding; its matched NumPy fixture moved from the historical `6.29%`
-source-pass regression to a **53.06%** median speedup with zero analyzer invocations. Both
-lanes remain Experimental/default-off; the analyzer-based rewrites remain rejected. The
-[stage-aware pass catalog v2](docs/research/stage-aware-pass-catalog-v2.md) now registers all
-18 retained or historically measured optimizations. Source/Plan/Run passes keep their narrow
-stages; cache, streaming, workflow, prepared-memory, COW and residency policies lower through an
-explicit `runtime_lowering` stage to their existing owners. Every pass remains default-off,
-conflicting source or capability scheduling owners fail before execution, and a Wazero factory
-bound to the catalog rejects direct optimization flags. Prior mechanism timings are not relabeled
-as automatic compiler-pass economics.
+and the [proof-first roadmap](docs/proof-first-authority-roadmap.md). The active successor is the
+[Unified Split-Phase Execution Roadmap](docs/plans/2026-08-27-unified-split-phase-execution-roadmap.md).
+It keeps one conservative latency-hiding path: source-time analysis may pre-issue a positively admitted Host read into a Run-private attempt table; after source seal, one plan-bound whole-program pass emits fixed `issue_or_reuse` and original-position `collect` sites for ordinary synchronous CPython. Runtime-derived arguments issue only after Python makes them concrete. The Host owns attempt lifecycle and Broker materialisation, not a Python dependency graph.
+
+The Python Future projection and the hard-coded `split_phase_sources_read` pass have been removed. Retained-prefix Guest execution and the earlier independent semantic pre-dispatch controller are hard-disabled for product execution and require the explicit `LegacyResearchExecution` factory gate to reproduce historical evidence. The direct prepared-value lane remains an independent default-off mechanism; it reuses one immutable ValueSlot template across fresh Guests through an explicit `prepared_value` binding. The current
+[stage-aware pass catalog](docs/source-pass-plugins.md) registers 17 default-off entries. Prior measurements remain attached to their original mechanisms and are not relabelled as unified-model speedups. Current correctness and negative cold exact-Guest economics are recorded in [unified split-phase evidence v1](docs/research/unified-split-phase-evidence-v1.md).
 The completed foundation records bounded Experimental target-Guest AST planning,
 exact whole-Run single-flight/retention, continuation-preserving cold-I/O evidence and a
 small static source-pass seam while keeping every mechanism off by default.

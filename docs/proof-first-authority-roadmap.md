@@ -40,8 +40,8 @@ or density behavior:
 
 ```text
 stable minimal Run contract
-├─ optional incremental source validation / streaming local execution
-├─ future verified semantic pre-dispatch of exact qualified reads
+├─ optional incremental source analysis and admitted split-phase preissue
+├─ one seal-time issue/collect lowering and one synchronous Guest execution
 ├─ optional streamed subagent fan-out
 ├─ optional immutable workspace roots / branches
 ├─ optional local content-addressed result reuse

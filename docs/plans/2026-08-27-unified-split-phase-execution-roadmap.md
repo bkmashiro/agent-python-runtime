@@ -1,6 +1,6 @@
 # Unified Split-Phase Execution Roadmap
 
-Status: **Approved architecture and execution roadmap. Implementation has not yet been launched.**
+Status: **Implemented through Gate Documentation. Final independent review is pending.**
 
 This is the sole execution roadmap for replacing Pysolate's overlapping source-streaming, semantic pre-dispatch, Python Future-proxy and split-phase call paths with one statically planned execution model. Historical roadmaps remain evidence records and must not be treated as competing queues.
 
@@ -154,7 +154,7 @@ Reference model: [`pysolate-issue-collect-formal-report.md`](../research/pysolat
 
 Tasks:
 
-- [ ] Freeze a bounded differential corpus covering:
+- [x] Freeze a bounded differential corpus covering:
   - static source-time read pre-issue;
   - runtime argument becoming concrete after a prior collect;
   - independent calls that may overlap;
@@ -166,13 +166,13 @@ Tasks:
   - cancellation, late completion and unused pre-issue;
   - denied write speculation;
   - sequential fallback for unsupported source.
-- [ ] Define exact baseline observations separately:
+- [x] Define exact baseline observations separately:
   - final result or exception;
   - ordered logical Broker calls and receipts;
   - terminal workspace state;
   - physical starts/completions;
   - orphaned/cancelled/discarded attempts.
-- [ ] Freeze the V1 ABI names and meanings. The preferred shape is:
+- [x] Freeze the V1 ABI names and meanings. The preferred shape is:
 
 ```text
 issue_or_reuse(slot, request) -> opaque compiler-owned handle
@@ -180,9 +180,9 @@ collect(handle) -> ordinary typed result or original logical error
 finalize() -> terminal attempt dispositions
 ```
 
-- [ ] Define static-site and dynamic-occurrence identity without dependency edges.
-- [ ] State that collect remains at the original logical call site in V1.
-- [ ] Define the sequential fallback before changing production code.
+- [x] Define static-site and dynamic-occurrence identity without dependency edges.
+- [x] State that collect remains at the original logical call site in V1.
+- [x] Define the sequential fallback before changing production code.
 
 **Gate Contract:** The corpus and contract distinguish language, authority and physical-work observations; no field represents a Python dependency edge or continuation.
 
@@ -192,19 +192,19 @@ finalize() -> terminal attempt dispositions
 
 Tasks:
 
-- [ ] Extend or replace `SplitPhaseTable` so it can accept:
+- [x] Extend or replace `SplitPhaseTable` so it can accept:
   - source-time preissued attempts;
   - runtime-issued attempts;
   - exact bind/reuse at final execution;
   - dynamic occurrences;
   - one terminal materialization/disposition path.
-- [ ] Preserve positive Host admission for speculative physical work, including freshness, privacy/billing partition, cost/result limits and unconsumed policy.
-- [ ] Keep logical permission, budget, call ordering, schema validation and receipts on the Broker path.
-- [ ] Remove the configuration-level mutual exclusion between semantic pre-dispatch and split-phase calls only after the shared table proves both paths.
-- [ ] Prove duplicate, mismatched, consumed, stale and unknown handles fail closed.
-- [ ] Prove cancellation and uncertain completion never trigger implicit replay.
-- [ ] Add race/lifecycle tests for concurrent issue, collect and finalize.
-- [ ] Keep table evidence body-safe and bounded; do not add a scheduler graph or Python-value trace.
+- [x] Preserve positive Host admission for speculative physical work, including freshness, privacy/billing partition, cost/result limits and unconsumed policy.
+- [x] Keep logical permission, budget, call ordering, schema validation and receipts on the Broker path.
+- [x] Remove the configuration-level mutual exclusion between semantic pre-dispatch and split-phase calls only after the shared table proves both paths.
+- [x] Prove duplicate, mismatched, consumed, stale and unknown handles fail closed.
+- [x] Prove cancellation and uncertain completion never trigger implicit replay.
+- [x] Add race/lifecycle tests for concurrent issue, collect and finalize.
+- [x] Keep table evidence body-safe and bounded; do not add a scheduler graph or Python-value trace.
 
 **Gate Host:** Unit and race tests show one physical attempt can originate before seal or during runtime and be consumed by exactly one matching logical call, with identical Broker receipts and no dependency representation.
 
@@ -214,20 +214,20 @@ Tasks:
 
 Tasks:
 
-- [ ] Generalize the narrow `split_phase_sources_read` patch through sealed capability projections and explicit pass registration.
-- [ ] Keep the legality envelope intentionally small:
+- [x] Generalize the narrow `split_phase_sources_read` patch through sealed capability projections and explicit pass registration.
+- [x] Keep the legality envelope intentionally small:
   - direct typed Host capability projections;
   - exact source locations;
   - literal or already-concrete arguments;
   - active branch/loop lowering;
   - no dynamic rebinding, opaque wrappers or unsupported call shapes.
-- [ ] Compute earliest legal issue points from argument availability, control activation, Python evaluation safety and Host policy.
-- [ ] Preserve original collect/logical-call positions and source locations.
-- [ ] Emit stable static sites and runtime dynamic-occurrence handling.
-- [ ] Emit `issue_or_reuse` for sites that may have a source-time attempt and ordinary issue behavior on a miss.
-- [ ] Reject unsupported or ambiguous programs before Guest execution and select the unchanged sequential source.
-- [ ] Compile the derived program once; perform no runtime AST analysis or rewriting.
-- [ ] Add source, AST and derived-program identity checks sufficient for correctness without building a general optimizer framework.
+- [x] Compute earliest legal issue points from argument availability, control activation, Python evaluation safety and Host policy.
+- [x] Preserve original collect/logical-call positions and source locations.
+- [x] Emit stable static sites and runtime dynamic-occurrence handling.
+- [x] Emit `issue_or_reuse` for sites that may have a source-time attempt and ordinary issue behavior on a miss.
+- [x] Reject unsupported or ambiguous programs before Guest execution and select the unchanged sequential source.
+- [x] Compile the derived program once; perform no runtime AST analysis or rewriting.
+- [x] Add source, AST and derived-program identity checks sufficient for correctness without building a general optimizer framework.
 
 **Gate Compiler:** Target-Guest tests prove straight-line, branch, loop and `A -> Python -> B` cases; unsupported cases run unchanged; no ordinary Python value is a Future proxy.
 
@@ -247,10 +247,10 @@ Required scenarios:
 
 Verification:
 
-- [ ] exact CPython/WASI Guest E2E;
-- [ ] differential oracle across enabled and sequential fallback;
-- [ ] focused Go and Guest tests;
-- [ ] targeted race run;
+- [x] exact CPython/WASI Guest E2E;
+- [x] differential oracle across enabled and sequential fallback;
+- [x] focused Go and Guest tests;
+- [x] targeted race run;
 - [ ] independent read-only review of authority, identity, failure and cleanup paths.
 
 **Gate Integration:** All scenarios pass on one integrated tree. If the slice requires a Host dependency graph, Python continuation or runtime AST mutation, stop and revise the architecture rather than adding one.
@@ -261,13 +261,13 @@ Verification:
 
 Order matters:
 
-- [ ] First route existing semantic pre-dispatch callers through the unified table.
-- [ ] Then remove or hard-disable `CapabilityFutureProjection` and `_CapabilityFuture` projection code after parity tests pass.
-- [ ] Then remove `SourceStreamingExecution` production wiring and retained-prefix Guest lifecycle after its negative/baseline evidence is sealed.
-- [ ] Remove obsolete mutual-exclusion rules, counters, helpers and tests that assert retired architecture rather than observable behavior.
-- [ ] Preserve research comparators only behind explicit research packages when required to reproduce negative results.
-- [ ] Audit mechanism names, pass registry, config, docs and examples for stale activation paths.
-- [ ] Do not retain compatibility adapters that make the runtime support both architectures indefinitely.
+- [x] First route existing semantic pre-dispatch callers through the unified table.
+- [x] Then remove or hard-disable `CapabilityFutureProjection` and `_CapabilityFuture` projection code after parity tests pass.
+- [x] Then remove `SourceStreamingExecution` production wiring and retained-prefix Guest lifecycle after its negative/baseline evidence is sealed.
+- [x] Remove obsolete mutual-exclusion rules, counters, helpers and tests that assert retired architecture rather than observable behavior.
+- [x] Preserve research comparators only behind explicit research packages when required to reproduce negative results.
+- [x] Audit mechanism names, pass registry, config, docs and examples for stale activation paths.
+- [x] Do not retain compatibility adapters that make the runtime support both architectures indefinitely.
 
 **Gate Retirement:** Searches and tests show no production path retains a partial Guest, emits Python Future proxies or maintains a separate pre-dispatch result table. Sequential fallback and the unified split-phase path both pass the corpus.
 
@@ -303,12 +303,12 @@ Metrics:
 
 Rules:
 
-- [ ] Freeze the bounded matrix and thresholds before final measurements.
-- [ ] Reuse existing evidence when identities and treatment definitions still match; do not rerun merely to accumulate logs.
-- [ ] Call an optimization net-negative only when matched evidence shows it.
-- [ ] Report the lost local-streaming opportunity explicitly rather than claiming literal zero loss.
-- [ ] Independently recalculate headline metrics from protected raw evidence.
-- [ ] Keep committed aggregates body-safe and concise.
+- [x] Freeze the bounded matrix and thresholds before final measurements.
+- [x] Reuse existing evidence when identities and treatment definitions still match; do not rerun merely to accumulate logs.
+- [x] Call an optimization net-negative only when matched evidence shows it.
+- [x] Report the lost local-streaming opportunity explicitly rather than claiming literal zero loss.
+- [x] Independently recalculate headline metrics from protected raw evidence.
+- [x] Keep committed aggregates body-safe and concise.
 
 **Gate Evidence:** The unified path preserves external-read overlap and logical semantics, quantifies its overhead, and truthfully records any capability or performance loss from retiring local streaming and Future proxies.
 
@@ -318,19 +318,19 @@ Rules:
 
 Tasks:
 
-- [ ] Mark retained-prefix Guest execution as an explored, semantically delicate path whose evaluated optimizations failed to justify its lifecycle complexity when supported by matched data.
-- [ ] Explain the replacement as static split-phase execution:
+- [x] Mark retained-prefix Guest execution as an explored, semantically delicate path whose evaluated optimizations failed to justify its lifecycle complexity when supported by matched data.
+- [x] Explain the replacement as static split-phase execution:
 
 ```text
 discover -> earliest policy-legal physical issue -> original logical collect
 ```
 
-- [ ] State that the compiler may analyse dependencies but the Host protocol does not represent them.
-- [ ] Distinguish source-time pre-issue from runtime AST-scheduled issue as two opportunities feeding one table.
-- [ ] State the deliberate loss: no pure local Python execution before source seal.
-- [ ] Separate Current, Measured, Rejected and Deferred claims.
-- [ ] Update runtime/development/research docs and examples before touching thesis or defence artifacts.
-- [ ] Treat thesis/report/deck reconciliation as an explicit owner decision after Gate Evidence, not an automatic roadmap step.
+- [x] State that the compiler may analyse dependencies but the Host protocol does not represent them.
+- [x] Distinguish source-time pre-issue from runtime AST-scheduled issue as two opportunities feeding one table.
+- [x] State the deliberate loss: no pure local Python execution before source seal.
+- [x] Separate Current, Measured, Rejected and Deferred claims.
+- [x] Update runtime/development/research docs and examples before touching thesis or defence artifacts.
+- [x] Treat thesis/report/deck reconciliation as an explicit owner decision after Gate Evidence, not an automatic roadmap step.
 
 **Gate Documentation:** A source/code/doc audit finds one current architecture, no stale claim of unchanged final Python where a derived AST is used, and no claim that the unified model preserves source-generation overlap for local Python.
 
@@ -398,8 +398,8 @@ Stop rather than silently expanding the design when:
 
 ## Current execution pointer
 
-**Current:** Approved on 2026-08-27. The architecture, lane order and deliberate retirement of local streaming/Future proxies are frozen; project execution is not yet launched.
+**Current:** Contract, Host, compiler, integration, retirement, evidence and active project documentation are complete. The post-retirement exact Guest, full suite and full race suite pass.
 
-**Next on explicit execution launch:** Lane 0, freeze the differential corpus and minimal ABI before production behavior changes.
+**Next:** Resume only after Yuzhe's incoming project update; reconcile that update before completing the pending independent review and Gate Closeout.
 
-**Blocked:** None. Awaiting an explicit project execution launch rather than an architecture decision.
+**Blocked:** No implementation blocker. Closeout is intentionally paused for the owner update and the already-dispatched bounded review.

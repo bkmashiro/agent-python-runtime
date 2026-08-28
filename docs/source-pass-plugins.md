@@ -36,25 +36,31 @@ type SourcePatchPlugin interface {
 }
 ```
 
-Analyzer-free direct passes use their own narrow dispatch surfaces:
+Analyzer-free Run bindings and plan-bound Host scheduling use separate narrow dispatch surfaces:
 
 ```go
-registry.ProjectPlan("capability_future_projection", plan)
 registry.BindRunValue("prepared_value_binding", slotID)
+registry.ExecuteCapabilityHostScheduled(
+    ctx,
+    "split_phase_capability_calls",
+    transformer,
+    runner,
+    request,
+    plan.PythonPrelude(),
+    passplugin.CapabilityProjections(plan),
+)
 ```
 
-Both are default-off, as are the streaming-stage adapters. `plan_projection` and
-`run_binding` registrations carry no analyzer identity; source-bound stages still require the
-exact target-Guest analyzer identity.
+The prepared-value binding is analyzer-free. The capability-call pass uses one exact target-Guest whole-program transform and a Host-authored projection allowlist derived from the sealed Plan. Neither surface exposes grants or handlers to Guest code.
 
 ## Unified optimization catalog
 
-`passplugin.NewDefaultUnifiedCatalog` registers 18 default-off entries:
+`passplugin.NewDefaultUnifiedCatalog` registers 17 default-off entries:
 
-- the four stage adapters introduced in v1;
+- the retained stage adapters for semantic analysis, prepared regions and Run bindings;
 - `prepared_pure_region`, `pure_scalar_cse`, `pure_scalar_fold`,
-  `split_phase_sources_read` and `data_local_numpy_sum`;
-- nine `runtime_lowering` passes for source streaming, child fanout, Agent Function retention,
+  `split_phase_capability_calls` and `data_local_numpy_sum`;
+- nine `runtime_lowering` passes for historical research streaming, child fanout, Agent Function retention,
   single-flight, fresh workflow re-evaluation, prepared Runtime instantiation, private-memory COW,
   cold-I/O residency and semantic whole-Run reuse.
 
@@ -62,7 +68,7 @@ exact target-Guest analyzer identity.
 all mutable state and lifecycle logic. `ResolveRuntime` applies Host availability after lowering
 and records `pysolate.optimization-pass-selection.v2`. `wazero.Factory.Passes` rejects direct
 optimization flags when a catalog is bound, so selection finishes before Runtime initialization
-or Guest effects.
+or Guest effects. Retained-prefix Guest execution and independent semantic pre-dispatch additionally require `LegacyResearchExecution`; the default product Factory rejects them.
 
 Two source-mutating execution patches cannot be enabled together because the repository has no
 automatic ordering contract. Conflicting capability scheduling owners also fail before execution.
@@ -100,8 +106,14 @@ after derived execution begins.
 | `prepared_pure_region` | `whole_program_patch` | adapter to the existing prepared-region owner |
 | `pure_scalar_cse` | `whole_program_patch` | runnable source-patch plugin |
 | `pure_scalar_fold` | `whole_program_patch` | runnable source-patch plugin |
-| `split_phase_sources_read` | `whole_program_patch` | historical analyzer-driven Future route; rejected on cost |
+| `split_phase_capability_calls` | `whole_program_patch` | plan-bound issue/collect lowering over admitted typed Host projections |
 | `data_local_numpy_sum` | `whole_program_patch` | historical analyzer-driven ValueSlot route; superseded by direct binding |
+
+## `split_phase_capability_calls` v1
+
+The retained Host-scheduled pass accepts only direct typed capability assignments whose sealed Plan entry has a positive pre-dispatch contract. Its Host-authored descriptor binds capability, Python module/method, ordered argument names and result field. The exact Guest inserts an internal issue at the earliest admitted statement-level point and a synchronous collect at the original logical call. Static source span plus runtime occurrence distinguishes loops and repeated sites. Unsupported wrappers, unsafe argument evaluation, writes and ambiguous source return `not_applicable` and execute the unchanged synchronous projection.
+
+Source-time analysis may populate the same dynamic slot before seal. Final execution calls `IssueOrReuse`; an exact request reuses that attempt, while a miss starts the admitted operation when CPython reaches the fixed issue site. Broker materialisation still owns logical permission, order, validation and receipts. Ordinary Python never receives a Future object, and the Host stores no Python dependency graph. Exact correctness and the negative cold-fixture economics are recorded in [`unified-split-phase-evidence-v1.md`](research/unified-split-phase-evidence-v1.md).
 
 ## `pure_scalar_cse` v1
 

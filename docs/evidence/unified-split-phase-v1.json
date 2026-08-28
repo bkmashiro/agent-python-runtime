@@ -1,0 +1,55 @@
+{
+  "schema_version": "pysolate.unified-split-phase-evidence.v1",
+  "status": "correctness_passed_economics_negative_on_current_fixture",
+  "target_commit": "0ea6d052b95fc9f22e19b451b5f1d6018118a666",
+  "final_guest": {
+    "profile": "base",
+    "platform": "linux_x86_64_cpython_wasi",
+    "sha256": "267d0810e0a9805bd58b100a92b63e72e7f05763a0bacce087b32c21e1d70202",
+    "exact_suite": {
+      "status": "passed",
+      "tests": [
+        "TestRealGuestUnifiedSplitPhasePreissueThenRuntimeIssue",
+        "TestRealGuestUnifiedSplitPhaseOverlapsIndependentCallsAndKeepsLogicalReceipts",
+        "TestRealGuestUnifiedSplitPhasePreservesDynamicActivation",
+        "TestRealGuestUnifiedSplitPhaseFailureDiscardsLaterPhysicalReadWithoutLogicalReceipt"
+      ],
+      "dynamic_cases": [
+        "branch_not_taken",
+        "branch_taken",
+        "zero_loop",
+        "two_loop_iterations",
+        "unsupported_one_line_branch_fallback"
+      ],
+      "matched_single_sample_ns": {
+        "baseline": 3726911335,
+        "unified": 9396233138
+      }
+    }
+  },
+  "matched_cold_exact_guest_campaign": {
+    "scope": "two independent 150ms immutable reads; treatment includes one exact analyzer/lowering Guest before final execution",
+    "samples": 5,
+    "artifact_sha256": "d9725f0d0995c288da5e4816862b283304072164e003143f81cdc7bfd3314a1d",
+    "baseline_ns": [3755490702, 3756419031, 3768251806, 3740341555, 3748677994],
+    "unified_ns": [9441244409, 9436986068, 9438266069, 9451057875, 9493429271],
+    "baseline_median_ns": 3755490702,
+    "unified_median_ns": 9441244409,
+    "median_delta_ns": 5685753707,
+    "median_change_percent": 151.3984232199545,
+    "interpretation": "The unified mechanism preserved physical overlap and logical equivalence, but the current cold exact-Guest analysis/lowering cost dominated the 150ms overlap opportunity. This fixture does not support a latency-improvement claim."
+  },
+  "host_checks": {
+    "go_test_all": "passed",
+    "go_vet_all": "passed",
+    "go_race_all": "passed",
+    "guest_python_tests": 191,
+    "guest_contract_tests": 109
+  },
+  "scope_limits": [
+    "No result is transferred to source-generation Study A, prepared-value, COW or multi-program workloads.",
+    "Retained-prefix local Python overlap is deliberately removed and is not remeasured here.",
+    "Collect remains at the original logical call site.",
+    "Legacy retained-prefix and independent semantic pre-dispatch comparators require LegacyResearchExecution."
+  ]
+}

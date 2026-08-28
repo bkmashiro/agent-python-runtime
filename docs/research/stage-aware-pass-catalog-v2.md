@@ -1,5 +1,7 @@
 # Stage-aware optimization pass catalog v2
 
+> **Historical catalog snapshot.** The current catalog is documented in [`source-pass-plugins.md`](../source-pass-plugins.md). `capability_future_projection` and `split_phase_sources_read` were removed; their records below remain the source of historical mechanism/economics claims.
+
 ## Decision
 
 All retained Runtime optimization selectors now enter through one static, default-off pass

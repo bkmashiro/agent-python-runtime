@@ -199,9 +199,9 @@ Plan and frozen per-Run legality context. Passes are individually default-off,
 versioned and deterministic; they emit canonical admitted/rejected decisions while
 opaque `QualifiedCall` values remain Host-private. Passes have no handler/provider
 handles and cannot dispatch. Unknown names or versions and duplicate selections
-fail closed; any future multi-pass conflict requires an explicit deterministic policy
-before admission. The current semantic pre-dispatch path is the first pass and
-still executes through the existing staged-observation/Broker boundary.
+fail closed.
+
+For the retained split-phase path, a qualified source-time call may populate the Run-private `SplitPhaseTable`. After source seal, the plan-bound `split_phase_capability_calls` pass emits fixed compiler-internal `issue_or_reuse` and original-position `collect` sites. The derived program is compiled once and executes once as synchronous CPython. Source-time and runtime issue share the same attempt lifecycle; the Broker remains the sole logical admission and receipt owner. No runtime AST rewriting, Python Future propagation or Host dependency graph is involved. Historical retained-prefix execution and the independent pre-dispatch controller require the explicit `LegacyResearchExecution` gate.
 
 The same plan projects one digest-bound Python source document and exact static
 capability occurrences. A Host-TCB-only resolver may attach `source_bound` evidence

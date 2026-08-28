@@ -11,10 +11,13 @@ and prepared-region contracts.
 
 | pass registration | existing consumer | v0 stage |
 |---|---|---|
-| `semantic_pre_dispatch` | `overlay_only` | `prefix_overlay` |
+| `semantic_pre_dispatch` | historical research-only prefix controller | `prefix_overlay` |
 | `prepared_pure_region` | `execution_patch` | `whole_program_patch` |
 | `pure_scalar_cse` | `execution_patch` | `whole_program_patch` |
 | `pure_scalar_fold` | `execution_patch` | `whole_program_patch` |
+| `split_phase_capability_calls` | plan-bound Host-scheduled execution patch | `whole_program_patch` |
+
+`semantic_pre_dispatch` remains registered only so frozen research campaigns can decode and replay their original evidence; Wazero requires `LegacyResearchExecution` for that path. Product execution uses `split_phase_capability_calls`, whose source-time preissue and runtime issue share one `SplitPhaseTable`.
 
 The registration definition owns its stage. `CurrentEntry` projects that stage into
 the outcome shell, and `New` rejects a caller-supplied stage that differs from the

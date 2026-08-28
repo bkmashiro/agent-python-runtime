@@ -2,12 +2,11 @@
 
 Status: **Historical exact-Guest contract; analyzer-driven overlap source pass rejected on cost**
 
-> **Superseded for the Future story:** this contract preserves ordinary synchronous Python and
-> therefore required an exact source rewrite. The retained successor is
-> [Direct Capability Futures v1](direct-capability-futures-v1.md), which adopts explicit Future
-> semantics, removes the analyzer entirely and has positive exact-Guest evidence. The lifecycle
-> substrate below remains relevant; its source-pass admission rules are not requirements of the
-> direct Future lane.
+> **Superseded implementation; retained lifecycle evidence:** the hard-coded source pass and
+> later direct Future successor were both removed. The retained model is the plan-bound
+> [`split_phase_capability_calls`](../source-pass-plugins.md) pass over one source-time/runtime
+> attempt table. The lifecycle evidence below remains relevant; pass names and performance
+> conclusions remain historical.
 
 Baseline source: `fde07939f3d1865a83bfb59b16a3ac16abf46e8f`
 

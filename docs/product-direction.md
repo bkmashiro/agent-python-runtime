@@ -35,37 +35,15 @@ remain typed Host effects. This does not replace the authority-lifecycle
 direction; fresh execution prevents hidden interpreter state from becoming
 workflow continuation state.
 
-The primary Agent-specific execution history is
-[streaming authority-staged execution](streaming-authority-staged-execution.md).
-A minimal mechanism now incrementally validates and executes append-only Python
-inside one live target-Guest session, stages filesystem changes in a private
-workspace attempt, dispatches reads only when unchanged Python reaches their Broker
-boundary, and enforces pre-seal write denial. The historical literal eager-read
-metadata path is disabled; the current successor is exact source-bound semantic
-pre-dispatch after verified legality. Bounded Experimental
-successors now add portable immutable roots, structured recursive child
-orchestration, exact AST-qualified whole-Run Agent Function reuse/single-flight,
-explicit single-wait fresh re-evaluation, one never-served single-use prepared
-module, bounded Linux private-memory COW, and continuation-preserving cold-I/O.
-General arbitrary-Python purity, production fan-out scheduling, automatic
-cold/reuse policy, generalized write commit/reconciliation, and broad performance
-claims remain Deferred or Proposed. The completed experimental investigation is bounded by the
-[Host-Scheduled Calls and Immutable Value Reuse Mega-Goal](plans/2026-08-24-host-scheduled-python-reuse-autonomous-megagoal.md).
-Its analyzer-driven split-phase pass, fixed NumPy source pass, cache widening and
-composition remain negative. Two explicit successors remove the analyzer dependency. The
-[direct capability Future](research/direct-capability-futures-v1.md) adopts Future semantics:
-non-approval live projected tools submit at the dynamic call point and materialize on
-use/final output, retaining a `5.17%` exact-Guest median speedup. The
-[direct prepared-value lane](research/direct-prepared-values-v1.md) reuses one immutable
-ValueSlot template across fresh Guests through an explicit binding, retaining a `53.06%`
-median speedup on the fixed NumPy fixture. Both lanes use zero analyzer Guests and remain
-Experimental/off. The
-[stage-aware pass catalog v2](research/stage-aware-pass-catalog-v2.md) registers all 18 retained
-or historically measured optimizations. Plan, prefix, hybrid, whole-program and fresh-Run passes
-keep their source/authority contracts; cache, streaming, workflow, prepared-memory, COW and
-residency policies use an explicit Runtime-lowering stage. Selection remains static and
-default-off, with no generic IR, automatic order solver or cost model. Broader automatic
-scheduling, source rewriting and reuse claims remain rejected.
+The active execution direction is the
+[unified split-phase roadmap](plans/2026-08-27-unified-split-phase-execution-roadmap.md).
+Source streaming performs incremental analysis only. A positively admitted fixed-input Host read may start physically before source seal; after seal, one plan-bound whole-program pass fixes compiler-internal `issue_or_reuse` and original-position `collect` sites. The derived program then runs once as ordinary synchronous CPython. Runtime-derived arguments issue only after Python makes them concrete. Source-time and runtime issue share one Run-private attempt table, while the Broker retains logical permission, order, validation and receipts.
+
+Retained-prefix Guest execution and the independent semantic pre-dispatch controller remain only as historical comparators behind the explicit `LegacyResearchExecution` gate. The Python Future projection and hard-coded `split_phase_sources_read` pass were removed. This deliberately gives up source-generation overlap with pure local Python and private filesystem mutation; unsupported or unproved cases use unchanged sequential execution.
+
+Other bounded Experimental mechanisms include portable immutable roots, structured recursive child orchestration, exact AST-qualified whole-Run Agent Function reuse/single-flight, explicit single-wait fresh re-evaluation, one never-served single-use prepared module, bounded Linux private-memory COW, and continuation-preserving cold-I/O. General arbitrary-Python purity, production fan-out scheduling, automatic cold/reuse policy, generalized write commit/reconciliation, collect sinking and broad performance claims remain Deferred or Proposed.
+
+The [direct prepared-value lane](research/direct-prepared-values-v1.md) remains an independent default-off mechanism and retains its fixed NumPy evidence. Historical Future and analyzer-driven source-pass measurements remain attached to those removed mechanisms; they are not unified-runtime speedups. The current [stage-aware pass catalog](source-pass-plugins.md) registers 17 default-off entries. Selection remains static, with no generic IR, automatic order solver, Host dependency graph or cost model.
 
 Optional mechanisms must remain orthogonal at their public contract boundaries.
 Result caching, single-flight, workflow re-evaluation, immutable workspace

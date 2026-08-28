@@ -3,12 +3,12 @@
 Status: **Historical mechanism evidence; literal eager preflight disabled by the 2026-08-14 successor contract.**
 Date: 2026-08-13
 
-> **2026-08-14 successor decision:** the literal-call eager-preflight path described
-> below is now disabled. Capability metadata no longer populates
-> `_stream_eager_calls`; unchanged Python must dynamically reach a call unless a
-> future verified semantic overlay proves the stricter pre-dispatch contract. See
-> [the v0 contract](research/effect-aware-contract-v0.md). The remaining text is
-> retained as historical mechanism evidence, not current admission policy.
+> **2026-08-27 successor decision:** retained-prefix Guest execution and literal eager
+> preflight are no longer product paths. They require the explicit
+> `LegacyResearchExecution` gate for historical replay. Current source streaming performs
+> analysis only; admitted Host work enters the unified split-phase table, then one
+> sealed-source lowering precedes one synchronous Guest execution. The remaining text is
+> historical mechanism evidence, not current admission policy.
 
 ## Research question
 

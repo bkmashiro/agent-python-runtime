@@ -86,7 +86,7 @@ required = {
     "branch_loop_exception_failure_discard": ["TestRealGuestPLMPreservesBranchLoopInvalidationAndFallback", "TestRealGuestPLMEarlierExceptionDiscardsUnclaimedCandidate", "TestRealGuestPLMPrepareFailureRetriesOnlyAtLinearization"],
     "setup_failure": ["TestSplitPhaseSetupFailureFinalizesSourceTimeCandidate"],
     "cancellation_and_late_completion": ["TestPLMCancellationAndLateCompletionRemainRunOwned"],
-    "uncertain_provider_outcome": ["TestPLMUncertainProviderOutcomeIsNeverReplayed"],
+    "uncertain_provider_outcome": ["TestPLMUncertainProviderOutcomeIsNeverReplayed", "TestPLMInvalidatedUncertainProviderOutcomeIsNeverReplayed"],
     "foreign_identity": ["TestSplitPhaseTableIsAtomicallyOwnedByOneRunBroker", "TestPLMPrepareRejectsResourceAndSealedContractDrift"],
     "pass_disabled": ["TestRealGuestPLMPassDisabledExecutesUnchangedSource"],
 }

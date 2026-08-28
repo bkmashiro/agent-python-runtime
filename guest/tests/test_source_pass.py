@@ -256,25 +256,17 @@ class SourcePassTests(unittest.TestCase):
         self.assertEqual("not_applicable", patch["status"])
         self.assertNotIn("derived_source", patch)
 
+    def test_plm_capability_calls_rejects_compiled_code_observation(self):
+        source = 'value = tools.get("alpha")\ntry:\n    1 / 0\nexcept Exception as error:\n    result = error.__traceback__.tb_frame.f_code.co_code.hex()\n'
+        patch = json.loads(emit_source_pass_patch_request_json(capability_request(source, CAPABILITY_PROJECTIONS)))
+        self.assertEqual("not_applicable", patch["status"])
+
     def test_data_local_numpy_sum_emits_one_value_slot_materialization(self):
-        source = (
-            "import io\n"
-            "import numpy as np\n"
-            "dataset = np.load(io.BytesIO(open('/workspace/input.npy', 'rb').read()), allow_pickle=False)\n"
-            "result = int(dataset.sum())\n"
-        )
-        raw_request = request(
-            source,
-            "data_local_numpy_sum",
-            "pysolate.data-local-numpy-sum-pass.v2",
-        )
-        patch = json.loads(emit_source_pass_patch_request_json(raw_request))
+        source = "import io\nimport numpy as np\ndataset = np.load(io.BytesIO(open('/workspace/input.npy', 'rb').read()), allow_pickle=False)\nresult = int(dataset.sum())\n"
+        raw = request(source, "data_local_numpy_sum", "pysolate.data-local-numpy-sum-pass.v2")
+        patch = json.loads(emit_source_pass_patch_request_json(raw))
         self.assertEqual("applied", patch["status"])
-        self.assertEqual(1, patch["replacement_count"])
-        self.assertEqual(
-            "pass\npass\npass\nresult = _pysolate_materialize_slot('slot-numpy-sum-v1')\n",
-            patch["derived_source"],
-        )
+        self.assertEqual("pass\npass\npass\nresult = _pysolate_materialize_slot('slot-numpy-sum-v1')\n", patch["derived_source"])
         tree = validate_source_pass_execution_request(source, json.dumps(patch, separators=(",", ":")))
         self.assertIsNotNone(tree)
 

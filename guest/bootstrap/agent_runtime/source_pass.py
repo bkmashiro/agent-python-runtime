@@ -282,6 +282,21 @@ def _projected_call(node, projection_index):
     return projection_index.get((node.func.value.id, node.func.attr))
 
 
+def _observes_compiled_code(node):
+    if isinstance(node, ast.Attribute):
+        return node.attr.startswith("co_") or node.attr in {
+            "__code__", "__traceback__", "tb_frame", "tb_next", "tb_lineno",
+            "f_code", "f_back", "gi_code", "cr_code", "ag_code", "_getframe",
+        }
+    if isinstance(node, ast.Name):
+        return node.id in {"compile", "eval", "exec"}
+    if isinstance(node, ast.Import):
+        return any(alias.name.partition(".")[0] in {"dis", "inspect", "traceback"} for alias in node.names)
+    if isinstance(node, ast.ImportFrom) and node.module is not None:
+        return node.module.partition(".")[0] in {"dis", "inspect", "traceback"}
+    return False
+
+
 def _isolated_physical_line(node, lines):
     if node.lineno != node.end_lineno or node.lineno < 1 or node.lineno > len(lines):
         return False
@@ -405,11 +420,12 @@ def _plm_capability_calls(source, projections, prepared_tree=None):
     projection_index = _validated_capability_projection_index(projections)
     tree = prepared_tree if isinstance(prepared_tree, ast.Module) else ast.parse(source, filename="<agent-run>", mode="exec")
     lines = source.splitlines()
-    projected_calls = {
-        id(node)
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and _projected_call(node, projection_index) is not None
-    }
+    projected_calls = set()
+    for node in ast.walk(tree):
+        if _observes_compiled_code(node):
+            return tree, "", 0, None
+        if isinstance(node, ast.Call) and _projected_call(node, projection_index) is not None:
+            projected_calls.add(id(node))
     if not projected_calls:
         return tree, "", 0, None
 

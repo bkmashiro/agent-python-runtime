@@ -1,10 +1,10 @@
 # Logical-Time-Preserving PLM Autonomous Mega-Goal
 
-> **Status (2026-08-28): active implemented architecture; Gate 10 closeout in progress.** Gates 0 through 9 are complete. This file remains the only active execution pointer until signed upstream-clean closeout.
+> **Status (2026-08-28): closed implemented Experimental V1.** Gates 0 through 10 are complete. PLM remains default-off after negative matched economics; any successor requires a separate plan and evidence identity.
 
 **Goal:** Replace the predecessor `issue/collect` interpretation with a Run-owned, logical-time-preserving Prepare/Linearize/Materialize model that preserves original Host-call semantics for temporally changing external worlds, fixes the independently reported lifecycle/authority defects, and earns any latency claim through matched end-to-end evidence.
 
-**Architecture:** Source streaming performs authority-free analysis and may create only positively admitted Host-private candidates. After source seal, one exact target-Guest lowering emits internal PLM calls into one synchronous CPython execution. Physical preparation may move earlier; linearization stays at the original logical Host-call point; V1 materialization stays at that same point. A candidate is adopted only when an operation-specific temporal validator proves that it denotes an outcome allowed at linearization; otherwise the Host starts the canonical operation there. Python receives no Future, and the Host does not execute Python expressions or maintain a Python dependency graph.
+**Architecture:** Source streaming performs authority-free analysis and may create only positively admitted Host-private candidates. After source seal, one exact target-Guest lowering emits internal PLM calls into one synchronous CPython execution. Physical preparation may move earlier; linearization stays at the original logical Host-call point; V1 materialization stays at that same point. A candidate is adopted only when an operation-specific temporal validator proves that it denotes an outcome allowed at linearization. Rejected candidates settle before replay: an uncertain physical outcome becomes one terminal error, while every other safe rejection starts the canonical operation there. Python receives no Future, and the Host does not execute Python expressions or maintain a Python dependency graph.
 
 **Primary design:** [`docs/research/logical-time-preserving-split-phase-execution.md`](../research/logical-time-preserving-split-phase-execution.md)
 
@@ -594,7 +594,7 @@ Tasks:
 - [x] Run focused, full, race, vet, Python and exact Guest gates.
 - [x] Run bounded independent Host ownership, compiler lowering, temporal contract and evidence reviews.
 - [x] Fix every High/Medium causal defect or record a named stop decision.
-- [ ] Sign final commits, push, verify upstream and leave a clean worktree.
+- [x] Sign final commits, push, verify upstream and leave a clean worktree.
 
 **Gate G10:** One active source of truth, no open High/Medium correctness findings, all required gates green, exact artifact/evidence linked, signed upstream clean.
 
@@ -602,8 +602,8 @@ Tasks:
 
 ## Current execution pointer
 
-**Current:** Gates 0 through 9 are complete. No optional reserve is active; PLM V1 remains the one bounded implementation and stays default-off after the negative economics result.
+**Current:** Gates 0 through 10 are complete. PLM V1 is the one bounded implementation, stays default-off and has no open High/Medium correctness finding.
 
-**Next:** Execute Gate 10 documentation, full verification, independent Host/compiler review and closeout.
+**Next:** None. Any further PLM work must begin from a separate successor plan with a new evidence identity.
 
 **Blocked:** No blocker.

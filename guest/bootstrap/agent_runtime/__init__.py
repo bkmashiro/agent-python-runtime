@@ -24,6 +24,7 @@ _prepared_globals: dict[str, Any] = {}
 _runtime_config: dict[str, Any] = {}
 _validated_request_json: str | None = None
 _validated_code: types.CodeType | None = None
+_validated_source_tree: ast.Module | None = None
 _validated_import_globals: dict[str, Any] = {}
 _validated_effective_ast_sha256: str | None = None
 _prepared_numpy_installed = False
@@ -369,12 +370,13 @@ def _initialize(config_json: str) -> None:
     value = json.loads(config_json)
     if not isinstance(value, dict):
         raise ValueError("runtime config must be an object")
-    global _runtime_config, _prepared_globals, _validated_request_json, _validated_code, _validated_import_globals, _validated_effective_ast_sha256, _prepared_numpy_installed
+    global _runtime_config, _prepared_globals, _validated_request_json, _validated_code, _validated_source_tree, _validated_import_globals, _validated_effective_ast_sha256, _prepared_numpy_installed
     _runtime_config = dict(value)
     _prepared_globals = {}
     _prepared_numpy_installed = False
     _validated_request_json = None
     _validated_code = None
+    _validated_source_tree = None
     _validated_import_globals = {}
     _validated_effective_ast_sha256 = None
 
@@ -885,7 +887,8 @@ def _validate_unrestricted_source(source: str) -> tuple[int, types.CodeType | No
 
 
 def _validate_request_source(request_json: str) -> int:
-    global _validated_request_json, _validated_code, _validated_import_globals
+    global _validated_request_json, _validated_code, _validated_source_tree, _validated_import_globals
+    _validated_source_tree = None
     if not isinstance(request_json, str):
         return _SOURCE_CONTRACT_INVALID
     request, error = _decode_request(request_json)
@@ -913,7 +916,7 @@ def _validate_request_source(request_json: str) -> int:
 
 def _validate_request_source_for_patch(request_json: str) -> int:
     """Admit original source without compiling or importing it before patch selection."""
-    global _validated_request_json, _validated_code, _validated_import_globals
+    global _validated_request_json, _validated_code, _validated_source_tree, _validated_import_globals
     if not isinstance(request_json, str):
         return _SOURCE_CONTRACT_INVALID
     request, error = _decode_request(request_json)
@@ -931,6 +934,7 @@ def _validate_request_source_for_patch(request_json: str) -> int:
         return _SOURCE_CONTRACT_INVALID
     _validated_request_json = request_json
     _validated_code = None
+    _validated_source_tree = tree
     _validated_import_globals = {}
     return _SOURCE_CONTRACT_OK
 
@@ -973,6 +977,29 @@ def _prepare_prepared_region_execution(selection_request_json: str) -> None:
     from .prepared_region import validate_prepared_region_execution_request
     tree = validate_prepared_region_execution_request(request["code"], selection_request_json)
     _install_derived_tree(tree, request)
+
+
+def _transform_source_pass(request_json: str) -> str:
+    global _validated_source_tree
+    prepared_tree = _validated_source_tree
+    if prepared_tree is not None:
+        if _validated_request_json is None:
+            raise ValueError("source pass source was not admitted")
+        request, error = _decode_request(_validated_request_json)
+        try:
+            transform_request = json.loads(request_json)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("source pass request is invalid") from exc
+        if (
+            error is not None
+            or request is None
+            or not isinstance(transform_request, dict)
+            or transform_request.get("source") != request["code"]
+        ):
+            raise ValueError("source pass source does not match the admitted request")
+        _validated_source_tree = None
+    from .source_pass import emit_source_pass_patch_request_json
+    return emit_source_pass_patch_request_json(request_json, prepared_tree)
 
 
 def _prepare_source_pass_execution(patch_json: str) -> None:

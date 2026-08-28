@@ -36,14 +36,12 @@ func (fake *capabilityTransformer) TransformSourcePass(_ context.Context, raw []
 	if err := json.Unmarshal(raw, &fake.request); err != nil {
 		return nil, err
 	}
-	derived := "result = 1\n"
 	patch := Patch{
 		SchemaVersion: SchemaVersion, Status: "applied",
 		PassName: fake.request.PassName, PassVersion: fake.request.PassVersion,
 		RegistrationSHA256:   fake.request.RegistrationSHA256,
 		OriginalSourceSHA256: digest([]byte(fake.request.Source)),
-		DerivedSource:        derived, DerivedSourceSHA256: digest([]byte(derived)),
-		ReplacementCount: 1, CapabilityProjections: fake.request.CapabilityProjections,
+		ReplacementCount:     1, CapabilityProjections: fake.request.CapabilityProjections,
 	}
 	return json.Marshal(patch)
 }

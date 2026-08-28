@@ -1,3 +1,4 @@
+import ast
 import hashlib
 import json
 import unittest
@@ -59,14 +60,24 @@ CAPABILITY_PROJECTIONS = [
 
 
 class SourcePassTests(unittest.TestCase):
-    def test_source_patch_v2_uses_verifiable_source_identities_only(self):
+    def assert_text_order(self, text, *parts):
+        positions = [text.index(part) for part in parts]
+        self.assertEqual(sorted(positions), positions)
+
+    def selected_plm_source(self, source, raw):
+        tree = validate_source_pass_execution_request(source, raw)
+        return ast.unparse(tree)
+
+    def test_source_patch_v3_uses_verifiable_source_identities_only(self):
         raw = emit_source_pass_patch_request_json(
             plm_capability_request('value = tools.get("alpha")\nresult = value\n', CAPABILITY_PROJECTIONS)
         )
         patch = json.loads(raw)
-        self.assertEqual("pysolate.source-pass-patch.v2", patch["schema_version"])
+        self.assertEqual("pysolate.source-pass-patch.v3", patch["schema_version"])
         self.assertNotIn("original_ast_sha256", patch)
         self.assertNotIn("derived_ast_sha256", patch)
+        self.assertNotIn("derived_source", patch)
+        self.assertNotIn("derived_source_sha256", patch)
 
     def test_same_guest_selection_does_not_replay_plm_transform(self):
         source = 'value = tools.get("alpha")\nresult = value\n'
@@ -96,12 +107,7 @@ class SourcePassTests(unittest.TestCase):
         patch = json.loads(emit_source_pass_patch_request_json(
             plm_capability_request(source, CAPABILITY_PROJECTIONS)
         ))
-        patch["derived_source"] = patch["derived_source"].replace(
-            "tools.get", "tools.other"
-        )
-        patch["derived_source_sha256"] = (
-            "sha256:" + hashlib.sha256(patch["derived_source"].encode()).hexdigest()
-        )
+        patch["replacement_count"] += 1
         tampered = json.dumps(patch, sort_keys=True, separators=(",", ":"))
 
         with self.assertRaisesRegex(ValueError, "does not match"):
@@ -119,31 +125,36 @@ class SourcePassTests(unittest.TestCase):
         patch = json.loads(raw)
         self.assertEqual("applied", patch["status"])
         self.assertEqual(2, patch["replacement_count"])
-        lines = patch["derived_source"].splitlines()
-        self.assertIn("_pysolate_plm_prepare", lines[0])
-        self.assertIn("_pysolate_plm_linearize", lines[0])
-        self.assertIn("_pysolate_plm_prepare", lines[1])
-        self.assertNotIn("_pysolate_plm_linearize", lines[1])
-        self.assertIn("_pysolate_plm_linearize", lines[3])
-        self.assertIn("{'value': x}", lines[3])
-        self.assertNotIn("_pysolate_call_issue", patch["derived_source"])
-        self.assertNotIn("_pysolate_call_collect", patch["derived_source"])
-        validate_source_pass_execution_request(source, raw)
+        derived = self.selected_plm_source(source, raw)
+        self.assertEqual(2, derived.count("_pysolate_plm_prepare"))
+        self.assertEqual(2, derived.count("_pysolate_plm_linearize"))
+        self.assert_text_order(
+            derived,
+            "_pysolate_plm_prepare('slot-s1",
+            "_pysolate_plm_linearize('slot-s1",
+            "_pysolate_plm_prepare('slot-s4",
+            "independent = 3 * 4",
+            "_pysolate_plm_linearize('slot-s4",
+        )
+        self.assertIn("{'value': x}", derived)
+        self.assertNotIn("_pysolate_call_issue", derived)
+        self.assertNotIn("_pysolate_call_collect", derived)
 
     def test_plm_capability_calls_preserves_branch_loop_and_unsupported_fallback(self):
         for source in (
             'if inputs["take"]:\n    value = tools.get("alpha")\n    result = value\nelse:\n    result = 0\n',
             'values = []\nfor item in inputs["items"]:\n    value = tools.get(item)\n    values.append(value)\nresult = values\n',
         ):
-            patch = json.loads(emit_source_pass_patch_request_json(plm_capability_request(source, CAPABILITY_PROJECTIONS)))
+            raw = emit_source_pass_patch_request_json(plm_capability_request(source, CAPABILITY_PROJECTIONS))
+            patch = json.loads(raw)
             self.assertEqual("applied", patch["status"])
-            self.assertIn("_pysolate_plm_prepare", patch["derived_source"])
-            self.assertIn("_pysolate_plm_linearize", patch["derived_source"])
-            validate_source_pass_execution_request(source, json.dumps(patch, sort_keys=True, separators=(",", ":")))
+            derived = self.selected_plm_source(source, raw)
+            self.assertIn("_pysolate_plm_prepare", derived)
+            self.assertIn("_pysolate_plm_linearize", derived)
         unsupported = 'value = tools.get(make_key())\nresult = value\n'
         patch = json.loads(emit_source_pass_patch_request_json(plm_capability_request(unsupported, CAPABILITY_PROJECTIONS)))
         self.assertEqual("not_applicable", patch["status"])
-        self.assertEqual("", patch["derived_source"])
+        self.assertNotIn("derived_source", patch)
 
     def test_plm_capability_calls_issues_runtime_dependency_after_value_is_ready(self):
         source = (
@@ -157,14 +168,15 @@ class SourcePassTests(unittest.TestCase):
         patch = json.loads(raw)
         self.assertEqual("applied", patch["status"])
         self.assertEqual(2, patch["replacement_count"])
-        lines = patch["derived_source"].splitlines()
-        self.assertLess(lines[0].index("_pysolate_plm_prepare"), lines[0].index("_pysolate_plm_linearize"))
-        self.assertIn("_pysolate_plm_prepare", lines[1])
-        self.assertNotIn("_pysolate_plm_linearize", lines[1])
-        self.assertNotIn("_pysolate_plm_prepare", lines[2])
-        self.assertIn("_pysolate_plm_linearize", lines[3])
-        self.assertEqual(source.count("\n"), patch["derived_source"].count("\n"))
-        validate_source_pass_execution_request(source, raw)
+        derived = self.selected_plm_source(source, raw)
+        self.assert_text_order(
+            derived,
+            "_pysolate_plm_prepare('slot-s1",
+            "_pysolate_plm_linearize('slot-s1",
+            "_pysolate_plm_prepare('slot-s4",
+            "independent = 3 * 4",
+            "_pysolate_plm_linearize('slot-s4",
+        )
 
     def test_plm_capability_calls_rejects_semicolon_siblings(self):
         for source in (
@@ -177,7 +189,7 @@ class SourcePassTests(unittest.TestCase):
                 plm_capability_request(source, CAPABILITY_PROJECTIONS)
             ))
             self.assertEqual("not_applicable", patch["status"])
-            self.assertEqual("", patch["derived_source"])
+            self.assertNotIn("derived_source", patch)
 
     def test_plm_capability_calls_stage_independent_literals_before_linearize(self):
         source = (
@@ -185,12 +197,17 @@ class SourcePassTests(unittest.TestCase):
             'b = tools.get("beta")\n'
             'result = [a, b]\n'
         )
-        patch = json.loads(emit_source_pass_patch_request_json(capability_request(source, CAPABILITY_PROJECTIONS)))
-        lines = patch["derived_source"].splitlines()
+        raw = emit_source_pass_patch_request_json(capability_request(source, CAPABILITY_PROJECTIONS))
+        patch = json.loads(raw)
+        derived = self.selected_plm_source(source, raw)
         self.assertEqual("applied", patch["status"])
-        self.assertEqual(2, lines[0].count("_pysolate_plm_prepare"))
-        self.assertEqual(1, lines[0].count("_pysolate_plm_linearize"))
-        self.assertEqual(1, lines[1].count("_pysolate_plm_linearize"))
+        self.assert_text_order(
+            derived,
+            "_pysolate_plm_prepare('slot-s1",
+            "_pysolate_plm_prepare('slot-s2",
+            "_pysolate_plm_linearize('slot-s1",
+            "_pysolate_plm_linearize('slot-s2",
+        )
 
     def test_plm_capability_calls_preserves_branch_and_loop_activation(self):
         branch = (
@@ -212,14 +229,13 @@ class SourcePassTests(unittest.TestCase):
                 patch = json.loads(raw)
                 self.assertEqual("applied", patch["status"])
                 self.assertEqual(1, patch["replacement_count"])
-                self.assertEqual(source.count("\n"), patch["derived_source"].count("\n"))
-                validate_source_pass_execution_request(source, raw)
+                self.assertIn("_pysolate_plm_linearize", self.selected_plm_source(source, raw))
 
     def test_plm_capability_calls_rejects_opaque_argument_evaluation(self):
         source = 'value = tools.get(make_key())\nresult = value\n'
         patch = json.loads(emit_source_pass_patch_request_json(capability_request(source, CAPABILITY_PROJECTIONS)))
         self.assertEqual("not_applicable", patch["status"])
-        self.assertEqual("", patch["derived_source"])
+        self.assertNotIn("derived_source", patch)
 
     def test_data_local_numpy_sum_emits_one_value_slot_materialization(self):
         source = (

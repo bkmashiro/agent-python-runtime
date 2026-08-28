@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	SchemaVersion                                        = "pysolate.source-pass-patch.v2"
+	SchemaVersion                                        = "pysolate.source-pass-patch.v3"
 	PureScalarCSEName              passregistration.Name = "pure_scalar_cse"
 	PureScalarCSEVersion                                 = "pysolate.pure-scalar-cse-pass.v1"
 	PureScalarCSEConfigSHA256                            = "sha256:48884671a1121cfb21c2b19f79faec1530342a6175ab515c0011ce2074e3057f"
@@ -61,8 +61,8 @@ type Patch struct {
 	PassVersion           string                 `json:"pass_version"`
 	RegistrationSHA256    string                 `json:"registration_sha256"`
 	OriginalSourceSHA256  string                 `json:"original_source_sha256"`
-	DerivedSource         string                 `json:"derived_source"`
-	DerivedSourceSHA256   string                 `json:"derived_source_sha256"`
+	DerivedSource         string                 `json:"derived_source,omitempty"`
+	DerivedSourceSHA256   string                 `json:"derived_source_sha256,omitempty"`
 	ReplacementCount      uint32                 `json:"replacement_count"`
 	CapabilityProjections []CapabilityProjection `json:"capability_projections,omitempty"`
 }
@@ -227,8 +227,14 @@ func (patch Patch) Validate(source string, registration passregistration.Registr
 	}
 	switch patch.Status {
 	case "applied":
-		if patch.ReplacementCount == 0 || patch.DerivedSource == "" ||
-			patch.DerivedSourceSHA256 != digest([]byte(patch.DerivedSource)) {
+		if patch.ReplacementCount == 0 {
+			return ErrInvalidPatch
+		}
+		if registration.Name() == PLMCapabilityCallsName {
+			if patch.DerivedSource != "" || patch.DerivedSourceSHA256 != "" {
+				return ErrInvalidPatch
+			}
+		} else if patch.DerivedSource == "" || patch.DerivedSourceSHA256 != digest([]byte(patch.DerivedSource)) {
 			return ErrInvalidPatch
 		}
 	case "not_applicable":

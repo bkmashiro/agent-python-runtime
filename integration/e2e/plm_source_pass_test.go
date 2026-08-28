@@ -70,8 +70,7 @@ func TestRealGuestPLMSourceTimeCandidateReusesAndLinearizesAtOriginalCall(t *tes
 		context.Background(), sourcepatch.PLMCapabilityCallsName, engine, request,
 		plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan),
 	)
-	if err != nil || !execution.Applied || strings.Contains(execution.Patch.DerivedSource, "_pysolate_call_") ||
-		!strings.Contains(execution.Patch.DerivedSource, "_pysolate_plm_prepare") || !strings.Contains(execution.Patch.DerivedSource, "_pysolate_plm_linearize") {
+	if err != nil || !execution.Applied || execution.Patch.ReplacementCount != 1 || execution.Patch.DerivedSource != "" {
 		t.Fatalf("execution=%+v err=%v", execution, err)
 	}
 	result, err := decodeSuccessfulGuestResult(execution.Payload)
@@ -179,7 +178,7 @@ func TestRealGuestPLMRuntimeDerivedCallsPreserveCodeAndReceipts(t *testing.T) {
 		context.Background(), sourcepatch.PLMCapabilityCallsName, trustedSemanticRunner(t, runner), request,
 		plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan),
 	)
-	if err != nil || !execution.Applied || strings.Contains(execution.Patch.DerivedSource, "_pysolate_call_") {
+	if err != nil || !execution.Applied || execution.Patch.ReplacementCount != 2 || execution.Patch.DerivedSource != "" {
 		t.Fatalf("execution=%+v err=%v", execution, err)
 	}
 	result, err := decodeSuccessfulGuestResult(execution.Payload)

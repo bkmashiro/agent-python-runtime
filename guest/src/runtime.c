@@ -470,24 +470,7 @@ uint32_t runtime_transform_source_pass(const char *request, int32_t request_len)
         request_len < 0 || request_len > AGENT_RUNTIME_REQUEST_MAX) {
         return write_internal_error();
     }
-    PyObject *module = PyImport_ImportModule("agent_runtime.source_pass");
-    if (module == NULL) {
-        return write_python_unicode(NULL);
-    }
-    PyObject *function = PyObject_GetAttrString(module, "emit_source_pass_patch_request_json");
-    Py_DECREF(module);
-    if (function == NULL) {
-        return write_python_unicode(NULL);
-    }
-    PyObject *argument = PyUnicode_DecodeUTF8(request, (Py_ssize_t)request_len,
-                                              "strict");
-    if (argument == NULL) {
-        Py_DECREF(function);
-        return write_python_unicode(NULL);
-    }
-    PyObject *result = PyObject_CallOneArg(function, argument);
-    Py_DECREF(argument);
-    Py_DECREF(function);
+    PyObject *result = call_with_utf8("_transform_source_pass", request, request_len);
     return write_python_unicode(result);
 }
 

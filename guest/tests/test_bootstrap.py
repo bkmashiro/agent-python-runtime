@@ -392,7 +392,6 @@ class BootstrapTests(unittest.TestCase):
         source = 'value = tools.get("alpha")\nresult = value\n'
         request = {"run_id": "single-compile", "code": source, "inputs": {}}
         raw = json.dumps(request)
-        source_pass = importlib.import_module(f"{self.runtime.__name__}.source_pass")
         patch_request = json.dumps({
             "pass_name": "plm_capability_calls",
             "pass_version": "pysolate.plm-capability-calls-pass.v1",
@@ -417,12 +416,47 @@ class BootstrapTests(unittest.TestCase):
         setattr(self.runtime, "_compile_agent_wrapper", counted_compile)
         try:
             self.assertEqual(0, self.runtime._validate_request_source_for_patch(raw))
-            patch = source_pass.emit_source_pass_patch_request_json(patch_request)
+            patch = self.runtime._transform_source_pass(patch_request)
             self.runtime._prepare_source_pass_execution(patch)
         finally:
             setattr(self.runtime, "_compile_agent_wrapper", compile_wrapper)
 
         self.assertEqual(1, compile_calls)
+
+    def test_patch_execution_parses_original_source_once(self):
+        source = 'value = tools.get("alpha")\nresult = value\n'
+        request = {"run_id": "single-parse", "code": source, "inputs": {}}
+        raw = json.dumps(request)
+        patch_request = json.dumps({
+            "pass_name": "plm_capability_calls",
+            "pass_version": "pysolate.plm-capability-calls-pass.v1",
+            "registration_sha256": "sha256:" + "a" * 64,
+            "source": source,
+            "capability_projections": [{
+                "capability": "tools.get",
+                "module": "tools",
+                "method": "get",
+                "arguments": ["key"],
+                "result_field": "value",
+            }],
+        }, sort_keys=True, separators=(",", ":"))
+        parse = self.runtime.ast.parse
+        parse_calls = 0
+
+        def counted_parse(*args, **kwargs):
+            nonlocal parse_calls
+            parse_calls += 1
+            return parse(*args, **kwargs)
+
+        setattr(self.runtime.ast, "parse", counted_parse)
+        try:
+            self.assertEqual(0, self.runtime._validate_request_source_for_patch(raw))
+            patch = self.runtime._transform_source_pass(patch_request)
+            self.runtime._prepare_source_pass_execution(patch)
+        finally:
+            setattr(self.runtime.ast, "parse", parse)
+
+        self.assertEqual(1, parse_calls)
 
     def test_patch_fallback_compiles_original_once(self):
         request = {"run_id": "single-compile-fallback", "code": "result = 7\n", "inputs": {}}

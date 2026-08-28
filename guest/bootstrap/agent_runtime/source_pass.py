@@ -1,4 +1,5 @@
 import ast
+import copy
 import hashlib
 import json
 import re
@@ -6,7 +7,7 @@ import re
 from .semantic import MAX_SCALAR_OPERATORS, MAX_SOURCE_BYTES
 
 
-PATCH_SCHEMA_VERSION = "pysolate.source-pass-patch.v2"
+PATCH_SCHEMA_VERSION = "pysolate.source-pass-patch.v3"
 PURE_SCALAR_CSE = "pure_scalar_cse"
 PURE_SCALAR_CSE_VERSION = "pysolate.pure-scalar-cse-pass.v1"
 PURE_SCALAR_FOLD = "pure_scalar_fold"
@@ -17,11 +18,12 @@ DATA_LOCAL_NUMPY_SUM = "data_local_numpy_sum"
 DATA_LOCAL_NUMPY_SUM_VERSION = "pysolate.data-local-numpy-sum-pass.v2"
 _REQUEST_KEYS = {"pass_name", "pass_version", "registration_sha256", "source"}
 _CAPABILITY_REQUEST_KEYS = _REQUEST_KEYS | {"capability_projections"}
-_PATCH_KEYS = {
+_PATCH_COMMON_KEYS = {
     "schema_version", "status", "pass_name", "pass_version", "registration_sha256",
-    "original_source_sha256", "derived_source", "derived_source_sha256", "replacement_count",
+    "original_source_sha256", "replacement_count",
 }
-_CAPABILITY_PATCH_KEYS = _PATCH_KEYS | {"capability_projections"}
+_PATCH_KEYS = _PATCH_COMMON_KEYS | {"derived_source", "derived_source_sha256"}
+_CAPABILITY_PATCH_KEYS = _PATCH_COMMON_KEYS | {"capability_projections"}
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _pending_capability_selection = None
 
@@ -234,10 +236,6 @@ def _pure_scalar_fold(source):
     return tree, derived_source, len(replacements)
 
 
-def _space_indent(line):
-    return line[: len(line) - len(line.lstrip())]
-
-
 def _validated_capability_projection_index(projections):
     if not isinstance(projections, list) or not projections or len(projections) > 64:
         raise ValueError("invalid split-phase capability projections")
@@ -320,7 +318,6 @@ def _split_phase_capability_assignment(statement, source, projection_index, avai
     if set(values) != set(argument_names):
         return None
     loaded_names = set()
-    rendered = []
     for argument_name in argument_names:
         value = values[argument_name]
         if isinstance(value, ast.Name):
@@ -332,11 +329,7 @@ def _split_phase_capability_assignment(statement, source, projection_index, avai
             and (value.value is None or type(value.value) in (bool, int, float, str))
         ):
             return None
-        segment = ast.get_source_segment(source, value)
-        if not isinstance(segment, str) or not segment or "\n" in segment:
-            return None
-        rendered.append(repr(argument_name) + ": " + segment)
-    return name, call, projection, loaded_names, "{" + ", ".join(rendered) + "}"
+    return name, call, projection, loaded_names, values
 
 
 def _v1_transparent_expression(node):
@@ -360,7 +353,46 @@ def _split_phase_site(call):
     return "s%dc%d-e%dc%d" % (call.lineno, call.col_offset, call.end_lineno, call.end_col_offset)
 
 
-def _plm_capability_calls(source, projections):
+def _plm_arguments_tree(argument_names, values):
+    return ast.Dict(
+        keys=[ast.Constant(value=name) for name in argument_names],
+        values=[copy.deepcopy(values[name]) for name in argument_names],
+    )
+
+
+def _plm_prepare_tree(base_slot, base_call, projection, argument_names, values, location):
+    node = ast.Expr(value=ast.Call(
+        func=ast.Name(id="_pysolate_plm_prepare", ctx=ast.Load()),
+        args=[
+            ast.Constant(value=base_slot),
+            ast.Constant(value=base_call),
+            ast.Constant(value=projection["capability"]),
+            _plm_arguments_tree(argument_names, values),
+        ],
+        keywords=[],
+    ))
+    return ast.copy_location(node, location)
+
+
+def _plm_materialize_tree(name, base_slot, projection, argument_names, values, location):
+    value = ast.Call(
+        func=ast.Name(id="_pysolate_plm_linearize", ctx=ast.Load()),
+        args=[
+            ast.Constant(value=base_slot),
+            ast.Constant(value=projection["capability"]),
+            _plm_arguments_tree(argument_names, values),
+        ],
+        keywords=[],
+    )
+    if projection["result_field"]:
+        value = ast.Subscript(value=value, slice=ast.Constant(value=projection["result_field"]), ctx=ast.Load())
+    return ast.copy_location(
+        ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=value),
+        location,
+    )
+
+
+def _plm_capability_calls(source, projections, prepared_tree=None):
     if (
         not isinstance(source, str)
         or not source
@@ -369,21 +401,20 @@ def _plm_capability_calls(source, projections):
     ):
         raise ValueError("invalid source pass input")
     projection_index = _validated_capability_projection_index(projections)
-    tree = ast.parse(source, filename="<agent-run>", mode="exec")
-    lines = source.splitlines(keepends=True)
+    tree = prepared_tree if isinstance(prepared_tree, ast.Module) else ast.parse(source, filename="<agent-run>", mode="exec")
     projected_calls = {
         id(node)
         for node in ast.walk(tree)
         if isinstance(node, ast.Call) and _projected_call(node, projection_index) is not None
     }
     if not projected_calls:
-        return tree, "", 0
+        return tree, "", 0, None
 
-    edits = {}
+    ast_edits = {}
     supported_calls = set()
 
-    def edit(line_number):
-        return edits.setdefault(line_number - 1, {"before": [], "after": [], "replacement": None})
+    def ast_edit(statement):
+        return ast_edits.setdefault(id(statement), {"before": [], "after": [], "replacement": None})
 
     def process_block(statements, inherited_names):
         if not statements:
@@ -404,7 +435,7 @@ def _plm_capability_calls(source, projections):
             )
             if parsed is None:
                 continue
-            name, call, projection, loaded_names, arguments_source = parsed
+            name, call, projection, loaded_names, values = parsed
             supported_calls.add(id(call))
             latest_definition = -1
             for loaded_name in loaded_names:
@@ -420,23 +451,23 @@ def _plm_capability_calls(source, projections):
             site = _split_phase_site(call)
             base_slot = "slot-" + site
             base_call = "plm-" + site
-            issue = "_pysolate_plm_prepare(%r, %r, %r, %s)" % (
-                base_slot, base_call, projection["capability"], arguments_source,
-            )
-            collected = "_pysolate_plm_linearize(%r, %r, %s)" % (
-                base_slot, projection["capability"], arguments_source,
-            )
-            if projection["result_field"]:
-                collected += "[" + repr(projection["result_field"]) + "]"
-            materialize = name + " = " + collected
+            argument_names = projection["arguments"]
             if issue_after < 0:
-                edit(statements[0].lineno)["before"].append(issue)
+                target = statements[0]
+                ast_edit(target)["before"].append(_plm_prepare_tree(
+                    base_slot, base_call, projection, argument_names, values, target
+                ))
             else:
-                edit(statements[issue_after].lineno)["after"].append(issue)
-            current = edit(statement.lineno)
-            if current["replacement"] is not None:
+                target = statements[issue_after]
+                ast_edit(target)["after"].append(_plm_prepare_tree(
+                    base_slot, base_call, projection, argument_names, values, target
+                ))
+            current_ast = ast_edit(statement)
+            if current_ast["replacement"] is not None:
                 raise ValueError("overlapping split-phase capability rewrite")
-            current["replacement"] = materialize
+            current_ast["replacement"] = _plm_materialize_tree(
+                name, base_slot, projection, argument_names, values, statement
+            )
 
         for index, statement in enumerate(statements):
             child_names = available_before[index]
@@ -447,24 +478,23 @@ def _plm_capability_calls(source, projections):
                 process_block(statement.body, child_names | {statement.target.id})
                 process_block(statement.orelse, child_names)
 
+        rewritten = []
+        for statement in statements:
+            operations = ast_edits.get(id(statement))
+            if operations is None:
+                rewritten.append(statement)
+                continue
+            rewritten.extend(operations["before"])
+            rewritten.append(operations["replacement"] or statement)
+            rewritten.extend(operations["after"])
+        statements[:] = rewritten
+
     process_block(tree.body, {"inputs"})
     if supported_calls != projected_calls:
-        return tree, "", 0
+        return tree, "", 0, None
 
-    derived = list(lines)
-    for line_index, operations in edits.items():
-        line = derived[line_index]
-        if "#" in line:
-            return tree, "", 0
-        indent = _space_indent(line)
-        if indent is None:
-            return tree, "", 0
-        newline = "\n" if line.endswith("\n") else ""
-        original = line[len(indent):].rstrip("\n")
-        body = operations["replacement"] if operations["replacement"] is not None else original
-        parts = [*operations["before"], body, *operations["after"]]
-        derived[line_index] = indent + "; ".join(parts) + newline
-    return tree, "".join(derived), len(supported_calls)
+    tree = ast.fix_missing_locations(tree)
+    return tree, "", len(supported_calls), tree
 
 
 def _data_local_numpy_sum(source):
@@ -582,7 +612,7 @@ _TRANSFORMS = {
 }
 
 
-def emit_source_pass_patch_request_json(request_json):
+def emit_source_pass_patch_request_json(request_json, prepared_tree=None):
     global _pending_capability_selection
     _pending_capability_selection = None
     probe = json.loads(request_json)
@@ -602,13 +632,13 @@ def emit_source_pass_patch_request_json(request_json):
     ):
         raise ValueError("unsupported source pass")
     if capability_pass:
-        original_tree, derived_source, replacement_count = transform(
-            request["source"], request["capability_projections"]
+        _, derived_source, replacement_count, derived_tree = transform(
+            request["source"], request["capability_projections"], prepared_tree
         )
     else:
-        original_tree, derived_source, replacement_count = transform(request["source"])
+        _, derived_source, replacement_count = transform(request["source"])
+        derived_tree = ast.parse(derived_source, filename="<agent-run>", mode="exec") if replacement_count > 0 else None
     applied = replacement_count > 0
-    derived_tree = ast.parse(derived_source, filename="<agent-run>", mode="exec") if applied else None
     patch = {
         "schema_version": PATCH_SCHEMA_VERSION,
         "status": "applied" if applied else "not_applicable",
@@ -616,14 +646,15 @@ def emit_source_pass_patch_request_json(request_json):
         "pass_version": request["pass_version"],
         "registration_sha256": request["registration_sha256"],
         "original_source_sha256": _digest(request["source"].encode("utf-8")),
-        "derived_source": derived_source,
-        "derived_source_sha256": _digest(derived_source.encode("utf-8")) if applied else "",
         "replacement_count": replacement_count,
     }
     if capability_pass:
         patch["capability_projections"] = request["capability_projections"]
         if applied:
             _pending_capability_selection = (request["source"], patch, derived_tree)
+    else:
+        patch["derived_source"] = derived_source
+        patch["derived_source_sha256"] = _digest(derived_source.encode("utf-8")) if applied else ""
     return _contract(patch)
 
 
@@ -655,13 +686,18 @@ def validate_source_pass_execution_request(final_source, patch_json):
         request_value = json.loads(request)
         request_value["capability_projections"] = patch["capability_projections"]
         request = _canonical(request_value)
+    replayed_tree = None
     try:
         expected = _decode(
             emit_source_pass_patch_request_json(request),
             _CAPABILITY_PATCH_KEYS if capability_pass else _PATCH_KEYS,
         )
+        if capability_pass and _pending_capability_selection is not None:
+            replayed_tree = _pending_capability_selection[2]
     finally:
         _pending_capability_selection = None
     if expected != patch:
         raise ValueError("source pass patch does not match the original source")
+    if replayed_tree is not None:
+        return replayed_tree
     return ast.parse(patch["derived_source"], filename="<agent-run>", mode="exec")

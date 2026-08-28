@@ -175,6 +175,47 @@ func streamingPrefixAnalysis(t *testing.T, plan *capability.Plan, prefixSource s
 	return VerifiedAnalysis{analysisJSON: prefixJSON}, prefixSiteID
 }
 
+func TestStreamingPLMPrefixAdmissionPromotesAndReusesFinalSlot(t *testing.T) {
+	adapter := &legalityPLMAdapter{}
+	plan := legalityPLMPlan(t, adapter)
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "streaming-plm", Plan: plan})
+	if err != nil {
+		t.Fatal(err)
+	}
+	table, err := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	admission, err := NewStreamingPLMPrefixAdmission(plan, table, legalityContext())
+	if err != nil {
+		t.Fatal(err)
+	}
+	prefix := "result = sources.read(\"profile\")\n"
+	verified, _ := streamingPrefixAnalysis(t, plan, prefix)
+	if added, addErr := admission.AdmitVerifiedPrefix(context.Background(), prefix, verified); addErr != nil || added != 1 {
+		t.Fatalf("added=%d err=%v", added, addErr)
+	}
+	finalSource := prefix + "answer = result\n"
+	if err := admission.SealFinalSource(finalSource); err != nil {
+		t.Fatal(err)
+	}
+	finalVerified, finalSite := streamingPrefixAnalysis(t, plan, finalSource)
+	call, ok := CanPreissue(finalVerified, plan, finalSite, legalityContext()).QualifiedCall()
+	if !ok {
+		t.Fatal("final PLM call unavailable")
+	}
+	if err := PrepareQualifiedPLM(context.Background(), table, call); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := table.Snapshot()
+	if snapshot.CandidatesPrepared != 1 || snapshot.Submitted != 1 || snapshot.Reused != 1 {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+	if err := broker.Finalize(false); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestStreamingSemanticPreDispatchClaimsIdenticalArgumentsInVerifiedSourceOrder(t *testing.T) {
 	plan := legalityTestPlan(t, true)
 	verified, site := legalityVerifiedAnalysis(t, plan, true)

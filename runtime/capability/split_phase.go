@@ -27,6 +27,14 @@ type SplitPhaseLimits struct {
 	MaxResultBytes uint64
 }
 
+// RuntimePLMSourcePromotion binds one prefix-prepared occurrence to the exact
+// full source before the execution Guest can reuse or linearize it.
+type RuntimePLMSourcePromotion struct {
+	SlotID               string
+	Request              []byte
+	PrefixSourceIdentity string
+}
+
 func (limits SplitPhaseLimits) valid() bool {
 	return limits.MaxCalls > 0 && limits.MaxCostUnits > 0 && limits.MaxResultBytes > 0
 }
@@ -190,6 +198,72 @@ func (table *SplitPhaseTable) PrepareRuntimePLM(ctx context.Context, slotID stri
 		Temporal: TemporalEvidence{Mode: contract.Temporal, ResourceIdentity: resourceIdentity},
 	}
 	return table.PrepareOrReuse(ctx, slotID, raw, contract, certificate)
+}
+
+// PromoteRuntimePLMSources atomically closes prefix-prepared candidates over
+// the exact full source. Every occurrence is validated before any binding is
+// changed, so a failed promotion cannot leave a partly updated Run table.
+func (table *SplitPhaseTable) PromoteRuntimePLMSources(promotions []RuntimePLMSourcePromotion, finalSourceIdentity string) error {
+	if table == nil || !validSHA256Identity(finalSourceIdentity) || len(promotions) == 0 {
+		return ErrSplitPhaseUnavailable
+	}
+	type checkedPromotion struct {
+		slotID, prefixSourceIdentity string
+		call                         request
+		canonicalRequest             []byte
+		siteID                       string
+		occurrence                   uint32
+	}
+	checked := make([]checkedPromotion, 0, len(promotions))
+	seen := make(map[string]struct{}, len(promotions))
+	for _, promotion := range promotions {
+		if !validSHA256Identity(promotion.PrefixSourceIdentity) {
+			return ErrSplitPhaseUnavailable
+		}
+		if _, exists := seen[promotion.SlotID]; exists {
+			return ErrSplitPhaseMismatch
+		}
+		seen[promotion.SlotID] = struct{}{}
+		call, siteID, occurrence, err := runtimePLMCall(promotion.SlotID, promotion.Request)
+		if err != nil {
+			return err
+		}
+		prepared, err := table.plan.PreparePLM(call.Capability, call.Arguments)
+		if err != nil {
+			return ErrSplitPhaseUnavailable
+		}
+		call.Arguments = prepared.Arguments()
+		canonicalRequest, err := json.Marshal(call)
+		if err != nil || len(canonicalRequest) == 0 || len(canonicalRequest) > maxCallBytes {
+			return ErrSplitPhaseUnavailable
+		}
+		checked = append(checked, checkedPromotion{
+			slotID: promotion.SlotID, prefixSourceIdentity: promotion.PrefixSourceIdentity,
+			call: call, canonicalRequest: canonicalRequest, siteID: siteID, occurrence: occurrence,
+		})
+	}
+
+	table.mu.Lock()
+	defer table.mu.Unlock()
+	if table.closed {
+		return ErrSplitPhaseUnavailable
+	}
+	for _, promotion := range checked {
+		entry := table.entriesBySlot[promotion.slotID]
+		if entry == nil || entry.materializing || entry.consumed || entry.discarded || entry.plmContract == nil || entry.certificate == nil ||
+			table.entriesByCall[promotion.call.CallID] != entry || !bytes.Equal(entry.request, promotion.canonicalRequest) ||
+			entry.certificate.Binding.SourceSealIdentity != promotion.prefixSourceIdentity ||
+			entry.certificate.Binding.SiteID != promotion.siteID || entry.certificate.Binding.Occurrence != promotion.occurrence ||
+			entry.certificate.Binding.Capability != promotion.call.Capability {
+			return ErrSplitPhaseMismatch
+		}
+	}
+	for _, promotion := range checked {
+		entry := table.entriesBySlot[promotion.slotID]
+		entry.certificate.Binding.SourceSealIdentity = finalSourceIdentity
+		table.recordLocked(entry, "source_promoted")
+	}
+	return nil
 }
 
 func (table *SplitPhaseTable) LinearizeRuntimePLM(ctx context.Context, slotID string, raw []byte, sourceSealIdentity string) ([]byte, error) {

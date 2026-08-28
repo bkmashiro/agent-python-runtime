@@ -223,7 +223,7 @@ func TestUnifiedCatalogResolvesPassLoweringsAgainstHostAvailability(t *testing.T
 	}
 }
 
-func TestUnifiedCatalogRejectsConflictingSchedulingPasses(t *testing.T) {
+func TestUnifiedCatalogCombinesSemanticPrefixAnalysisWithPLMOwner(t *testing.T) {
 	registry, err := NewUnifiedCatalog(UnifiedCatalogConfig{
 		SemanticPreDispatchConfigSHA256: digestFor('a'),
 		PreparedNumpyLoadConfigSHA256:   digestFor('b'),
@@ -232,8 +232,17 @@ func TestUnifiedCatalogRejectsConflictingSchedulingPasses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = registry.Enable(passregistration.SemanticPreDispatch, sourcepatch.PLMCapabilityCallsName); !errors.Is(err, ErrPassConflict) {
-		t.Fatalf("duplicate scheduling owners error=%v", err)
+	registry, err = registry.Enable(passregistration.SemanticPreDispatch, sourcepatch.PLMCapabilityCallsName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection, err := registry.LowerMechanisms(runtimeconfig.MechanismSet{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !selection.Mechanisms.SemanticAnalysis || !selection.Mechanisms.SplitPhaseCalls ||
+		selection.Mechanisms.SemanticPreDispatch || selection.Mechanisms.StagedObservation {
+		t.Fatalf("combined mechanisms=%+v", selection.Mechanisms)
 	}
 }
 

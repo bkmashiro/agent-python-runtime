@@ -277,7 +277,7 @@ func (registry *Registry) LowerMechanisms(base runtimeconfig.MechanismSet) (Runt
 			continue
 		}
 		passes = append(passes, name)
-		mechanisms = mergeMechanisms(mechanisms, registry.requirements[name])
+		mechanisms = mergeMechanisms(mechanisms, registry.requirementForSelection(name))
 	}
 	sort.Slice(passes, func(left, right int) bool { return passes[left] < passes[right] })
 	if err := mechanisms.Validate(); err != nil {
@@ -446,12 +446,22 @@ func (registry *Registry) validateEnabledSelection() error {
 			}
 			sourceMutation = name
 		}
-		mechanisms = mergeMechanisms(mechanisms, registry.requirements[name])
+		mechanisms = mergeMechanisms(mechanisms, registry.requirementForSelection(name))
 	}
 	if err := mechanisms.Validate(); err != nil {
 		return errors.Join(ErrPassConflict, err)
 	}
 	return nil
+}
+
+func (registry *Registry) requirementForSelection(name passregistration.Name) runtimeconfig.MechanismSet {
+	requirement := registry.requirements[name]
+	if name == passregistration.SemanticPreDispatch && registry.enabled[sourcepatch.PLMCapabilityCallsName] {
+		// Prefix analysis prepares directly into the PLM SplitPhaseTable. Do not
+		// select the legacy staged-observation owner for the same Run.
+		return runtimeconfig.MechanismSet{SemanticAnalysis: true}
+	}
+	return requirement
 }
 
 func (registry *Registry) Lookup(name passregistration.Name) (Plugin, bool) {

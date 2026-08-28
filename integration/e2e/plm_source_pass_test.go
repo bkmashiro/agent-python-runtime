@@ -13,9 +13,12 @@ import (
 	"time"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
+	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 
 	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
 )
@@ -85,6 +88,127 @@ func TestRealGuestPLMSourceTimeCandidateReusesAndLinearizesAtOriginalCall(t *tes
 		evidence.ProviderNanos == 0 || evidence.ValidationNanos == 0 || evidence.LinearizationNanos == 0 || evidence.MaterializationNanos == 0 ||
 		lifecycle.ModuleInstantiations != 1 || lifecycle.LoweringCalls != 1 || lifecycle.SelectionCalls != 1 || lifecycle.ExecuteCalls != 1 || lifecycle.TotalNanos == 0 {
 		t.Fatalf("physical=%d calls=%d receipts=%#v evidence=%+v lifecycle=%+v", physical.Load(), broker.CallCount(), receipts, evidence, lifecycle)
+	}
+}
+
+func TestRealGuestStreamingPrefixAndPLMShareOneSplitPhaseOwner(t *testing.T) {
+	artifact, err := osReadGuestArtifact(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var physical atomic.Uint32
+	adapter := &e2ePLMAdapter{handler: capability.HandlerFunc(func(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
+		physical.Add(1)
+		var arguments struct {
+			Path string `json:"path"`
+		}
+		_ = json.Unmarshal(raw, &arguments)
+		return json.Marshal(map[string]string{"body": arguments.Path + "-body"})
+	})}
+	plan := plmE2EPlan(t, 2, adapter)
+
+	artifactDigest := sha256.Sum256(artifact)
+	artifactSHA := fmt.Sprintf("sha256:%x", artifactDigest[:])
+	allowedImports := []string{"json"}
+	profile, err := runtimeconfig.NewExecutionProfile("base", allowedImports)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err = profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{
+		ProfileID: "base", ArtifactSHA256: artifactSHA,
+		ManifestSHA256: testDigest("streaming-plm-manifest"), ImportRoots: allowedImports, QualifiedImportRoots: allowedImports,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysisConfig := runtimeconfig.DefaultRunConfig()
+	analysisConfig.ExecutionProfile = &profile
+	analysisConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
+	analyzer, err := (wazeroengine.Factory{}).New(context.Background(), artifact, analysisConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer analyzer.Close(context.Background())
+
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "streaming-plm-owner", Plan: plan})
+	if err != nil {
+		t.Fatal(err)
+	}
+	table, err := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{MaxCalls: 2, MaxCostUnits: 2, MaxResultBytes: 8192})
+	if err != nil {
+		t.Fatal(err)
+	}
+	admission, err := semantic.NewStreamingPLMPrefixAdmission(plan, table, semantic.PreissueContext{
+		StreamEpoch: "streaming-plm-stream", WorkflowEpoch: "streaming-plm-workflow", FreshnessEpoch: "streaming-plm-fresh",
+		ExpiryEpoch: "streaming-plm-expiry", PrivacyPartition: "streaming-plm-private", ParentLineageSHA256: testDigest("streaming-plm-parent"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prefix := "first = sources.read(\"alpha\")\n"
+	fullSource := prefix + "if inputs[\"take\"]:\n    label = \"price:\" + first\n    second = sources.read(first)\n    result = [label, second]\nelse:\n    result = [first]\n"
+	bindings := semantic.Bindings{
+		ArtifactSHA256: artifactSHA, ExecutionProfileSHA256: analyzer.Properties().ExecutionProfileBindingSHA256,
+		ImportClosureSHA256: agentfunction.ImportClosureIdentity(allowedImports, allowedImports), CapabilityPlanSHA256: plan.Identity(),
+	}
+	prefixRequest, err := semantic.NewRequest(prefix, bindings, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifiedPrefix, err := semantic.AnalyzeVerified(context.Background(), trustedSemanticRunner(t, analyzer), prefixRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if added, addErr := admission.AdmitVerifiedPrefix(context.Background(), prefix, verifiedPrefix); addErr != nil || added != 1 {
+		t.Fatalf("added=%d err=%v", added, addErr)
+	}
+	if err := admission.SealFinalSource(fullSource); err != nil {
+		t.Fatal(err)
+	}
+
+	plugins := unifiedPassCatalog(t)
+	plugins, err = plugins.Enable(passregistration.SemanticPreDispatch, sourcepatch.PLMCapabilityCallsName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection, err := plugins.LowerMechanisms(runtimeconfig.MechanismSet{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !selection.Mechanisms.SemanticAnalysis || !selection.Mechanisms.SplitPhaseCalls || selection.Mechanisms.SemanticPreDispatch {
+		t.Fatalf("selection=%+v", selection)
+	}
+	executionConfig := runtimeconfig.DefaultRunConfig()
+	executionConfig.Timeout = 90 * time.Second
+	runner, err := (wazeroengine.Factory{Passes: plugins, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+		return broker, nil
+	}}).New(context.Background(), artifact, executionConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{
+		RunID: "streaming-plm-owner", Code: fullSource, Inputs: json.RawMessage(`{"take":true}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := trustedSemanticRunner(t, runner)
+	execution, err := plugins.ExecuteCapabilityHostScheduled(
+		context.Background(), sourcepatch.PLMCapabilityCallsName, engine, request,
+		plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan),
+	)
+	if err != nil || !execution.Applied || execution.Patch.ReplacementCount != 2 {
+		t.Fatalf("execution=%+v err=%v", execution, err)
+	}
+	result, err := decodeSuccessfulGuestResult(execution.Payload)
+	if err != nil || string(result) != `["price:alpha-body","alpha-body-body"]` {
+		t.Fatalf("result=%s payload=%s err=%v", result, execution.Payload, err)
+	}
+	evidence := engine.SplitPhaseEvidence()
+	if physical.Load() != 2 || broker.CallCount() != 2 || evidence.CandidatesPrepared != 2 || evidence.Submitted != 2 ||
+		evidence.Reused != 1 || evidence.CandidatesAdopted != 2 || evidence.JobsLinearized != 2 || evidence.JobsMaterialized != 2 {
+		t.Fatalf("physical=%d calls=%d evidence=%+v", physical.Load(), broker.CallCount(), evidence)
 	}
 }
 

@@ -694,11 +694,15 @@ def _validate_agent_wrapper_inputs(
     collector = _ModuleAssignedNameCollector()
     for node in (*preamble, *body):
         collector.visit(node)
-    if any(name.startswith("_pysolate_") and name not in allowed_runtime_names for name in collector.names):
+    if any(name.startswith("_pysolate_") for name in collector.names):
         raise SyntaxError("agent source binds a reserved runtime name")
     for node in walk_ast_bounded(ast.Module(body=body, type_ignores=[])):
-        if isinstance(node, ast.Name) and node.id.startswith("_pysolate_") and node.id not in allowed_runtime_names:
-            raise SyntaxError("agent source uses a reserved runtime name")
+        if isinstance(node, ast.Name) and node.id.startswith("_pysolate_"):
+            if node.id not in allowed_runtime_names or (
+                node.id in {_PLM_PREPARE_HELPER, _PLM_LINEARIZE_HELPER}
+                and not getattr(node, "_pysolate_trusted_runtime", False)
+            ):
+                raise SyntaxError("agent source uses a reserved runtime name")
     return collector
 
 
@@ -915,7 +919,7 @@ def _validate_request_source(request_json: str) -> int:
 
 
 def _validate_request_source_for_patch(request_json: str) -> int:
-    """Admit original source without compiling or importing it before patch selection."""
+    """Parse and stage original source; selected-tree admission happens once after lowering."""
     global _validated_request_json, _validated_code, _validated_source_tree, _validated_import_globals
     if not isinstance(request_json, str):
         return _SOURCE_CONTRACT_INVALID
@@ -924,12 +928,6 @@ def _validate_request_source_for_patch(request_json: str) -> int:
         return _SOURCE_CONTRACT_INVALID
     try:
         tree = ast.parse(request["code"], filename="<agent-run>", mode="exec")
-        if request.get("compatibility") is None:
-            _admit_unrestricted_tree(tree)
-        else:
-            status, _, _, _, collector = _admit_agent_tree(tree, request.get("compatibility"))
-            if status != _SOURCE_CONTRACT_OK or collector is None:
-                return status
     except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
         return _SOURCE_CONTRACT_INVALID
     _validated_request_json = request_json

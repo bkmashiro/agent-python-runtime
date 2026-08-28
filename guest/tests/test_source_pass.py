@@ -209,6 +209,25 @@ class SourcePassTests(unittest.TestCase):
             "_pysolate_plm_linearize('slot-s2",
         )
 
+    def test_plm_capability_call_uses_definition_before_later_redefinition(self):
+        source = (
+            'key = "alpha"\n'
+            "value = tools.get(key)\n"
+            'key = "beta"\n'
+            "result = value\n"
+        )
+        raw = emit_source_pass_patch_request_json(capability_request(source, CAPABILITY_PROJECTIONS))
+        patch = json.loads(raw)
+        self.assertEqual("applied", patch["status"])
+        derived = self.selected_plm_source(source, raw)
+        self.assert_text_order(
+            derived,
+            "key = 'alpha'",
+            "_pysolate_plm_prepare",
+            "_pysolate_plm_linearize",
+            "key = 'beta'",
+        )
+
     def test_plm_capability_calls_preserves_branch_and_loop_activation(self):
         branch = (
             'if inputs["take"]:\n'

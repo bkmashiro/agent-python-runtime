@@ -480,13 +480,31 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(7, response["result"])
         self.assertEqual(1, compile_calls)
 
-    def test_patch_admission_rejects_user_runtime_helpers(self):
-        raw = json.dumps({
-            "run_id": "patch-reserved-helper",
-            "code": "result = _pysolate_plm_prepare('slot', 'call', 'tools.get', {})",
-            "inputs": {},
-        })
-        self.assertEqual(2, self.runtime._validate_request_source_for_patch(raw))
+    def test_patch_selection_rejects_user_runtime_helpers(self):
+        source = (
+            "ignored = _pysolate_plm_prepare('slot', 'call', 'tools.get', {})\n"
+            'value = tools.get("alpha")\n'
+            "result = value\n"
+        )
+        raw = json.dumps({"run_id": "patch-reserved-helper", "code": source, "inputs": {}})
+        patch_request = json.dumps({
+            "pass_name": "plm_capability_calls",
+            "pass_version": "pysolate.plm-capability-calls-pass.v1",
+            "registration_sha256": "sha256:" + "a" * 64,
+            "source": source,
+            "capability_projections": [{
+                "capability": "tools.get",
+                "module": "tools",
+                "method": "get",
+                "arguments": ["key"],
+                "result_field": "value",
+            }],
+        }, sort_keys=True, separators=(",", ":"))
+
+        self.assertEqual(0, self.runtime._validate_request_source_for_patch(raw))
+        patch = self.runtime._transform_source_pass(patch_request)
+        with self.assertRaisesRegex(SyntaxError, "reserved runtime"):
+            self.runtime._prepare_source_pass_execution(patch)
 
     def test_rejects_non_static_agent_import_forms_before_execution(self):
         cases = {

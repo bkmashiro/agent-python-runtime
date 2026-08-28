@@ -282,8 +282,7 @@ def _projected_call(node, projection_index):
     return projection_index.get((node.func.value.id, node.func.attr))
 
 
-def _isolated_physical_line(node, source):
-    lines = source.splitlines()
+def _isolated_physical_line(node, lines):
     if node.lineno != node.end_lineno or node.lineno < 1 or node.lineno > len(lines):
         return False
     line = lines[node.lineno - 1]
@@ -292,9 +291,9 @@ def _isolated_physical_line(node, source):
     return not prefix and (not suffix or suffix.startswith("#"))
 
 
-def _split_phase_capability_assignment(statement, source, projection_index, available_names):
+def _split_phase_capability_assignment(statement, lines, projection_index):
     assignment = _simple_assignment(statement)
-    if assignment is None or not _isolated_physical_line(statement, source):
+    if assignment is None or not _isolated_physical_line(statement, lines):
         return None
     name, call = assignment
     projection = _projected_call(call, projection_index)
@@ -322,8 +321,6 @@ def _split_phase_capability_assignment(statement, source, projection_index, avai
         value = values[argument_name]
         if isinstance(value, ast.Name):
             loaded_names.add(value.id)
-            if value.id not in available_names:
-                return None
         elif not (
             isinstance(value, ast.Constant)
             and (value.value is None or type(value.value) in (bool, int, float, str))
@@ -360,9 +357,15 @@ def _plm_arguments_tree(argument_names, values):
     )
 
 
+def _plm_runtime_name(name):
+    node = ast.Name(id=name, ctx=ast.Load())
+    setattr(node, "_pysolate_trusted_runtime", True)
+    return node
+
+
 def _plm_prepare_tree(base_slot, base_call, projection, argument_names, values, location):
     node = ast.Expr(value=ast.Call(
-        func=ast.Name(id="_pysolate_plm_prepare", ctx=ast.Load()),
+        func=_plm_runtime_name("_pysolate_plm_prepare"),
         args=[
             ast.Constant(value=base_slot),
             ast.Constant(value=base_call),
@@ -376,7 +379,7 @@ def _plm_prepare_tree(base_slot, base_call, projection, argument_names, values, 
 
 def _plm_materialize_tree(name, base_slot, projection, argument_names, values, location):
     value = ast.Call(
-        func=ast.Name(id="_pysolate_plm_linearize", ctx=ast.Load()),
+        func=_plm_runtime_name("_pysolate_plm_linearize"),
         args=[
             ast.Constant(value=base_slot),
             ast.Constant(value=projection["capability"]),
@@ -402,6 +405,7 @@ def _plm_capability_calls(source, projections, prepared_tree=None):
         raise ValueError("invalid source pass input")
     projection_index = _validated_capability_projection_index(projections)
     tree = prepared_tree if isinstance(prepared_tree, ast.Module) else ast.parse(source, filename="<agent-run>", mode="exec")
+    lines = source.splitlines()
     projected_calls = {
         id(node)
         for node in ast.walk(tree)
@@ -420,27 +424,30 @@ def _plm_capability_calls(source, projections, prepared_tree=None):
         if not statements:
             return
         definitions = {}
-        available_before = []
-        available = set(inherited_names)
         for index, statement in enumerate(statements):
-            available_before.append(set(available))
             assignment = _simple_assignment(statement)
             if assignment is not None:
-                definitions[assignment[0]] = index
-                available.add(assignment[0])
+                definitions.setdefault(assignment[0], []).append(index)
+
+        def names_before(index):
+            return inherited_names | {name for name, positions in definitions.items() if positions[0] < index}
+
+        def latest_definition_before(name, index):
+            return max((position for position in definitions.get(name, ()) if position < index), default=-1)
 
         for index, statement in enumerate(statements):
             parsed = _split_phase_capability_assignment(
-                statement, source, projection_index, available_before[index]
+                statement, lines, projection_index
             )
             if parsed is None:
                 continue
             name, call, projection, loaded_names, values = parsed
+            if not loaded_names.issubset(names_before(index)):
+                continue
             supported_calls.add(id(call))
             latest_definition = -1
             for loaded_name in loaded_names:
-                if loaded_name in definitions and definitions[loaded_name] < index:
-                    latest_definition = max(latest_definition, definitions[loaded_name])
+                latest_definition = max(latest_definition, latest_definition_before(loaded_name, index))
             issue_after = latest_definition
             for candidate in range(latest_definition + 1, index):
                 candidate_call = _simple_assignment(statements[candidate])
@@ -470,7 +477,7 @@ def _plm_capability_calls(source, projections, prepared_tree=None):
             )
 
         for index, statement in enumerate(statements):
-            child_names = available_before[index]
+            child_names = names_before(index)
             if isinstance(statement, ast.If):
                 process_block(statement.body, child_names)
                 process_block(statement.orelse, child_names)

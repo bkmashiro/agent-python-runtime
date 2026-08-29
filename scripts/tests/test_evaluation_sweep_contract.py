@@ -42,6 +42,10 @@ class EvaluationSweepContractTests(unittest.TestCase):
         self.assertIn("COW_FANOUT_GO_TEST_TIMEOUT", cow_gate)
         self.assertIn("PYSOLATE_PREPARED_FAMILY_GO_TEST_TIMEOUT", base_gate)
 
+    def test_cow_treatment_order_uses_host_parity(self):
+        script = (ROOT / "scripts/run-linux-evaluation-sweeps.sh").read_text()
+        self.assertIn('COW_ORDER_OFFSET="$((order_offset % 2))"', script)
+
     def test_launcher_probes_all_hosts_before_parallel_runs(self):
         text = (ROOT / "scripts/run-workstation-evaluation-sweeps.py").read_text()
         for host in ("gpu31", "gpu32", "gpu33", "gpu34", "gpu35"):

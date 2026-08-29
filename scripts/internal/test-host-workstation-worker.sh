@@ -130,11 +130,12 @@ set +e
       mkdir -p "$output/thesis-experiments"
       AGENT_RUNTIME_BUILD_CACHE_ROOT="$build_cache_root" AGENT_RUNTIME_BUILD_CACHE_MODE=auto AGENT_RUNTIME_ARTIFACT_PROFILE=base \
         GITHUB_SHA="$source_commit" AGENT_RUNTIME_SOURCE_TREE="$source_tree" ./guest/build/build-guest.sh
-      AGENT_RUNTIME_GUEST="$repository/dist/agent-python-runtime-base.wasm" \
+      AGENT_RUNTIME_GUEST="$repository/dist/agent-python-runtime.wasm" \
         PYSOLATE_PLM_PREFIX_EAGER_OUTPUT="$output/thesis-experiments/plm-prefix-eager.json" \
         PYSOLATE_PLM_PREFIX_EAGER_RUNS="$plm_crossover_runs" PYSOLATE_PLM_PREFIX_EAGER_ORDER_OFFSET="$(( order_offset % 3 ))" \
         PYSOLATE_EXPERIMENT_SOURCE_COMMIT="$source_commit" PYSOLATE_EXPERIMENT_SOURCE_TREE="$source_tree" EVALUATION_HOST_ID="$target" \
         "$GOROOT/bin/go" test ./integration/e2e -run '^TestPLMPrefixEagerEconomicsFixture$' -count=1 -timeout=30m
+      test -s "$output/thesis-experiments/plm-prefix-eager.json"
       AGENT_RUNTIME_BUILD_CACHE_ROOT="$build_cache_root" AGENT_RUNTIME_BUILD_CACHE_MODE=auto AGENT_RUNTIME_ARTIFACT_PROFILE=numpy-core \
         GITHUB_SHA="$source_commit" AGENT_RUNTIME_SOURCE_TREE="$source_tree" ./guest/build/build-guest.sh
       AGENT_RUNTIME_GUEST="$repository/dist/agent-python-runtime-numpy-core.wasm" \
@@ -142,6 +143,7 @@ set +e
         PYSOLATE_COW_MUTATION_DENSITY_RUNS="$cow_fanout_runs" PYSOLATE_COW_MUTATION_DENSITY_ORDER_OFFSET="$(( order_offset % 2 ))" \
         PYSOLATE_EXPERIMENT_SOURCE_COMMIT="$source_commit" PYSOLATE_EXPERIMENT_SOURCE_TREE="$source_tree" EVALUATION_HOST_ID="$target" \
         "$GOROOT/bin/go" test ./runtime/engine/wazero -run '^TestCOWMutationDensityEconomicsFixture$' -count=1 -timeout=2h
+      test -s "$output/thesis-experiments/cow-mutation-density.json"
       ;;
   esac
 } >"$output/test.log" 2>&1

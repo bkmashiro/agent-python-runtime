@@ -214,7 +214,7 @@ func (treatment *plmPrefixTreatment) ObserveChunk(ctx context.Context, chunk str
 	treatment.prefixIndex++
 	prefix := treatment.source.String()
 	if !treatment.filter.ShouldAnalyzePrefix(treatment.prefixIndex, prefix) {
-		return nil
+		return treatment.admission.RecordSkippedPrefix(prefix)
 	}
 	started := time.Now()
 	request, err := semantic.NewRequest(prefix, treatment.bindings, treatment.plan)

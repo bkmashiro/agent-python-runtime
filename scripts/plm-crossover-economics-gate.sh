@@ -13,6 +13,7 @@ SOURCE_TREE=${PLM_SOURCE_TREE:-}
 ARTIFACT_SOURCE_COMMIT=${PLM_ARTIFACT_SOURCE_COMMIT:-}
 HOST_ID=${EVALUATION_HOST_ID:-}
 ORDER_OFFSET=${EVALUATION_ORDER_OFFSET:-0}
+GO_TEST_TIMEOUT=${PLM_CROSSOVER_GO_TEST_TIMEOUT:-4h}
 
 if [[ $# -ne 1 ]]; then
   echo "usage: $0 OUTPUT_JSON" >&2
@@ -51,6 +52,10 @@ if [[ ! "${ORDER_OFFSET}" =~ ^[0-9]+$ ]]; then
   echo "EVALUATION_ORDER_OFFSET must be a non-negative integer" >&2
   exit 2
 fi
+if [[ ! "${GO_TEST_TIMEOUT}" =~ ^[1-9][0-9]*(s|m|h)$ ]]; then
+  echo "PLM_CROSSOVER_GO_TEST_TIMEOUT must be a bounded Go duration" >&2
+  exit 2
+fi
 
 mkdir -p "$(dirname "${OUTPUT_JSON}")"
 cd "${ROOT_DIR}"
@@ -65,4 +70,4 @@ PLM_ARTIFACT_SOURCE_COMMIT="${ARTIFACT_SOURCE_COMMIT}" \
 EVALUATION_HOST_ID="${HOST_ID}" \
 EVALUATION_ORDER_OFFSET="${ORDER_OFFSET}" \
 AGENT_RUNTIME_GUEST="${ARTIFACT}" \
-go test ./integration/e2e -run '^TestRealGuestPLMCrossoverEconomicsFixture$' -count=1 -v
+go test ./integration/e2e -timeout="${GO_TEST_TIMEOUT}" -run '^TestRealGuestPLMCrossoverEconomicsFixture$' -count=1 -v

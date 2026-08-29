@@ -10,6 +10,7 @@ HOST_ID=${EVALUATION_HOST_ID:-}
 RUNS=${COW_FANOUT_RUNS:-5}
 FANOUTS_RAW=${COW_FANOUTS:-1,2,4,8}
 ORDER_OFFSET=${COW_ORDER_OFFSET:-0}
+GO_TEST_TIMEOUT=${COW_FANOUT_GO_TEST_TIMEOUT:-2h}
 
 if [[ -z "${OUTPUT_JSON}" ]]; then
   echo "usage: cow-fanout-economics-gate.sh OUTPUT_JSON" >&2
@@ -36,6 +37,10 @@ if [[ ! "${RUNS}" =~ ^[0-9]+$ ]] || (( RUNS < 3 || RUNS > 20 )); then
 fi
 if [[ ! "${ORDER_OFFSET}" =~ ^[01]$ ]]; then
   echo "COW_ORDER_OFFSET must be 0 or 1" >&2
+  exit 2
+fi
+if [[ ! "${GO_TEST_TIMEOUT}" =~ ^[1-9][0-9]*(s|m|h)$ ]]; then
+  echo "COW_FANOUT_GO_TEST_TIMEOUT must be a bounded Go duration" >&2
   exit 2
 fi
 if [[ $(uname -s) != Linux ]]; then
@@ -80,6 +85,7 @@ for fanout in "${FANOUTS[@]}"; do
   PYSOLATE_PREPARED_FAMILY_ECONOMICS_RUNS="${RUNS}" \
   PYSOLATE_PREPARED_FAMILY_ECONOMICS_FANOUT="${fanout}" \
   PYSOLATE_PREPARED_FAMILY_ECONOMICS_ORDER_OFFSET="${ORDER_OFFSET}" \
+  PYSOLATE_PREPARED_FAMILY_GO_TEST_TIMEOUT="${GO_TEST_TIMEOUT}" \
   PYSOLATE_PREPARED_FAMILY_SOURCE_COMMIT="${SOURCE_COMMIT}" \
   PYSOLATE_PREPARED_FAMILY_SOURCE_TREE="${SOURCE_TREE}" \
   AGENT_RUNTIME_GUEST="${ARTIFACT}" \

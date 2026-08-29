@@ -217,6 +217,8 @@ class CowFanoutEconomicsTests(unittest.TestCase):
         ):
             self.assertIn(marker, gate)
         self.assertIn("PYSOLATE_PREPARED_FAMILY_ECONOMICS_ORDER_OFFSET", fixture)
+        self.assertIn("COW_FANOUT_GO_TEST_TIMEOUT", gate)
+        self.assertIn("PYSOLATE_PREPARED_FAMILY_GO_TEST_TIMEOUT", gate)
         self.assertIn("pysolate.cow-fanout-economics.v1", SCRIPT.read_text())
 
 

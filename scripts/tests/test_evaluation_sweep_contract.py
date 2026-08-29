@@ -34,6 +34,14 @@ class EvaluationSweepContractTests(unittest.TestCase):
         ):
             self.assertIn(token, text)
 
+    def test_long_sweeps_have_explicit_bounded_go_timeouts(self):
+        plm_gate = (ROOT / "scripts/plm-crossover-economics-gate.sh").read_text()
+        cow_gate = (ROOT / "scripts/cow-fanout-economics-gate.sh").read_text()
+        base_gate = (ROOT / "scripts/prepared-family-economics-gate.sh").read_text()
+        self.assertIn("PLM_CROSSOVER_GO_TEST_TIMEOUT", plm_gate)
+        self.assertIn("COW_FANOUT_GO_TEST_TIMEOUT", cow_gate)
+        self.assertIn("PYSOLATE_PREPARED_FAMILY_GO_TEST_TIMEOUT", base_gate)
+
     def test_launcher_probes_all_hosts_before_parallel_runs(self):
         text = (ROOT / "scripts/run-workstation-evaluation-sweeps.py").read_text()
         for host in ("gpu31", "gpu32", "gpu33", "gpu34", "gpu35"):

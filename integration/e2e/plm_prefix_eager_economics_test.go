@@ -95,6 +95,11 @@ type plmPrefixEagerEvidence struct {
 	Samples         []plmPrefixEagerSample `json:"samples"`
 }
 
+type plmPrefixAnalysisResult struct {
+	nanos uint64
+	err   error
+}
+
 type plmPrefixTreatment struct {
 	artifact                  []byte
 	config                    runtimeconfig.RunConfig
@@ -117,6 +122,7 @@ type plmPrefixTreatment struct {
 	prefixAnalysisNanos       uint64
 	prefixAnalyzerInvocations uint32
 	prefixIndex               uint32
+	analysisResult            chan plmPrefixAnalysisResult
 	split                     capability.SplitPhaseSnapshot
 	lifecycle                 wazeroengine.PLMRunLifecycleEvidence
 }
@@ -212,22 +218,39 @@ func (treatment *plmPrefixTreatment) ObserveChunk(ctx context.Context, chunk str
 	if !treatment.filter.ShouldAnalyzePrefix(treatment.prefixIndex, prefix) {
 		return nil
 	}
-	started := time.Now()
-	request, err := semantic.NewRequest(prefix, treatment.bindings, treatment.plan)
-	if err != nil {
-		return err
+	if treatment.analysisResult != nil {
+		return fmt.Errorf("experiment fixture supports one prefix analysis")
 	}
-	verified, err := semantic.AnalyzeVerified(ctx, treatment.analyzer, request)
-	treatment.prefixAnalysisNanos += uint64(time.Since(started))
-	treatment.prefixAnalyzerInvocations++
-	if err != nil {
-		return err
-	}
-	_, err = treatment.admission.AdmitVerifiedPrefix(ctx, prefix, verified)
-	return err
+	result := make(chan plmPrefixAnalysisResult, 1)
+	treatment.analysisResult = result
+	go func() {
+		started := time.Now()
+		request, err := semantic.NewRequest(prefix, treatment.bindings, treatment.plan)
+		if err == nil {
+			var verified semantic.VerifiedAnalysis
+			verified, err = semantic.AnalyzeVerified(ctx, treatment.analyzer, request)
+			if err == nil {
+				_, err = treatment.admission.AdmitVerifiedPrefix(ctx, prefix, verified)
+			}
+		}
+		result <- plmPrefixAnalysisResult{nanos: uint64(time.Since(started)), err: err}
+	}()
+	return nil
 }
 
 func (treatment *plmPrefixTreatment) Finalize(ctx context.Context) (semanticspeculation.TreatmentOutcome, error) {
+	if treatment.analysisResult != nil {
+		select {
+		case analyzed := <-treatment.analysisResult:
+			treatment.prefixAnalysisNanos = analyzed.nanos
+			treatment.prefixAnalyzerInvocations = 1
+			if analyzed.err != nil {
+				return semanticspeculation.TreatmentOutcome{}, analyzed.err
+			}
+		case <-ctx.Done():
+			return semanticspeculation.TreatmentOutcome{}, ctx.Err()
+		}
+	}
 	fullSource := treatment.source.String()
 	if err := treatment.admission.SealFinalSource(fullSource); err != nil {
 		return semanticspeculation.TreatmentOutcome{}, err

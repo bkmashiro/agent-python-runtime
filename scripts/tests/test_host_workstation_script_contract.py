@@ -22,7 +22,7 @@ def load_verifier():
 class HostWorkstationScriptContractTests(unittest.TestCase):
     def test_wrapper_is_clean_head_and_enum_only(self) -> None:
         text = WRAPPER.read_text()
-        self.assertIn('case "$suite" in baseline|prepared-family|evaluation|evaluation-sweeps)', text)
+        self.assertIn('case "$suite" in baseline|prepared-family|evaluation|evaluation-sweeps|plm-fixed-cost)', text)
         self.assertIn("git status --porcelain", text)
         self.assertIn("git archive --format=tar HEAD", text)
         self.assertIn('case "$gateway" in shell2|shell3)', text)

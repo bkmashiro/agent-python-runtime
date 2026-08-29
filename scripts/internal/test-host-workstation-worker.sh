@@ -27,7 +27,7 @@ if [[ ! $source_commit =~ ^[0-9a-f]{40}$ || ! $source_tree =~ ^[0-9a-f]{40}$ || 
   echo "invalid source identity" >&2
   exit 4
 fi
-case "$suite" in baseline|prepared-family|evaluation|evaluation-sweeps) ;; *) echo "invalid suite" >&2; exit 5 ;; esac
+case "$suite" in baseline|prepared-family|evaluation|evaluation-sweeps|plm-fixed-cost) ;; *) echo "invalid suite" >&2; exit 5 ;; esac
 if [[ ! $order_offset =~ ^[0-9]+$ || ! $plm_crossover_runs =~ ^[0-9]+$ || ! $cow_fanout_runs =~ ^[0-9]+$ ||
   $plm_crossover_runs -lt 3 || $plm_crossover_runs -gt 20 || $cow_fanout_runs -lt 3 || $cow_fanout_runs -gt 20 ]]; then
   echo "invalid sweep parameters" >&2
@@ -115,6 +115,17 @@ set +e
         --cow-fanout-runs "$cow_fanout_runs" \
         --build-cache-root "$build_cache_root"
       ;;
+    plm-fixed-cost)
+      ./scripts/run-linux-plm-fixed-cost.sh \
+        --output "$output/plm-fixed-cost" \
+        --source-commit "$source_commit" \
+        --source-tree "$source_tree" \
+        --source-epoch "$source_epoch" \
+        --host-id "$target" \
+        --order-offset "$order_offset" \
+        --runs "$plm_crossover_runs" \
+        --build-cache-root "$build_cache_root"
+      ;;
   esac
 } >"$output/test.log" 2>&1
 test_status=$?
@@ -154,6 +165,7 @@ PY
   evidence_dir=""
   if [[ $suite == evaluation ]]; then evidence_dir=evaluation; fi
   if [[ $suite == evaluation-sweeps ]]; then evidence_dir=evaluation-sweeps; fi
+  if [[ $suite == plm-fixed-cost ]]; then evidence_dir=plm-fixed-cost; fi
   if [[ -n $evidence_dir ]]; then
     mapfile -d '' nested_files < <(python3 - "$evidence_dir" <<'PY'
 import pathlib

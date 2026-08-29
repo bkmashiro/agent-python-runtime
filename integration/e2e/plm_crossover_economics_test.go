@@ -27,9 +27,11 @@ const plmCrossoverEconomicsSchema = "pysolate.plm-crossover-economics.v1"
 type plmCrossoverConfig struct {
 	Output                string
 	Runs                  int
+	ZeroReadRuns          int
 	ReadCounts            []int
 	DelaysMS              []int
 	ZeroRead              bool
+	ZeroOnly              bool
 	TargetCommit          string
 	SourceTree            string
 	ArtifactSourceCommit  string
@@ -78,9 +80,11 @@ type plmCrossoverEvidence struct {
 	ArtifactSHA256        string                `json:"artifact_sha256"`
 	SourceSHA256          string                `json:"source_sha256"`
 	RunsPerArm            int                   `json:"runs_per_arm"`
+	ZeroReadRuns          int                   `json:"zero_read_runs"`
 	ReadCounts            []int                 `json:"read_counts"`
 	DelaysMS              []int                 `json:"delays_ms"`
 	ZeroRead              bool                  `json:"zero_read"`
+	ZeroOnly              bool                  `json:"zero_only"`
 	EvaluationHostID      string                `json:"evaluation_host_id"`
 	EvaluationOrderOffset int                   `json:"evaluation_order_offset"`
 	Profiles              []plmCrossoverProfile `json:"profiles"`
@@ -88,8 +92,8 @@ type plmCrossoverEvidence struct {
 
 func TestPLMCrossoverConfigDefaultsAndValidation(t *testing.T) {
 	for _, name := range []string{
-		"PLM_CROSSOVER_RUNS", "PLM_CROSSOVER_READ_COUNTS", "PLM_CROSSOVER_DELAYS_MS",
-		"PLM_CROSSOVER_ZERO_READ", "PLM_TARGET_COMMIT", "PLM_SOURCE_TREE",
+		"PLM_CROSSOVER_RUNS", "PLM_CROSSOVER_ZERO_READ_RUNS", "PLM_CROSSOVER_READ_COUNTS", "PLM_CROSSOVER_DELAYS_MS",
+		"PLM_CROSSOVER_ZERO_READ", "PLM_CROSSOVER_ZERO_ONLY", "PLM_TARGET_COMMIT", "PLM_SOURCE_TREE",
 		"PLM_ARTIFACT_SOURCE_COMMIT", "EVALUATION_HOST_ID", "EVALUATION_ORDER_OFFSET",
 	} {
 		t.Setenv(name, "")
@@ -98,14 +102,24 @@ func TestPLMCrossoverConfigDefaultsAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.Runs != 5 || !equalInts(config.ReadCounts, []int{1, 2, 4, 8}) ||
-		!equalInts(config.DelaysMS, []int{25, 75, 200}) || !config.ZeroRead || config.EvaluationOrderOffset != 0 {
+	if config.Runs != 5 || config.ZeroReadRuns != 1 || !equalInts(config.ReadCounts, []int{1, 2, 4, 8}) ||
+		!equalInts(config.DelaysMS, []int{25, 75, 200}) || !config.ZeroRead || config.ZeroOnly || config.EvaluationOrderOffset != 0 {
 		t.Fatalf("defaults=%+v", config)
 	}
 
 	t.Setenv("PLM_CROSSOVER_RUNS", "2")
 	if _, err := plmCrossoverConfigFromEnv(); err == nil {
 		t.Fatal("expected runs lower bound error")
+	}
+	t.Setenv("PLM_CROSSOVER_RUNS", "5")
+	t.Setenv("PLM_CROSSOVER_ZERO_READ_RUNS", "20")
+	t.Setenv("PLM_CROSSOVER_ZERO_ONLY", "1")
+	config, err = plmCrossoverConfigFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.ZeroReadRuns != 20 || !config.ZeroOnly || len(config.ReadCounts) != 0 || len(config.DelaysMS) != 0 {
+		t.Fatalf("zero-only config=%+v", config)
 	}
 }
 
@@ -136,18 +150,18 @@ func TestPLMCrossoverOrderOffsetAlternatesBaselineAndPLM(t *testing.T) {
 	}
 }
 
-func TestPLMCrossoverZeroReadRunsOncePerProfile(t *testing.T) {
-	if got := plmCrossoverPairIterations(0, 20); got != 1 {
-		t.Fatalf("zero-read control pairs = %d, want 1", got)
+func TestPLMCrossoverZeroReadUsesIndependentRepetitionCount(t *testing.T) {
+	if got := plmCrossoverPairIterations(0, 20, 12); got != 12 {
+		t.Fatalf("zero-read control pairs = %d, want 12", got)
 	}
-	if got := plmCrossoverPairIterations(8, 20); got != 20 {
+	if got := plmCrossoverPairIterations(8, 20, 12); got != 20 {
 		t.Fatalf("non-zero cell pairs = %d, want 20", got)
 	}
 }
 
-func plmCrossoverPairIterations(readCount, runs int) int {
+func plmCrossoverPairIterations(readCount, runs, zeroReadRuns int) int {
 	if readCount == 0 {
-		return 1
+		return zeroReadRuns
 	}
 	return runs
 }
@@ -171,15 +185,15 @@ func TestRealGuestPLMCrossoverEconomicsFixture(t *testing.T) {
 
 	profiles := make([]plmCrossoverProfile, 0, 2)
 	for _, profile := range []string{"cold_end_to_end", "engine_precompiled"} {
-		samples := make([]plmCrossoverSample, 0, 2*config.Runs*len(config.ReadCounts)*len(config.DelaysMS)+2)
+		samples := make([]plmCrossoverSample, 0, 2*config.Runs*len(config.ReadCounts)*len(config.DelaysMS)+2*config.ZeroReadRuns)
 		if config.ZeroRead {
-			for pairIteration := 0; pairIteration < plmCrossoverPairIterations(0, config.Runs); pairIteration++ {
+			for pairIteration := 0; pairIteration < plmCrossoverPairIterations(0, config.Runs, config.ZeroReadRuns); pairIteration++ {
 				samples = append(samples, runPLMCrossoverPair(t, artifact, profile, pairIteration, 0, 0, config.EvaluationOrderOffset)...)
 			}
 		}
 		for _, readCount := range config.ReadCounts {
 			for _, delayMS := range config.DelaysMS {
-				for pairIteration := 0; pairIteration < plmCrossoverPairIterations(readCount, config.Runs); pairIteration++ {
+				for pairIteration := 0; pairIteration < plmCrossoverPairIterations(readCount, config.Runs, config.ZeroReadRuns); pairIteration++ {
 					samples = append(samples, runPLMCrossoverPair(t, artifact, profile, pairIteration, readCount, delayMS, config.EvaluationOrderOffset)...)
 				}
 			}
@@ -220,8 +234,9 @@ func TestRealGuestPLMCrossoverEconomicsFixture(t *testing.T) {
 		ArtifactSourceCommit: config.ArtifactSourceCommit,
 		ArtifactSHA256:       fmt.Sprintf("sha256:%x", artifactDigest[:]),
 		SourceSHA256:         plmCrossoverDigest(plmCrossoverSource(maxReadCount)),
-		RunsPerArm:           config.Runs, ReadCounts: config.ReadCounts, DelaysMS: config.DelaysMS,
-		ZeroRead: config.ZeroRead, EvaluationHostID: config.EvaluationHostID,
+		RunsPerArm:           config.Runs, ZeroReadRuns: config.ZeroReadRuns,
+		ReadCounts: config.ReadCounts, DelaysMS: config.DelaysMS,
+		ZeroRead: config.ZeroRead, ZeroOnly: config.ZeroOnly, EvaluationHostID: config.EvaluationHostID,
 		EvaluationOrderOffset: config.EvaluationOrderOffset, Profiles: profiles,
 	}
 	encoded, err := json.MarshalIndent(evidence, "", "  ")
@@ -245,6 +260,10 @@ func plmCrossoverConfigFromEnv() (plmCrossoverConfig, error) {
 	if err != nil {
 		return plmCrossoverConfig{}, err
 	}
+	config.ZeroReadRuns, err = plmCrossoverIntEnv("PLM_CROSSOVER_ZERO_READ_RUNS", 1, 1, 20)
+	if err != nil {
+		return plmCrossoverConfig{}, err
+	}
 	config.ReadCounts, err = plmCrossoverListEnv("PLM_CROSSOVER_READ_COUNTS", "1,2,4,8", map[int]bool{1: true, 2: true, 4: true, 8: true})
 	if err != nil {
 		return plmCrossoverConfig{}, err
@@ -256,6 +275,17 @@ func plmCrossoverConfigFromEnv() (plmCrossoverConfig, error) {
 	config.ZeroRead, err = plmCrossoverBoolEnv("PLM_CROSSOVER_ZERO_READ", true)
 	if err != nil {
 		return plmCrossoverConfig{}, err
+	}
+	config.ZeroOnly, err = plmCrossoverBoolEnv("PLM_CROSSOVER_ZERO_ONLY", false)
+	if err != nil {
+		return plmCrossoverConfig{}, err
+	}
+	if config.ZeroOnly {
+		if !config.ZeroRead {
+			return plmCrossoverConfig{}, fmt.Errorf("PLM_CROSSOVER_ZERO_ONLY requires PLM_CROSSOVER_ZERO_READ")
+		}
+		config.ReadCounts = []int{}
+		config.DelaysMS = []int{}
 	}
 	config.TargetCommit, err = plmCrossoverIdentityEnv("PLM_TARGET_COMMIT")
 	if err != nil {

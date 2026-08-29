@@ -98,6 +98,7 @@ project_args=(
   --host-id "${HOST_ID}"
   --source-commit "${SOURCE_COMMIT}"
   --source-tree "${SOURCE_TREE}"
+  --order-offset "${ORDER_OFFSET}"
   --artifact "${ARTIFACT}"
   --output "${OUTPUT_JSON}"
   --fanouts "${FANOUTS[@]}"

@@ -201,6 +201,7 @@ def project(
     source_commit: str,
     source_tree: str,
     artifact_sha256: str,
+    order_offset: int = 0,
 ) -> dict[str, Any]:
     expected_fanouts = _validate_fanouts(fanouts)
     if isinstance(runs, bool) or not isinstance(runs, int) or runs < 3 or runs > 20:
@@ -209,6 +210,8 @@ def project(
         raise ValueError("host id is required")
     if not isinstance(source_commit, str) or not isinstance(source_tree, str) or not isinstance(artifact_sha256, str):
         raise ValueError("identity arguments are required")
+    if isinstance(order_offset, bool) or order_offset not in (0, 1):
+        raise ValueError("order offset must be 0 or 1")
 
     input_paths = [Path(path) for path in paths]
     if not input_paths:
@@ -266,6 +269,7 @@ def project(
         "input_element_value": EXPECTED_INPUT_ELEMENT_VALUE,
         "expected_result": EXPECTED_RESULT,
         "runs": runs,
+        "order_offset": order_offset,
         "cells": cells,
     }
 
@@ -298,6 +302,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--host-id", required=True)
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--source-tree", required=True)
+    parser.add_argument("--order-offset", type=int, choices=(0, 1), required=True)
     artifact_group = parser.add_mutually_exclusive_group(required=True)
     artifact_group.add_argument("--artifact", type=Path)
     artifact_group.add_argument("--artifact-sha256")
@@ -317,6 +322,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             source_commit=args.source_commit,
             source_tree=args.source_tree,
             artifact_sha256=artifact_sha256,
+            order_offset=args.order_offset,
         )
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")

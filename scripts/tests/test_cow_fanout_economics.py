@@ -114,6 +114,7 @@ class CowFanoutEconomicsTests(unittest.TestCase):
 
         self.assertEqual("pysolate.cow-fanout-economics.v1", result["schema_version"])
         self.assertEqual(HOST_ID, result["host_id"])
+        self.assertEqual(0, result["order_offset"])
         self.assertEqual([1, 2, 4, 8], [cell["fanout"] for cell in result["cells"]])
         cell = result["cells"][0]
         self.assertEqual(2, len(cell["treatments"]))

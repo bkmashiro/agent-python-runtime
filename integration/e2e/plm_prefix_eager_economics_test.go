@@ -263,7 +263,7 @@ func (treatment *plmPrefixTreatment) Finalize(ctx context.Context) (semanticspec
 	}
 	fullSource := treatment.source.String()
 	if err := treatment.admission.SealFinalSource(fullSource); err != nil {
-		return semanticspeculation.TreatmentOutcome{}, err
+		return semanticspeculation.TreatmentOutcome{}, fmt.Errorf("seal final source: %w", err)
 	}
 	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: treatment.runID, Code: fullSource, Inputs: json.RawMessage(`{}`)})
 	if err != nil {
@@ -273,7 +273,7 @@ func (treatment *plmPrefixTreatment) Finalize(ctx context.Context) (semanticspec
 	config.ExecutionProfile = treatment.bindingsProfile()
 	runner, err := (wazeroengine.Factory{Passes: treatment.plugins, WorkspaceManager: treatment.manager, WorkspaceRef: treatment.attempt.Ref(), WorkspaceOwner: treatment.runID, BrokerFactory: func(context.Context) (*capability.Broker, error) { return treatment.broker, nil }}).New(ctx, treatment.artifact, config)
 	if err != nil {
-		return semanticspeculation.TreatmentOutcome{}, err
+		return semanticspeculation.TreatmentOutcome{}, fmt.Errorf("create final PLM runner: %w", err)
 	}
 	engine := trustedSemanticRunnerNoTest(runner)
 	if engine == nil {
@@ -283,7 +283,7 @@ func (treatment *plmPrefixTreatment) Finalize(ctx context.Context) (semanticspec
 	closeErr := runner.Close(ctx)
 	_ = treatment.analyzer.Close(ctx)
 	if err != nil {
-		return semanticspeculation.TreatmentOutcome{}, err
+		return semanticspeculation.TreatmentOutcome{}, fmt.Errorf("execute final PLM source: %w", err)
 	}
 	if closeErr != nil {
 		return semanticspeculation.TreatmentOutcome{}, closeErr

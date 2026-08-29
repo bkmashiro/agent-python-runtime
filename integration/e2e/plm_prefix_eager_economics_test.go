@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -27,7 +28,7 @@ import (
 )
 
 const (
-	plmPrefixEagerSchema        = "pysolate.plm-prefix-eager-economics.v1"
+	plmPrefixEagerSchema        = "pysolate.plm-prefix-eager-economics.v2"
 	plmPrefixEagerProviderDelay = 1500 * time.Millisecond
 )
 
@@ -71,31 +72,33 @@ func (tracker *plmPrefixEagerTracker) observation() semanticspeculation.Provider
 }
 
 type plmPrefixEagerSample struct {
-	Trial                     int                                  `json:"trial"`
-	Order                     int                                  `json:"order"`
-	Treatment                 string                               `json:"treatment"`
-	ColdNanos                 uint64                               `json:"cold_nanos"`
-	PostBeginNanos            uint64                               `json:"post_begin_nanos"`
-	BeginNanos                uint64                               `json:"begin_nanos"`
-	FinalizeNanos             uint64                               `json:"finalize_nanos"`
-	Outcome                   semanticspeculation.TreatmentOutcome `json:"outcome"`
-	SplitPhase                capability.SplitPhaseSnapshot        `json:"split_phase,omitempty"`
-	PLMLifecycle              wazeroengine.PLMRunLifecycleEvidence `json:"plm_lifecycle,omitempty"`
-	PrefixAnalysisNanos       uint64                               `json:"prefix_analysis_nanos,omitempty"`
-	PrefixAnalyzerInvocations uint32                               `json:"prefix_analyzer_invocations,omitempty"`
+	Trial                     int                                                   `json:"trial"`
+	Order                     int                                                   `json:"order"`
+	Treatment                 string                                                `json:"treatment"`
+	ColdNanos                 uint64                                                `json:"cold_nanos"`
+	PostBeginNanos            uint64                                                `json:"post_begin_nanos"`
+	BeginNanos                uint64                                                `json:"begin_nanos"`
+	FinalizeNanos             uint64                                                `json:"finalize_nanos"`
+	Outcome                   semanticspeculation.TreatmentOutcome                  `json:"outcome"`
+	SplitPhase                capability.SplitPhaseSnapshot                         `json:"split_phase,omitempty"`
+	PLMLifecycle              wazeroengine.PLMRunLifecycleEvidence                  `json:"plm_lifecycle,omitempty"`
+	PrefixAnalysisNanos       uint64                                                `json:"prefix_analysis_nanos,omitempty"`
+	PrefixAnalyzerInvocations uint32                                                `json:"prefix_analyzer_invocations,omitempty"`
+	AnalyzerProvision         wazeroengine.SemanticAnalysisSessionProvisionEvidence `json:"analyzer_provision,omitempty"`
 }
 
 type plmPrefixEagerEvidence struct {
-	SchemaVersion   string                 `json:"schema_version"`
-	SourceCommit    string                 `json:"source_commit"`
-	SourceTree      string                 `json:"source_tree"`
-	HostID          string                 `json:"host_id"`
-	ArtifactSHA256  string                 `json:"artifact_sha256"`
-	Runs            int                    `json:"runs"`
-	ProviderDelayMS int                    `json:"provider_delay_ms"`
-	ChunkOffsetsMS  []int                  `json:"chunk_offsets_ms"`
-	SourceSHA256    string                 `json:"source_sha256"`
-	Samples         []plmPrefixEagerSample `json:"samples"`
+	SchemaVersion       string                 `json:"schema_version"`
+	SourceCommit        string                 `json:"source_commit"`
+	SourceTree          string                 `json:"source_tree"`
+	HostID              string                 `json:"host_id"`
+	ArtifactSHA256      string                 `json:"artifact_sha256"`
+	Runs                int                    `json:"runs"`
+	ProviderDelayMS     int                    `json:"provider_delay_ms"`
+	ChunkOffsetsMS      []int                  `json:"chunk_offsets_ms"`
+	SourceSHA256        string                 `json:"source_sha256"`
+	EagerFallbackReason string                 `json:"eager_fallback_reason"`
+	Samples             []plmPrefixEagerSample `json:"samples"`
 }
 
 type plmPrefixAnalysisResult struct {
@@ -113,11 +116,12 @@ type plmPrefixTreatment struct {
 	workspaceRoot             string
 	source                    strings.Builder
 	analyzer                  *wazeroengine.Engine
+	analyzerSession           *wazeroengine.SemanticAnalysisSession
+	finalRunner               *wazeroengine.Engine
 	broker                    *capability.Broker
 	table                     *capability.SplitPhaseTable
 	admission                 *semantic.StreamingPrefixAdmission
 	bindings                  semantic.Bindings
-	profile                   *runtimeconfig.ExecutionProfile
 	plugins                   *passplugin.Registry
 	manager                   *workspace.Manager
 	attempt                   *workspace.Attempt
@@ -125,6 +129,7 @@ type plmPrefixTreatment struct {
 	prefixAnalyzerInvocations uint32
 	prefixIndex               uint32
 	analysisResult            chan plmPrefixAnalysisResult
+	analyzerProvision         wazeroengine.SemanticAnalysisSessionProvisionEvidence
 
 	split     capability.SplitPhaseSnapshot
 	lifecycle wazeroengine.PLMRunLifecycleEvidence
@@ -165,19 +170,42 @@ func (treatment *plmPrefixTreatment) Begin(ctx context.Context, _ json.RawMessag
 	if err != nil {
 		return err
 	}
-	analysisConfig := treatment.config
-	analysisConfig.ExecutionProfile = &profile
-	analysisConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
-	analyzer, err := (wazeroengine.Factory{}).New(ctx, treatment.artifact, analysisConfig)
+	plugins := unifiedPassCatalogForExperiment()
+	plugins, err = plugins.Enable(passregistration.SemanticPreDispatch, sourcepatch.PLMCapabilityCallsName)
 	if err != nil {
 		return err
 	}
-	analyzerEngine := trustedSemanticRunnerNoTest(analyzer)
-	if analyzerEngine == nil {
-		return fmt.Errorf("prefix analyzer requires wazero engine")
+	treatment.plugins = plugins
+
+	analysisConfig := treatment.config
+	analysisConfig.ExecutionProfile = &profile
+	analysisConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
+	preparedPass := passregistration.PreparedRuntimeInstantiation
+	if goruntime.GOOS == "linux" {
+		preparedPass = passregistration.PrivateMemoryCOW
 	}
-	treatment.analyzer = analyzerEngine
-	treatment.profile = &profile
+	analysisConfig, _, err = passplugin.LowerDefaultRunConfig(analysisConfig, preparedPass)
+	if err != nil {
+		return err
+	}
+	analyzer, err := wazeroengine.New(ctx, treatment.artifact, analysisConfig)
+	if err != nil {
+		return err
+	}
+	treatment.analyzer = analyzer
+	session, err := analyzer.NewSemanticAnalysisSession(ctx, wazeroengine.SemanticAnalysisSessionLimits{
+		MaxRequests: 1, MaxCumulativeRequestBytes: semantic.MaxDocumentBytes, MaxDuration: 30 * time.Second,
+	})
+	if err != nil {
+		return err
+	}
+	provision, err := session.Prepare(ctx)
+	if err != nil {
+		return err
+	}
+	treatment.analyzerSession = session
+	treatment.analyzerProvision = provision
+
 	broker, err := capability.NewBroker(capability.Config{RunIdentity: treatment.runID, Plan: treatment.plan})
 	if err != nil {
 		return err
@@ -200,12 +228,18 @@ func (treatment *plmPrefixTreatment) Begin(ctx context.Context, _ json.RawMessag
 		ArtifactSHA256: artifactSHA, ExecutionProfileSHA256: analyzer.Properties().ExecutionProfileBindingSHA256,
 		ImportClosureSHA256: agentfunction.ImportClosureIdentity(allowedImports, allowedImports), CapabilityPlanSHA256: treatment.plan.Identity(),
 	}
-	plugins := unifiedPassCatalogForExperiment()
-	plugins, err = plugins.Enable(passregistration.SemanticPreDispatch, sourcepatch.PLMCapabilityCallsName)
+
+	finalConfig := treatment.config
+	finalConfig.ExecutionProfile = &profile
+	finalRunner, err := (wazeroengine.Factory{Passes: treatment.plugins, WorkspaceManager: treatment.manager, WorkspaceRef: treatment.attempt.Ref(), WorkspaceOwner: treatment.runID, BrokerFactory: func(context.Context) (*capability.Broker, error) { return treatment.broker, nil }}).New(ctx, treatment.artifact, finalConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf("create final PLM runner: %w", err)
 	}
-	treatment.plugins = plugins
+	finalEngine := trustedSemanticRunnerNoTest(finalRunner)
+	if finalEngine == nil {
+		return fmt.Errorf("PLM experiment requires wazero engine")
+	}
+	treatment.finalRunner = finalEngine
 	return nil
 }
 
@@ -228,7 +262,7 @@ func (treatment *plmPrefixTreatment) ObserveChunk(ctx context.Context, chunk str
 			err = fmt.Errorf("build prefix request: %w", err)
 		} else {
 			var verified semantic.VerifiedAnalysis
-			verified, err = semantic.AnalyzeVerified(ctx, treatment.analyzer, request)
+			verified, err = semantic.AnalyzeVerifiedSession(ctx, treatment.analyzerSession, request)
 			if err != nil {
 				err = fmt.Errorf("analyze prefix: %w", err)
 			} else {
@@ -267,24 +301,25 @@ func (treatment *plmPrefixTreatment) Finalize(ctx context.Context) (semanticspec
 	if err != nil {
 		return semanticspeculation.TreatmentOutcome{}, err
 	}
-	config := treatment.config
-	config.ExecutionProfile = treatment.bindingsProfile()
-	runner, err := (wazeroengine.Factory{Passes: treatment.plugins, WorkspaceManager: treatment.manager, WorkspaceRef: treatment.attempt.Ref(), WorkspaceOwner: treatment.runID, BrokerFactory: func(context.Context) (*capability.Broker, error) { return treatment.broker, nil }}).New(ctx, treatment.artifact, config)
-	if err != nil {
-		return semanticspeculation.TreatmentOutcome{}, fmt.Errorf("create final PLM runner: %w", err)
-	}
-	engine := trustedSemanticRunnerNoTest(runner)
+	engine := treatment.finalRunner
 	if engine == nil {
-		return semanticspeculation.TreatmentOutcome{}, fmt.Errorf("PLM experiment requires wazero engine")
+		return semanticspeculation.TreatmentOutcome{}, fmt.Errorf("PLM experiment final runner was not initialized")
 	}
 	execution, err := treatment.plugins.ExecuteCapabilityHostScheduled(ctx, sourcepatch.PLMCapabilityCallsName, engine, request, treatment.plan.PythonPrelude(), passplugin.PLMCapabilityProjections(treatment.plan))
-	closeErr := runner.Close(ctx)
-	_ = treatment.analyzer.Close(ctx)
+	closeErr := engine.Close(ctx)
+	sessionCloseErr := treatment.analyzerSession.Close(ctx)
+	analyzerCloseErr := treatment.analyzer.Close(ctx)
 	if err != nil {
 		return semanticspeculation.TreatmentOutcome{}, fmt.Errorf("execute final PLM source: %w", err)
 	}
 	if closeErr != nil {
 		return semanticspeculation.TreatmentOutcome{}, closeErr
+	}
+	if sessionCloseErr != nil {
+		return semanticspeculation.TreatmentOutcome{}, sessionCloseErr
+	}
+	if analyzerCloseErr != nil {
+		return semanticspeculation.TreatmentOutcome{}, analyzerCloseErr
 	}
 	result, err := decodeSuccessfulGuestResult(execution.Payload)
 	if err != nil {
@@ -310,11 +345,13 @@ func (treatment *plmPrefixTreatment) Finalize(ctx context.Context) (semanticspec
 	}, nil
 }
 
-func (treatment *plmPrefixTreatment) bindingsProfile() *runtimeconfig.ExecutionProfile {
-	return treatment.profile
-}
-
 func (treatment *plmPrefixTreatment) Cancel(ctx context.Context) error {
+	if treatment.finalRunner != nil {
+		_ = treatment.finalRunner.Close(ctx)
+	}
+	if treatment.analyzerSession != nil {
+		_ = treatment.analyzerSession.Close(ctx)
+	}
 	if treatment.analyzer != nil {
 		_ = treatment.analyzer.Close(ctx)
 	}
@@ -366,11 +403,12 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 90 * time.Second
 	artifactDigest := sha256.Sum256(artifact)
-	treatments := []string{"serial_whole_file", "eager_style_gate", "plm_prefix_prepare"}
+	treatments := []string{"serial_whole_file", "eager_conservative_fallback", "plm_prefix_prepare"}
 	evidence := plmPrefixEagerEvidence{
 		SchemaVersion: plmPrefixEagerSchema, SourceCommit: os.Getenv("PYSOLATE_EXPERIMENT_SOURCE_COMMIT"), SourceTree: os.Getenv("PYSOLATE_EXPERIMENT_SOURCE_TREE"),
 		HostID: os.Getenv("EVALUATION_HOST_ID"), ArtifactSHA256: fmt.Sprintf("sha256:%x", artifactDigest[:]), Runs: runs, ProviderDelayMS: int(plmPrefixEagerProviderDelay / time.Millisecond),
 		ChunkOffsetsMS: []int{0, 700, 1400}, SourceSHA256: testDigest(plmPrefixEagerChunks[0].source + plmPrefixEagerChunks[1].source + plmPrefixEagerChunks[2].source),
+		EagerFallbackReason: "custom Host I/O is not statically position-insensitive",
 	}
 	for trial := 0; trial < runs; trial++ {
 		for order := 0; order < len(treatments); order++ {
@@ -389,8 +427,10 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 				runConfig := config
 				runConfig.Mechanisms = runtimeconfig.MechanismSet{PrivateWorkspace: true}
 				treatment, err = semanticspeculation.NewSerialGuestTreatment(semanticspeculation.SerialGuestTreatmentConfig{Artifact: artifact, RunConfig: runConfig, Plan: plan, BrokerFactory: brokerFactory, ProviderObservation: tracker.observation, RunID: runID, WorkspaceRoot: workspaceRoot, WorkspaceOwner: runID})
-			case "eager_style_gate":
-				treatment, err = semanticspeculation.NewEagerGuestTreatment(semanticspeculation.EagerGuestTreatmentConfig{Artifact: artifact, RunConfig: config, Plan: plan, BrokerFactory: brokerFactory, ProviderObservation: tracker.observation, RunID: runID, WorkspaceRoot: workspaceRoot, WorkspaceOwner: runID})
+			case "eager_conservative_fallback":
+				runConfig := config
+				runConfig.Mechanisms = runtimeconfig.MechanismSet{PrivateWorkspace: true}
+				treatment, err = semanticspeculation.NewSerialGuestTreatment(semanticspeculation.SerialGuestTreatmentConfig{Artifact: artifact, RunConfig: runConfig, Plan: plan, BrokerFactory: brokerFactory, ProviderObservation: tracker.observation, RunID: runID, WorkspaceRoot: workspaceRoot, WorkspaceOwner: runID})
 			case "plm_prefix_prepare":
 				treatment = newPLMPrefixTreatment(artifact, config, plan, adapter, tracker, runID, workspaceRoot)
 			}
@@ -404,8 +444,12 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 			if plm, ok := treatment.(*plmPrefixTreatment); ok {
 				sample.SplitPhase, sample.PLMLifecycle = plm.split, plm.lifecycle
 				sample.PrefixAnalysisNanos, sample.PrefixAnalyzerInvocations = plm.prefixAnalysisNanos, plm.prefixAnalyzerInvocations
+				sample.AnalyzerProvision = plm.analyzerProvision
 				if sample.PrefixAnalyzerInvocations != 1 || sample.SplitPhase.Reused != 1 {
 					t.Fatalf("prefix path did not run or was not reused: analysis=%d split=%+v", sample.PrefixAnalyzerInvocations, sample.SplitPhase)
+				}
+				if !sample.AnalyzerProvision.NeverServed || sample.AnalyzerProvision.BrokerAvailable || sample.AnalyzerProvision.WorkspaceMounted || (goruntime.GOOS == "linux" && !sample.AnalyzerProvision.COWHit) {
+					t.Fatalf("prefix analyzer was not provisioned before source arrival: %+v", sample.AnalyzerProvision)
 				}
 			}
 			if sample.Outcome.FinalProgramOutcome != "success" || sample.Outcome.LogicalCalls != 1 || sample.Outcome.PhysicalAttempts != 1 {

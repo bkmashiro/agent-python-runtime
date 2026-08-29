@@ -126,6 +126,17 @@ set +e
         --runs "$plm_crossover_runs" \
         --build-cache-root "$build_cache_root"
       ;;
+    source-stream-timing)
+      mkdir -p "$output/source-stream-timing"
+      AGENT_RUNTIME_BUILD_CACHE_ROOT="$build_cache_root" AGENT_RUNTIME_BUILD_CACHE_MODE=auto AGENT_RUNTIME_ARTIFACT_PROFILE=base \
+        GITHUB_SHA="$source_commit" AGENT_RUNTIME_SOURCE_TREE="$source_tree" ./guest/build/build-guest.sh
+      AGENT_RUNTIME_GUEST="$repository/dist/agent-python-runtime.wasm" \
+        PYSOLATE_PLM_PREFIX_EAGER_OUTPUT="$output/source-stream-timing/plm-prefix-eager.json" \
+        PYSOLATE_PLM_PREFIX_EAGER_RUNS="$plm_crossover_runs" PYSOLATE_PLM_PREFIX_EAGER_ORDER_OFFSET="$(( order_offset % 3 ))" \
+        PYSOLATE_EXPERIMENT_SOURCE_COMMIT="$source_commit" PYSOLATE_EXPERIMENT_SOURCE_TREE="$source_tree" EVALUATION_HOST_ID="$target" \
+        "$GOROOT/bin/go" test ./integration/e2e -run '^TestPLMPrefixEagerEconomicsFixture$' -count=1 -timeout=30m || exit $?
+      test -s "$output/source-stream-timing/plm-prefix-eager.json" || exit $?
+      ;;
     thesis-experiments)
       mkdir -p "$output/thesis-experiments"
       AGENT_RUNTIME_BUILD_CACHE_ROOT="$build_cache_root" AGENT_RUNTIME_BUILD_CACHE_MODE=auto AGENT_RUNTIME_ARTIFACT_PROFILE=base \
@@ -185,6 +196,7 @@ PY
   if [[ $suite == evaluation ]]; then evidence_dir=evaluation; fi
   if [[ $suite == evaluation-sweeps ]]; then evidence_dir=evaluation-sweeps; fi
   if [[ $suite == plm-fixed-cost ]]; then evidence_dir=plm-fixed-cost; fi
+  if [[ $suite == source-stream-timing ]]; then evidence_dir=source-stream-timing; fi
   if [[ $suite == thesis-experiments ]]; then evidence_dir=thesis-experiments; fi
   if [[ -n $evidence_dir ]]; then
     mapfile -d '' nested_files < <(python3 - "$evidence_dir" <<'PY'

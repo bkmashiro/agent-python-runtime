@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	plmPrefixEagerSchema        = "pysolate.plm-prefix-eager-economics.v3"
+	plmPrefixEagerSchema        = "pysolate.plm-prefix-eager-economics.v4"
 	plmPrefixEagerProviderDelay = 1500 * time.Millisecond
 )
 
@@ -403,12 +403,12 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 90 * time.Second
 	artifactDigest := sha256.Sum256(artifact)
-	treatments := []string{"serial_whole_file", "eager_deferred_endpoint", "eager_immediate_dispatch_endpoint", "plm_prefix_prepare"}
+	treatments := []string{"serial_whole_file", "eager_v2_policy_fallback", "immediate_dispatch_bound", "plm_prefix_prepare"}
 	evidence := plmPrefixEagerEvidence{
 		SchemaVersion: plmPrefixEagerSchema, SourceCommit: os.Getenv("PYSOLATE_EXPERIMENT_SOURCE_COMMIT"), SourceTree: os.Getenv("PYSOLATE_EXPERIMENT_SOURCE_TREE"),
 		HostID: os.Getenv("EVALUATION_HOST_ID"), ArtifactSHA256: fmt.Sprintf("sha256:%x", artifactDigest[:]), Runs: runs, ProviderDelayMS: int(plmPrefixEagerProviderDelay / time.Millisecond),
 		ChunkOffsetsMS: []int{0, 700, 1400}, SourceSHA256: testDigest(plmPrefixEagerChunks[0].source + plmPrefixEagerChunks[1].source + plmPrefixEagerChunks[2].source),
-		EagerEstimateScope: "deferred and immediate-dispatch endpoints derived from the published chunk schedule",
+		EagerEstimateScope: "EAGER v2 external-side-effect policy fallback plus a version-neutral immediate-dispatch bound",
 	}
 	for trial := 0; trial < runs; trial++ {
 		for order := 0; order < len(treatments); order++ {
@@ -427,11 +427,11 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 				runConfig := config
 				runConfig.Mechanisms = runtimeconfig.MechanismSet{PrivateWorkspace: true}
 				treatment, err = semanticspeculation.NewSerialGuestTreatment(semanticspeculation.SerialGuestTreatmentConfig{Artifact: artifact, RunConfig: runConfig, Plan: plan, BrokerFactory: brokerFactory, ProviderObservation: tracker.observation, RunID: runID, WorkspaceRoot: workspaceRoot, WorkspaceOwner: runID})
-			case "eager_deferred_endpoint":
+			case "eager_v2_policy_fallback":
 				runConfig := config
 				runConfig.Mechanisms = runtimeconfig.MechanismSet{PrivateWorkspace: true}
 				treatment, err = semanticspeculation.NewSerialGuestTreatment(semanticspeculation.SerialGuestTreatmentConfig{Artifact: artifact, RunConfig: runConfig, Plan: plan, BrokerFactory: brokerFactory, ProviderObservation: tracker.observation, RunID: runID, WorkspaceRoot: workspaceRoot, WorkspaceOwner: runID})
-			case "eager_immediate_dispatch_endpoint":
+			case "immediate_dispatch_bound":
 				treatment, err = semanticspeculation.NewEagerGuestTreatment(semanticspeculation.EagerGuestTreatmentConfig{Artifact: artifact, RunConfig: config, Plan: plan, BrokerFactory: brokerFactory, ProviderObservation: tracker.observation, RunID: runID, WorkspaceRoot: workspaceRoot, WorkspaceOwner: runID})
 			case "plm_prefix_prepare":
 				treatment = newPLMPrefixTreatment(artifact, config, plan, adapter, tracker, runID, workspaceRoot)

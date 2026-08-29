@@ -98,11 +98,6 @@ type plmPrefixEagerEvidence struct {
 	Samples         []plmPrefixEagerSample `json:"samples"`
 }
 
-type plmPrefixAnalysisResult struct {
-	nanos uint64
-	err   error
-}
-
 type plmPrefixTreatment struct {
 	artifact                  []byte
 	config                    runtimeconfig.RunConfig
@@ -125,9 +120,9 @@ type plmPrefixTreatment struct {
 	prefixAnalysisNanos       uint64
 	prefixAnalyzerInvocations uint32
 	prefixIndex               uint32
-	analysisResult            chan plmPrefixAnalysisResult
-	split                     capability.SplitPhaseSnapshot
-	lifecycle                 wazeroengine.PLMRunLifecycleEvidence
+
+	split     capability.SplitPhaseSnapshot
+	lifecycle wazeroengine.PLMRunLifecycleEvidence
 }
 
 func newPLMPrefixTreatment(artifact []byte, config runtimeconfig.RunConfig, plan *capability.Plan, adapter *e2ePLMAdapter, tracker *plmPrefixEagerTracker, runID, workspaceRoot string) *plmPrefixTreatment {
@@ -221,46 +216,28 @@ func (treatment *plmPrefixTreatment) ObserveChunk(ctx context.Context, chunk str
 	if !treatment.filter.ShouldAnalyzePrefix(treatment.prefixIndex, prefix) {
 		return nil
 	}
-	if treatment.analysisResult != nil {
-		return fmt.Errorf("experiment fixture supports one prefix analysis")
+	started := time.Now()
+	request, err := semantic.NewRequest(prefix, treatment.bindings, treatment.plan)
+	if err != nil {
+		return fmt.Errorf("build prefix request: %w", err)
 	}
-	result := make(chan plmPrefixAnalysisResult, 1)
-	treatment.analysisResult = result
-	go func() {
-		started := time.Now()
-		request, err := semantic.NewRequest(prefix, treatment.bindings, treatment.plan)
-		if err != nil {
-			err = fmt.Errorf("build prefix request: %w", err)
-		} else {
-			var verified semantic.VerifiedAnalysis
-			verified, err = semantic.AnalyzeVerified(ctx, treatment.analyzer, request)
-			if err != nil {
-				err = fmt.Errorf("analyze prefix: %w", err)
-			} else {
-				_, err = treatment.admission.AdmitVerifiedPrefix(ctx, prefix, verified)
-				if err != nil {
-					err = fmt.Errorf("admit prefix: %w", err)
-				}
-			}
-		}
-		result <- plmPrefixAnalysisResult{nanos: uint64(time.Since(started)), err: err}
-	}()
+	verified, err := semantic.AnalyzeVerified(ctx, treatment.analyzer, request)
+	if err != nil {
+		return fmt.Errorf("analyze prefix: %w", err)
+	}
+	added, err := treatment.admission.AdmitVerifiedPrefix(ctx, prefix, verified)
+	treatment.prefixAnalysisNanos = uint64(time.Since(started))
+	treatment.prefixAnalyzerInvocations = 1
+	if err != nil {
+		return fmt.Errorf("admit prefix: %w", err)
+	}
+	if added != 1 {
+		return fmt.Errorf("prefix admission added %d calls", added)
+	}
 	return nil
 }
 
 func (treatment *plmPrefixTreatment) Finalize(ctx context.Context) (semanticspeculation.TreatmentOutcome, error) {
-	if treatment.analysisResult != nil {
-		select {
-		case analyzed := <-treatment.analysisResult:
-			treatment.prefixAnalysisNanos = analyzed.nanos
-			treatment.prefixAnalyzerInvocations = 1
-			if analyzed.err != nil {
-				return semanticspeculation.TreatmentOutcome{}, analyzed.err
-			}
-		case <-ctx.Done():
-			return semanticspeculation.TreatmentOutcome{}, ctx.Err()
-		}
-	}
 	fullSource := treatment.source.String()
 	if err := treatment.admission.SealFinalSource(fullSource); err != nil {
 		return semanticspeculation.TreatmentOutcome{}, fmt.Errorf("seal final source: %w", err)

@@ -27,7 +27,7 @@ if [[ ! $source_commit =~ ^[0-9a-f]{40}$ || ! $source_tree =~ ^[0-9a-f]{40}$ || 
   echo "invalid source identity" >&2
   exit 4
 fi
-case "$suite" in baseline|prepared-family|evaluation|evaluation-sweeps|plm-fixed-cost|thesis-experiments) ;; *) echo "invalid suite" >&2; exit 5 ;; esac
+case "$suite" in baseline|prepared-family|evaluation|evaluation-sweeps|plm-fixed-cost|source-stream-timing|thesis-experiments) ;; *) echo "invalid suite" >&2; exit 5 ;; esac
 if [[ ! $order_offset =~ ^[0-9]+$ || ! $plm_crossover_runs =~ ^[0-9]+$ || ! $cow_fanout_runs =~ ^[0-9]+$ ||
   $plm_crossover_runs -lt 3 || $plm_crossover_runs -gt 20 || $cow_fanout_runs -lt 3 || $cow_fanout_runs -gt 20 ]]; then
   echo "invalid sweep parameters" >&2

@@ -132,7 +132,7 @@ set +e
         GITHUB_SHA="$source_commit" AGENT_RUNTIME_SOURCE_TREE="$source_tree" ./guest/build/build-guest.sh
       AGENT_RUNTIME_GUEST="$repository/dist/agent-python-runtime.wasm" \
         PYSOLATE_PLM_PREFIX_EAGER_OUTPUT="$output/source-stream-timing/plm-prefix-eager.json" \
-        PYSOLATE_PLM_PREFIX_EAGER_RUNS="$plm_crossover_runs" PYSOLATE_PLM_PREFIX_EAGER_ORDER_OFFSET="$(( order_offset % 3 ))" \
+        PYSOLATE_PLM_PREFIX_EAGER_RUNS="$plm_crossover_runs" PYSOLATE_PLM_PREFIX_EAGER_ORDER_OFFSET="$(( order_offset % 4 ))" \
         PYSOLATE_EXPERIMENT_SOURCE_COMMIT="$source_commit" PYSOLATE_EXPERIMENT_SOURCE_TREE="$source_tree" EVALUATION_HOST_ID="$target" \
         "$GOROOT/bin/go" test ./integration/e2e -run '^TestPLMPrefixEagerEconomicsFixture$' -count=1 -timeout=30m || exit $?
       test -s "$output/source-stream-timing/plm-prefix-eager.json" || exit $?
@@ -143,7 +143,7 @@ set +e
         GITHUB_SHA="$source_commit" AGENT_RUNTIME_SOURCE_TREE="$source_tree" ./guest/build/build-guest.sh
       AGENT_RUNTIME_GUEST="$repository/dist/agent-python-runtime.wasm" \
         PYSOLATE_PLM_PREFIX_EAGER_OUTPUT="$output/thesis-experiments/plm-prefix-eager.json" \
-        PYSOLATE_PLM_PREFIX_EAGER_RUNS="$plm_crossover_runs" PYSOLATE_PLM_PREFIX_EAGER_ORDER_OFFSET="$(( order_offset % 3 ))" \
+        PYSOLATE_PLM_PREFIX_EAGER_RUNS="$plm_crossover_runs" PYSOLATE_PLM_PREFIX_EAGER_ORDER_OFFSET="$(( order_offset % 4 ))" \
         PYSOLATE_EXPERIMENT_SOURCE_COMMIT="$source_commit" PYSOLATE_EXPERIMENT_SOURCE_TREE="$source_tree" EVALUATION_HOST_ID="$target" \
         "$GOROOT/bin/go" test ./integration/e2e -run '^TestPLMPrefixEagerEconomicsFixture$' -count=1 -timeout=30m || exit $?
       test -s "$output/thesis-experiments/plm-prefix-eager.json" || exit $?

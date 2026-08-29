@@ -116,6 +116,7 @@ type plmPrefixTreatment struct {
 	attempt                   *workspace.Attempt
 	prefixAnalysisNanos       uint64
 	prefixAnalyzerInvocations uint32
+	prefixIndex               uint32
 	split                     capability.SplitPhaseSnapshot
 	lifecycle                 wazeroengine.PLMRunLifecycleEvidence
 }
@@ -206,8 +207,9 @@ func (treatment *plmPrefixTreatment) Begin(ctx context.Context, _ json.RawMessag
 
 func (treatment *plmPrefixTreatment) ObserveChunk(ctx context.Context, chunk string) error {
 	treatment.source.WriteString(chunk)
+	treatment.prefixIndex++
 	prefix := treatment.source.String()
-	if !treatment.filter.ShouldAnalyzePrefix(uint32(len(plmPrefixEagerChunks)), prefix) {
+	if !treatment.filter.ShouldAnalyzePrefix(treatment.prefixIndex, prefix) {
 		return nil
 	}
 	started := time.Now()

@@ -229,11 +229,18 @@ func (treatment *plmPrefixTreatment) ObserveChunk(ctx context.Context, chunk str
 	go func() {
 		started := time.Now()
 		request, err := semantic.NewRequest(prefix, treatment.bindings, treatment.plan)
-		if err == nil {
+		if err != nil {
+			err = fmt.Errorf("build prefix request: %w", err)
+		} else {
 			var verified semantic.VerifiedAnalysis
 			verified, err = semantic.AnalyzeVerified(ctx, treatment.analyzer, request)
-			if err == nil {
+			if err != nil {
+				err = fmt.Errorf("analyze prefix: %w", err)
+			} else {
 				_, err = treatment.admission.AdmitVerifiedPrefix(ctx, prefix, verified)
+				if err != nil {
+					err = fmt.Errorf("admit prefix: %w", err)
+				}
 			}
 		}
 		result <- plmPrefixAnalysisResult{nanos: uint64(time.Since(started)), err: err}

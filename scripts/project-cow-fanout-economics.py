@@ -81,7 +81,11 @@ def _validate_fanouts(fanouts: Sequence[int]) -> list[int]:
 
 
 def _validate_raw_sample(sample: dict[str, Any], mode: str, iteration: int, fanout: int) -> None:
-    if sample.get("mode") != mode or sample.get("iteration") != iteration or sample.get("fanout") != fanout:
+    if sample.get("mode") != mode:
+        raise ValueError("sample coordinate drift")
+    if _require_integer(sample.get("iteration"), "sample iteration") != iteration:
+        raise ValueError("sample coordinate drift")
+    if _require_integer(sample.get("fanout"), "sample fanout") != fanout:
         raise ValueError("sample coordinate drift")
     if _require_integer(sample.get("result"), "sample result") != EXPECTED_RESULT:
         raise ValueError("oracle mismatch: sample result")

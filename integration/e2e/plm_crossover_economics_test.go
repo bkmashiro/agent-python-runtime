@@ -50,6 +50,7 @@ type plmCrossoverSample struct {
 	ProviderNanos          uint64                               `json:"provider_nanos"`
 	ProviderStarts         uint32                               `json:"provider_starts"`
 	ProviderMaxConcurrency uint32                               `json:"provider_max_concurrency"`
+	CallCount              uint32                               `json:"call_count"`
 	Result                 json.RawMessage                      `json:"result"`
 	Lifecycle              wazeroengine.PLMRunLifecycleEvidence `json:"lifecycle"`
 	Candidates             capability.SplitPhaseSnapshot        `json:"candidates"`
@@ -135,8 +136,24 @@ func TestPLMCrossoverOrderOffsetAlternatesBaselineAndPLM(t *testing.T) {
 	}
 }
 
+func TestPLMCrossoverZeroReadRunsOncePerProfile(t *testing.T) {
+	if got := plmCrossoverPairIterations(0, 20); got != 1 {
+		t.Fatalf("zero-read control pairs = %d, want 1", got)
+	}
+	if got := plmCrossoverPairIterations(8, 20); got != 20 {
+		t.Fatalf("non-zero cell pairs = %d, want 20", got)
+	}
+}
+
+func plmCrossoverPairIterations(readCount, runs int) int {
+	if readCount == 0 {
+		return 1
+	}
+	return runs
+}
+
 func TestRealGuestPLMCrossoverEconomicsFixture(t *testing.T) {
-	output := os.Getenv("PLM_CROSSOVER_OUTPUT")
+	output := strings.TrimSpace(os.Getenv("PLM_CROSSOVER_OUTPUT"))
 	if output == "" {
 		t.Skip("set PLM_CROSSOVER_OUTPUT to run the parameterized crossover fixture")
 	}
@@ -154,15 +171,15 @@ func TestRealGuestPLMCrossoverEconomicsFixture(t *testing.T) {
 
 	profiles := make([]plmCrossoverProfile, 0, 2)
 	for _, profile := range []string{"cold_end_to_end", "engine_precompiled"} {
-		samples := make([]plmCrossoverSample, 0, 2*config.Runs*(len(config.ReadCounts)*len(config.DelaysMS)+1))
+		samples := make([]plmCrossoverSample, 0, 2*config.Runs*len(config.ReadCounts)*len(config.DelaysMS)+2)
 		if config.ZeroRead {
-			for pairIteration := 0; pairIteration < config.Runs; pairIteration++ {
+			for pairIteration := 0; pairIteration < plmCrossoverPairIterations(0, config.Runs); pairIteration++ {
 				samples = append(samples, runPLMCrossoverPair(t, artifact, profile, pairIteration, 0, 0, config.EvaluationOrderOffset)...)
 			}
 		}
 		for _, readCount := range config.ReadCounts {
 			for _, delayMS := range config.DelaysMS {
-				for pairIteration := 0; pairIteration < config.Runs; pairIteration++ {
+				for pairIteration := 0; pairIteration < plmCrossoverPairIterations(readCount, config.Runs); pairIteration++ {
 					samples = append(samples, runPLMCrossoverPair(t, artifact, profile, pairIteration, readCount, delayMS, config.EvaluationOrderOffset)...)
 				}
 			}
@@ -191,7 +208,12 @@ func TestRealGuestPLMCrossoverEconomicsFixture(t *testing.T) {
 	}
 
 	artifactDigest := sha256.Sum256(artifact)
-	maxReadCount := config.ReadCounts[len(config.ReadCounts)-1]
+	maxReadCount := 0
+	for _, readCount := range config.ReadCounts {
+		if readCount > maxReadCount {
+			maxReadCount = readCount
+		}
+	}
 	evidence := plmCrossoverEvidence{
 		SchemaVersion: plmCrossoverEconomicsSchema,
 		TargetCommit:  config.TargetCommit, SourceTree: config.SourceTree,
@@ -468,7 +490,8 @@ func runPLMCrossoverSample(t *testing.T, artifact []byte, profile, mode string, 
 		Mode: mode, Profile: profile, PairIteration: pairIteration, ReadCount: readCount, DelayMS: delayMS,
 		SourceSHA256: plmCrossoverDigest(source), TotalNanos: totalNanos, EngineSetupNanos: setupNanos,
 		AllocatedBytes: allocated, ProviderNanos: provider.totalNanos.Load(), ProviderStarts: provider.starts.Load(),
-		ProviderMaxConcurrency: provider.maxConcurrency.Load(), Result: append(json.RawMessage(nil), result...),
+		ProviderMaxConcurrency: provider.maxConcurrency.Load(), CallCount: broker.CallCount(),
+		Result:    append(json.RawMessage(nil), result...),
 		Lifecycle: engine.PLMRunLifecycleEvidence(), Candidates: candidates,
 	}
 }

@@ -26,15 +26,18 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
-const plmPrefixEagerSchema = "pysolate.plm-prefix-eager-economics.v1"
+const (
+	plmPrefixEagerSchema        = "pysolate.plm-prefix-eager-economics.v1"
+	plmPrefixEagerProviderDelay = 1500 * time.Millisecond
+)
 
 var plmPrefixEagerChunks = []struct {
 	offset time.Duration
 	source string
 }{
 	{0, "value = sources.read(\"alpha\")\n"},
-	{150 * time.Millisecond, "label = value.upper()\n"},
-	{450 * time.Millisecond, "result = [label, 12]\n"},
+	{700 * time.Millisecond, "label = value.upper()\n"},
+	{1400 * time.Millisecond, "result = [label, 12]\n"},
 }
 
 type plmPrefixEagerTracker struct {
@@ -45,7 +48,7 @@ type plmPrefixEagerTracker struct {
 
 func (tracker *plmPrefixEagerTracker) handler(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
 	tracker.attempts.Add(1)
-	timer := time.NewTimer(250 * time.Millisecond)
+	timer := time.NewTimer(plmPrefixEagerProviderDelay)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
@@ -361,8 +364,8 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 	treatments := []string{"serial_whole_file", "eager_style_gate", "plm_prefix_prepare"}
 	evidence := plmPrefixEagerEvidence{
 		SchemaVersion: plmPrefixEagerSchema, SourceCommit: os.Getenv("PYSOLATE_EXPERIMENT_SOURCE_COMMIT"), SourceTree: os.Getenv("PYSOLATE_EXPERIMENT_SOURCE_TREE"),
-		HostID: os.Getenv("EVALUATION_HOST_ID"), ArtifactSHA256: fmt.Sprintf("sha256:%x", artifactDigest[:]), Runs: runs, ProviderDelayMS: 250,
-		ChunkOffsetsMS: []int{0, 150, 450}, SourceSHA256: testDigest(plmPrefixEagerChunks[0].source + plmPrefixEagerChunks[1].source + plmPrefixEagerChunks[2].source),
+		HostID: os.Getenv("EVALUATION_HOST_ID"), ArtifactSHA256: fmt.Sprintf("sha256:%x", artifactDigest[:]), Runs: runs, ProviderDelayMS: int(plmPrefixEagerProviderDelay / time.Millisecond),
+		ChunkOffsetsMS: []int{0, 700, 1400}, SourceSHA256: testDigest(plmPrefixEagerChunks[0].source + plmPrefixEagerChunks[1].source + plmPrefixEagerChunks[2].source),
 	}
 	for trial := 0; trial < runs; trial++ {
 		for order := 0; order < len(treatments); order++ {

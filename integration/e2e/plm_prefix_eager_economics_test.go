@@ -116,7 +116,6 @@ type plmPrefixTreatment struct {
 	broker                    *capability.Broker
 	table                     *capability.SplitPhaseTable
 	admission                 *semantic.StreamingPrefixAdmission
-	filter                    *semantic.ConservativePrefixReadinessFilter
 	bindings                  semantic.Bindings
 	profile                   *runtimeconfig.ExecutionProfile
 	plugins                   *passplugin.Registry
@@ -197,11 +196,6 @@ func (treatment *plmPrefixTreatment) Begin(ctx context.Context, _ json.RawMessag
 		return err
 	}
 	treatment.admission = admission
-	filter, err := semantic.NewConservativePrefixReadinessFilter(treatment.plan)
-	if err != nil {
-		return err
-	}
-	treatment.filter = filter
 	treatment.bindings = semantic.Bindings{
 		ArtifactSHA256: artifactSHA, ExecutionProfileSHA256: analyzer.Properties().ExecutionProfileBindingSHA256,
 		ImportClosureSHA256: agentfunction.ImportClosureIdentity(allowedImports, allowedImports), CapabilityPlanSHA256: treatment.plan.Identity(),
@@ -219,7 +213,7 @@ func (treatment *plmPrefixTreatment) ObserveChunk(ctx context.Context, chunk str
 	treatment.source.WriteString(chunk)
 	treatment.prefixIndex++
 	prefix := treatment.source.String()
-	if !treatment.filter.ShouldAnalyzePrefix(treatment.prefixIndex, prefix) {
+	if treatment.prefixIndex != 1 {
 		return treatment.admission.RecordSkippedPrefix(prefix)
 	}
 	if treatment.analysisResult != nil {
@@ -410,6 +404,9 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 			if plm, ok := treatment.(*plmPrefixTreatment); ok {
 				sample.SplitPhase, sample.PLMLifecycle = plm.split, plm.lifecycle
 				sample.PrefixAnalysisNanos, sample.PrefixAnalyzerInvocations = plm.prefixAnalysisNanos, plm.prefixAnalyzerInvocations
+				if sample.PrefixAnalyzerInvocations != 1 || sample.SplitPhase.Reused != 1 {
+					t.Fatalf("prefix path did not run or was not reused: analysis=%d split=%+v", sample.PrefixAnalyzerInvocations, sample.SplitPhase)
+				}
 			}
 			if sample.Outcome.FinalProgramOutcome != "success" || sample.Outcome.LogicalCalls != 1 || sample.Outcome.PhysicalAttempts != 1 {
 				t.Fatalf("invalid outcome: %+v", sample.Outcome)

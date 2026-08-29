@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 usage: scripts/test-host-workstation.sh \
-  --suite baseline|prepared-family|evaluation|evaluation-sweeps|plm-fixed-cost \
+  --suite baseline|prepared-family|evaluation|evaluation-sweeps|plm-fixed-cost|thesis-experiments \
   --target gpu31|gpu32|gpu33|gpu34|gpu35 --output ABSOLUTE_DIR [--gateway shell2|shell3] \
   [--order-offset N] [--plm-crossover-runs N] [--cow-fanout-runs N] \
   [--build-cache-root ABSOLUTE_REMOTE_DIR]
@@ -36,7 +36,7 @@ while [[ $# -gt 0 ]]; do
     *) usage >&2; exit 2 ;;
   esac
 done
-case "$suite" in baseline|prepared-family|evaluation|evaluation-sweeps|plm-fixed-cost) ;; *) usage >&2; exit 2 ;; esac
+case "$suite" in baseline|prepared-family|evaluation|evaluation-sweeps|plm-fixed-cost|thesis-experiments) ;; *) usage >&2; exit 2 ;; esac
 case "$gateway" in shell2|shell3) ;; *) usage >&2; exit 2 ;; esac
 case "$target" in gpu31|gpu32|gpu33|gpu34|gpu35) ;; *) echo "--target must be gpu31..gpu35" >&2; exit 2 ;; esac
 if [[ -z $output || $output != /* ]]; then

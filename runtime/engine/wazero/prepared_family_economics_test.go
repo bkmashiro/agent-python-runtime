@@ -35,6 +35,8 @@ type preparedFamilyEconomicsSample struct {
 	Mode                  string                       `json:"mode"`
 	Iteration             int                          `json:"iteration"`
 	Fanout                int                          `json:"fanout"`
+	MutationPages         int                          `json:"mutation_pages,omitempty"`
+	PageSizeBytes         int                          `json:"page_size_bytes,omitempty"`
 	FamilyPrepareNanos    uint64                       `json:"family_prepare_nanos"`
 	RunnerCreateNanos     []uint64                     `json:"runner_create_nanos"`
 	RunNanos              []uint64                     `json:"run_nanos"`
@@ -185,6 +187,16 @@ func TestPreparedFamilyEconomicsWorker(t *testing.T) {
 		t.Fatal("invalid worker coordinates")
 	}
 	fanout := preparedFamilyEconomicsBoundedInt(t, "PYSOLATE_PREPARED_FAMILY_ECONOMICS_FANOUT", 1, 8)
+	mutationPages := 1
+	recordMutationPages := false
+	if raw := os.Getenv("PYSOLATE_PREPARED_FAMILY_ECONOMICS_MUTATION_PAGES"); raw != "" {
+		var parseErr error
+		mutationPages, parseErr = strconv.Atoi(raw)
+		if parseErr != nil || mutationPages < 0 || mutationPages > 2048 || goruntime.GOOS != "linux" || os.Getpagesize() != 4096 {
+			t.Fatal("mutation pages require Linux 4096-byte pages and a value in [0,2048]")
+		}
+		recordMutationPages = true
+	}
 	output := os.Getenv("PYSOLATE_PREPARED_FAMILY_ECONOMICS_WORKER_OUTPUT")
 	if output == "" {
 		t.Fatal("worker output is required")
@@ -216,6 +228,10 @@ func TestPreparedFamilyEconomicsWorker(t *testing.T) {
 		Close(context.Context) error
 	}, 0, fanout)
 	sample := preparedFamilyEconomicsSample{Mode: mode, Iteration: iteration, Fanout: fanout, FamilyPrepareNanos: familyPrepare, BaselineResources: baseline}
+	if recordMutationPages {
+		sample.MutationPages = mutationPages
+		sample.PageSizeBytes = os.Getpagesize()
+	}
 	for index := 0; index < fanout; index++ {
 		runID := preparedFamilyEconomicsRunID(mode, iteration, index)
 		started = time.Now()
@@ -240,7 +256,7 @@ func TestPreparedFamilyEconomicsWorker(t *testing.T) {
 		runID := preparedFamilyEconomicsRunID(mode, iteration, index)
 		request := runtimeconfig.RunRequest{
 			RunID:         runID,
-			Code:          "import numpy\ndataset.flat[0] = dataset.flat[0] + 1\nresult = int(dataset.sum())\n",
+			Code:          preparedFamilyMutationCode(mutationPages),
 			Inputs:        json.RawMessage(`{}`),
 			Compatibility: &runtimeconfig.CompatibilityDeclaration{Profile: "numpy-core", Imports: []string{"numpy"}},
 		}
@@ -262,8 +278,9 @@ func TestPreparedFamilyEconomicsWorker(t *testing.T) {
 		if err := json.Unmarshal(decoded.Result, &result); err != nil {
 			t.Fatal(err)
 		}
-		if result != preparedFamilyEconomicsExpectedResult {
-			t.Fatalf("unexpected consumer result: got=%d want=%d", result, preparedFamilyEconomicsExpectedResult)
+		expectedResult := int64((8<<20)/8 + mutationPages)
+		if result != expectedResult {
+			t.Fatalf("unexpected consumer result: got=%d want=%d", result, expectedResult)
 		}
 		if index == 0 {
 			sample.Result = result
@@ -340,6 +357,11 @@ func preparedFamilyEconomicsBody() ([]byte, int64) {
 		binary.LittleEndian.PutUint64(body[offset:], 1)
 	}
 	return body, preparedFamilyEconomicsExpectedResult
+}
+
+func preparedFamilyMutationCode(mutationPages int) string {
+	limit := mutationPages * (4096 / 8)
+	return fmt.Sprintf("import numpy\nview = dataset.reshape(-1)\nview[0:%d:512] += 1\nresult = int(dataset.sum())\n", limit)
 }
 
 func preparedFamilyEconomicsBoundedInt(t *testing.T, name string, minimum, maximum int) int {

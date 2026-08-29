@@ -27,7 +27,7 @@ if [[ ! $source_commit =~ ^[0-9a-f]{40}$ || ! $source_tree =~ ^[0-9a-f]{40}$ || 
   echo "invalid source identity" >&2
   exit 4
 fi
-case "$suite" in baseline|prepared-family|evaluation|evaluation-sweeps|plm-fixed-cost) ;; *) echo "invalid suite" >&2; exit 5 ;; esac
+case "$suite" in baseline|prepared-family|evaluation|evaluation-sweeps|plm-fixed-cost|thesis-experiments) ;; *) echo "invalid suite" >&2; exit 5 ;; esac
 if [[ ! $order_offset =~ ^[0-9]+$ || ! $plm_crossover_runs =~ ^[0-9]+$ || ! $cow_fanout_runs =~ ^[0-9]+$ ||
   $plm_crossover_runs -lt 3 || $plm_crossover_runs -gt 20 || $cow_fanout_runs -lt 3 || $cow_fanout_runs -gt 20 ]]; then
   echo "invalid sweep parameters" >&2
@@ -126,6 +126,23 @@ set +e
         --runs "$plm_crossover_runs" \
         --build-cache-root "$build_cache_root"
       ;;
+    thesis-experiments)
+      mkdir -p "$output/thesis-experiments"
+      AGENT_RUNTIME_BUILD_CACHE_ROOT="$build_cache_root" AGENT_RUNTIME_BUILD_CACHE_MODE=auto AGENT_RUNTIME_ARTIFACT_PROFILE=base \
+        GITHUB_SHA="$source_commit" AGENT_RUNTIME_SOURCE_TREE="$source_tree" ./guest/build/build-guest.sh
+      AGENT_RUNTIME_GUEST="$repository/dist/agent-python-runtime-base.wasm" \
+        PYSOLATE_PLM_PREFIX_EAGER_OUTPUT="$output/thesis-experiments/plm-prefix-eager.json" \
+        PYSOLATE_PLM_PREFIX_EAGER_RUNS="$plm_crossover_runs" PYSOLATE_PLM_PREFIX_EAGER_ORDER_OFFSET="$(( order_offset % 3 ))" \
+        PYSOLATE_EXPERIMENT_SOURCE_COMMIT="$source_commit" PYSOLATE_EXPERIMENT_SOURCE_TREE="$source_tree" EVALUATION_HOST_ID="$target" \
+        "$GOROOT/bin/go" test ./integration/e2e -run '^TestPLMPrefixEagerEconomicsFixture$' -count=1 -timeout=30m
+      AGENT_RUNTIME_BUILD_CACHE_ROOT="$build_cache_root" AGENT_RUNTIME_BUILD_CACHE_MODE=auto AGENT_RUNTIME_ARTIFACT_PROFILE=numpy-core \
+        GITHUB_SHA="$source_commit" AGENT_RUNTIME_SOURCE_TREE="$source_tree" ./guest/build/build-guest.sh
+      AGENT_RUNTIME_GUEST="$repository/dist/agent-python-runtime-numpy-core.wasm" \
+        PYSOLATE_COW_MUTATION_DENSITY_OUTPUT="$output/thesis-experiments/cow-mutation-density.json" \
+        PYSOLATE_COW_MUTATION_DENSITY_RUNS="$cow_fanout_runs" PYSOLATE_COW_MUTATION_DENSITY_ORDER_OFFSET="$(( order_offset % 2 ))" \
+        PYSOLATE_EXPERIMENT_SOURCE_COMMIT="$source_commit" PYSOLATE_EXPERIMENT_SOURCE_TREE="$source_tree" EVALUATION_HOST_ID="$target" \
+        "$GOROOT/bin/go" test ./runtime/engine/wazero -run '^TestCOWMutationDensityEconomicsFixture$' -count=1 -timeout=2h
+      ;;
   esac
 } >"$output/test.log" 2>&1
 test_status=$?
@@ -166,6 +183,7 @@ PY
   if [[ $suite == evaluation ]]; then evidence_dir=evaluation; fi
   if [[ $suite == evaluation-sweeps ]]; then evidence_dir=evaluation-sweeps; fi
   if [[ $suite == plm-fixed-cost ]]; then evidence_dir=plm-fixed-cost; fi
+  if [[ $suite == thesis-experiments ]]; then evidence_dir=thesis-experiments; fi
   if [[ -n $evidence_dir ]]; then
     mapfile -d '' nested_files < <(python3 - "$evidence_dir" <<'PY'
 import pathlib

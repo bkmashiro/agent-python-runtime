@@ -38,12 +38,13 @@ type plmPrefixEagerChunk struct {
 }
 
 type plmPrefixEagerCell struct {
-	id                string
-	chunks            []plmPrefixEagerChunk
-	providerResponses map[string]string
-	expectedCalls     uint32
-	expectedResult    json.RawMessage
-	includeImmediate  bool
+	id                  string
+	chunks              []plmPrefixEagerChunk
+	providerResponses   map[string]string
+	expectedCalls       uint32
+	expectedPrefixCalls uint32
+	expectedResult      json.RawMessage
+	includeImmediate    bool
 }
 
 var plmPrefixEagerCells = map[string]plmPrefixEagerCell{
@@ -55,7 +56,7 @@ var plmPrefixEagerCells = map[string]plmPrefixEagerCell{
 			{1400 * time.Millisecond, "result = [label, 12]\nprint(result)\n"},
 		},
 		providerResponses: map[string]string{"alpha": "alpha"},
-		expectedCalls:     1, expectedResult: json.RawMessage(`["ALPHA",12]`), includeImmediate: true,
+		expectedCalls:     1, expectedPrefixCalls: 1, expectedResult: json.RawMessage(`["ALPHA",12]`), includeImmediate: true,
 	},
 	"one-read-gate-rejected-long-tail": {
 		id: "one-read-gate-rejected-long-tail",
@@ -65,7 +66,7 @@ var plmPrefixEagerCells = map[string]plmPrefixEagerCell{
 			{1400 * time.Millisecond, "result = [label, 12]\nprint(result)\n"},
 		},
 		providerResponses: map[string]string{"alpha": "alpha"},
-		expectedCalls:     1, expectedResult: json.RawMessage(`["ALPHA",12]`), includeImmediate: true,
+		expectedCalls:     1, expectedPrefixCalls: 1, expectedResult: json.RawMessage(`["ALPHA",12]`), includeImmediate: true,
 	},
 	"two-read-gate-rejected-long-tail": {
 		id: "two-read-gate-rejected-long-tail",
@@ -75,7 +76,7 @@ var plmPrefixEagerCells = map[string]plmPrefixEagerCell{
 			{1400 * time.Millisecond, "result = [left_label, right_label, 12]\nprint(result)\n"},
 		},
 		providerResponses: map[string]string{"alpha": "alpha", "beta": "beta"},
-		expectedCalls:     2, expectedResult: json.RawMessage(`["ALPHA","BETA",12]`),
+		expectedCalls:     2, expectedPrefixCalls: 2, expectedResult: json.RawMessage(`["ALPHA","BETA",12]`),
 	},
 	"two-read-dependent-long-tail": {
 		id: "two-read-dependent-long-tail",
@@ -85,7 +86,7 @@ var plmPrefixEagerCells = map[string]plmPrefixEagerCell{
 			{1400 * time.Millisecond, "result = [left_label, right_label, 12]\nprint(result)\n"},
 		},
 		providerResponses: map[string]string{"alpha": "beta", "beta": "gamma"},
-		expectedCalls:     2, expectedResult: json.RawMessage(`["BETA","GAMMA",12]`),
+		expectedCalls:     2, expectedPrefixCalls: 1, expectedResult: json.RawMessage(`["BETA","GAMMA",12]`),
 	},
 }
 
@@ -322,6 +323,7 @@ type plmPrefixTreatment struct {
 	adapter                     *e2ePLMAdapter
 	tracker                     *plmPrefixEagerTracker
 	expectedCalls               uint32
+	expectedPrefixCalls         uint32
 	runID                       string
 	workspaceRoot               string
 	source                      strings.Builder
@@ -347,8 +349,8 @@ type plmPrefixTreatment struct {
 	lifecycle wazeroengine.PLMRunLifecycleEvidence
 }
 
-func newPLMPrefixTreatment(capacity *plmPrefixPreparedCapacity, plan *capability.Plan, adapter *e2ePLMAdapter, tracker *plmPrefixEagerTracker, expectedCalls uint32, runID, workspaceRoot string) *plmPrefixTreatment {
-	return &plmPrefixTreatment{capacity: capacity, artifact: capacity.artifact, config: capacity.config, plan: plan, adapter: adapter, tracker: tracker, expectedCalls: expectedCalls, runID: runID, workspaceRoot: workspaceRoot}
+func newPLMPrefixTreatment(capacity *plmPrefixPreparedCapacity, plan *capability.Plan, adapter *e2ePLMAdapter, tracker *plmPrefixEagerTracker, expectedCalls, expectedPrefixCalls uint32, runID, workspaceRoot string) *plmPrefixTreatment {
+	return &plmPrefixTreatment{capacity: capacity, artifact: capacity.artifact, config: capacity.config, plan: plan, adapter: adapter, tracker: tracker, expectedCalls: expectedCalls, expectedPrefixCalls: expectedPrefixCalls, runID: runID, workspaceRoot: workspaceRoot}
 }
 
 func (treatment *plmPrefixTreatment) Begin(ctx context.Context, _ json.RawMessage) error {
@@ -449,7 +451,7 @@ func (treatment *plmPrefixTreatment) ObserveChunk(ctx context.Context, chunk str
 				admissionNanos = uint64(time.Since(admissionStarted))
 				if err != nil {
 					err = fmt.Errorf("admit prefix: %w", err)
-				} else if added != treatment.expectedCalls {
+				} else if added != treatment.expectedPrefixCalls {
 					err = fmt.Errorf("prefix admission added %d calls", added)
 				}
 			}
@@ -669,7 +671,7 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 			case "immediate_dispatch_reference":
 				treatment, err = semanticspeculation.NewEagerGuestTreatment(semanticspeculation.EagerGuestTreatmentConfig{Artifact: artifact, RunConfig: config, Plan: plan, BrokerFactory: brokerFactory, ProviderObservation: tracker.observation, RunID: runID, WorkspaceRoot: workspaceRoot, WorkspaceOwner: runID})
 			case "pysolate_pooled_prefix":
-				treatment = newPLMPrefixTreatment(capacity, plan, adapter, tracker, cell.expectedCalls, runID, workspaceRoot)
+				treatment = newPLMPrefixTreatment(capacity, plan, adapter, tracker, cell.expectedCalls, cell.expectedPrefixCalls, runID, workspaceRoot)
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -685,7 +687,7 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 				sample.AnalyzerProvision = plm.analyzerProvision
 				sample.AnalyzerSessionPrepareNanos = plm.analyzerSessionPrepareNanos
 				sample.FinalExecutionNanos = plm.finalExecutionNanos
-				if sample.PrefixAnalyzerInvocations != 1 || sample.SplitPhase.Reused != cell.expectedCalls || sample.SplitPhase.MaximumConcurrent != cell.expectedCalls {
+				if sample.PrefixAnalyzerInvocations != 1 || sample.SplitPhase.Reused != cell.expectedPrefixCalls || sample.SplitPhase.MaximumConcurrent != cell.expectedPrefixCalls {
 					t.Fatalf("prefix path did not run or was not reused: analysis=%d split=%+v", sample.PrefixAnalyzerInvocations, sample.SplitPhase)
 				}
 				if sample.AnalyzerSessionPrepareNanos == 0 || sample.PrefixAnalysisNanos == 0 || sample.PrefixAdmissionNanos == 0 || sample.FinalExecutionNanos == 0 {
@@ -698,7 +700,7 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 			if sample.Outcome.FinalProgramOutcome != "success" || sample.Outcome.LogicalCalls != cell.expectedCalls || sample.Outcome.PhysicalAttempts != cell.expectedCalls || sample.Outcome.ResultSHA256 != expectedResultSHA {
 				t.Fatalf("invalid outcome: %+v", sample.Outcome)
 			}
-			if name == "pysolate_pooled_prefix" && sample.ProviderMaxConcurrent != cell.expectedCalls {
+			if name == "pysolate_pooled_prefix" && sample.ProviderMaxConcurrent != cell.expectedPrefixCalls {
 				t.Fatalf("Pysolate did not overlap provider calls: %+v", sample)
 			}
 			if name == "serial_whole_file" && sample.ProviderMaxConcurrent != 1 {

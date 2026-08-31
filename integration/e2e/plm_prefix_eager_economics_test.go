@@ -112,11 +112,11 @@ var plmPrefixEagerCells = map[string]plmPrefixEagerCell{
 	"compute-heavy-eager-favourable": {
 		id: "compute-heavy-eager-favourable",
 		chunks: []plmPrefixEagerChunk{
-			{0, "acc = 0\nfor i in range(5000000):\n    acc = (acc + ((i * 17) % 97)) % 1000000007\n"},
+			{0, "acc = sum((i * 17) % 97 for i in range(20000000)) % 1000000007\n"},
 			{1400 * time.Millisecond, "result = acc\nprint(result)\n"},
 		},
 		providerResponses: map[string]string{},
-		expectedResult:    json.RawMessage(`239999942`),
+		expectedResult:    json.RawMessage(`959999907`),
 	},
 }
 

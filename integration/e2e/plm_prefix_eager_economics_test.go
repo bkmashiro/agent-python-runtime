@@ -721,7 +721,11 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 			name := treatments[(trial+offset+order)%len(treatments)]
 			tracker := &plmPrefixEagerTracker{responses: cell.providerResponses, delay: cell.providerDelayDuration()}
 			adapter := &e2ePLMAdapter{handler: capability.HandlerFunc(tracker.handler)}
-			plan := plmE2EPlan(t, cell.expectedCalls, adapter)
+			planCallBudget := cell.expectedCalls
+			if planCallBudget == 0 {
+				planCallBudget = 1
+			}
+			plan := plmE2EPlan(t, planCallBudget, adapter)
 			runID := fmt.Sprintf("plm-prefix-eager-%s-%d-%s", cell.id, trial, name)
 			workspaceRoot := filepath.Join(t.TempDir(), runID)
 			brokerFactory := func(context.Context) (*capability.Broker, error) {

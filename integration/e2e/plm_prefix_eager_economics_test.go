@@ -47,6 +47,16 @@ type plmPrefixEagerCell struct {
 }
 
 var plmPrefixEagerCells = map[string]plmPrefixEagerCell{
+	"one-read-gate-eligible-long-tail": {
+		id: "one-read-gate-eligible-long-tail",
+		chunks: []plmPrefixEagerChunk{
+			{0, "value = sources.read(\"alpha\")\n"},
+			{700 * time.Millisecond, "label = value.upper()\n"},
+			{1400 * time.Millisecond, "result = [label, 12]\nprint(result)\n"},
+		},
+		providerResponses: map[string]string{"alpha": "alpha"},
+		expectedCalls:     1, expectedResult: json.RawMessage(`["ALPHA",12]`), includeImmediate: true,
+	},
 	"one-read-gate-rejected-long-tail": {
 		id: "one-read-gate-rejected-long-tail",
 		chunks: []plmPrefixEagerChunk{

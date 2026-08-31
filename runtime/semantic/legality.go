@@ -375,11 +375,8 @@ func streamingPrefixSpeculationAllowed(analysis Analysis, site CallSite, plan *c
 		}
 		for _, occurrence := range region.CapabilityOccurrences {
 			predecessorSite, ok := findCallSite(analysis.CallSites, occurrence)
-			if !ok || !predecessorSite.ArgumentsCanonical || predecessorSite.DynamicOccurrence != 1 {
-				return false
-			}
-			qualification, ok := plan.PreDispatch(predecessorSite.Capability)
-			if !ok || !qualification.Eligible() || qualification.Contract().Unclaimed != capability.UnclaimedDiscardWithDisposition {
+			if !ok || !predecessorSite.ArgumentsCanonical || predecessorSite.DynamicOccurrence != 1 ||
+				!streamingPrefixPredecessorAllowed(plan, predecessorSite.Capability) {
 				return false
 			}
 		}
@@ -392,6 +389,15 @@ func streamingPrefixSpeculationAllowed(analysis Analysis, site CallSite, plan *c
 		}
 	}
 	return true
+}
+
+func streamingPrefixPredecessorAllowed(plan *capability.Plan, capabilityName string) bool {
+	if qualification, ok := plan.PreDispatch(capabilityName); ok && qualification.Eligible() &&
+		qualification.Contract().Unclaimed == capability.UnclaimedDiscardWithDisposition {
+		return true
+	}
+	contract, ok := plan.PLMContract(capabilityName)
+	return ok && contract.CanPrepareValueCandidate() && contract.Speculation == capability.SpeculationBudgeted
 }
 
 func safeStreamingPrefixRegion(region CandidateRegion) bool {

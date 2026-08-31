@@ -60,6 +60,18 @@ func TestCanPreissueRequiresVerifiedExactNecessarilyReachedCallAndFrozenContext(
 	}
 }
 
+func TestStreamingPrefixAllowsLaterPLMReadAfterQualifiedPLMRead(t *testing.T) {
+	plan := legalityPLMPlan(t, &legalityPLMAdapter{})
+	verified, target := legalityVerifiedTwoReadPrefix(t, plan)
+
+	if decision := CanPreissue(verified, plan, target.ID, legalityContext()); decision.Allowed() || !hasRejection(decision, RejectCallNotNecessarilyReached) {
+		t.Fatalf("ordinary decision=%+v", decision)
+	}
+	if decision := CanPreissueStreamingPrefix(verified, plan, target.ID, legalityContext()); !decision.Allowed() {
+		t.Fatalf("streaming decision=%+v", decision)
+	}
+}
+
 func TestPrepareQualifiedPLMUsesFinalSemanticSourceIdentity(t *testing.T) {
 	adapter := &legalityPLMAdapter{}
 	plan := legalityPLMPlan(t, adapter)
@@ -269,6 +281,53 @@ func legalityVerifiedAnalysis(t *testing.T, plan *capability.Plan, necessarilyRe
 		t.Fatal(err)
 	}
 	return VerifiedAnalysis{analysisJSON: encoded}, site
+}
+
+func legalityVerifiedTwoReadPrefix(t *testing.T, plan *capability.Plan) (VerifiedAnalysis, CallSite) {
+	t.Helper()
+	source := "left = sources.read(\"alpha\")\nright = sources.read(\"beta\")\n"
+	controlID := legalityDigest("two-read-control")
+	firstRegionID := legalityDigest("two-read-region:first")
+	secondRegionID := legalityDigest("two-read-region:second")
+	first := CallSite{
+		ID: legalityDigest("two-read-site:first"), Span: SourceSpan{StartLine: 1, StartColumn: 7, EndLine: 1, EndColumn: 28},
+		Capability: "sources.read", ControlRegionID: controlID, NecessarilyReached: true,
+		ArgumentsCanonical: true, CanonicalArguments: json.RawMessage(`{"key":"alpha"}`), DynamicOccurrence: 1,
+	}
+	second := CallSite{
+		ID: legalityDigest("two-read-site:second"), Span: SourceSpan{StartLine: 2, StartColumn: 8, EndLine: 2, EndColumn: 28},
+		Capability: "sources.read", ControlRegionID: controlID, NecessarilyReached: false,
+		ArgumentsCanonical: true, CanonicalArguments: json.RawMessage(`{"key":"beta"}`), DynamicOccurrence: 1,
+	}
+	region := func(id string, span SourceSpan, siteID string, predecessors []string) CandidateRegion {
+		return CandidateRegion{
+			ID: id, Kind: CandidateRegionStraightLine, Span: span, ControlRegionID: controlID,
+			ControlPredecessors: predecessors, DataDependencies: []RegionDataDependency{}, LiveIns: []string{}, LiveOuts: []string{},
+			LiveInsCanonical: true, LiveOutsCanonical: true, Effects: EffectSummary{MayObserveLive: true, MaySuspend: true},
+			CapabilityOccurrences: []string{siteID}, Barriers: []BarrierCode{}, RejectionReasons: []CandidateRejection{CandidateRejectMayRaise},
+		}
+	}
+	callSites := []CallSite{first, second}
+	if callSites[1].ID < callSites[0].ID {
+		callSites[0], callSites[1] = callSites[1], callSites[0]
+	}
+	analysis := Analysis{
+		SchemaVersion: AnalysisSchemaVersion, SourceSHA256: legalityDigest(source), ASTSHA256: legalityDigest("two-read-ast"),
+		AnalyzerSHA256: legalityDigest("analyzer"), ArtifactSHA256: legalityDigest("artifact"), ExecutionProfileSHA256: legalityDigest("profile"),
+		ImportClosureSHA256: legalityDigest("imports"), CapabilityPlanSHA256: plan.Identity(),
+		ModuleSpan:    SourceSpan{StartLine: 1, StartColumn: 0, EndLine: 2, EndColumn: 28},
+		ModuleEffects: EffectSummary{MayObserveLive: true, MaySuspend: true}, Functions: []FunctionSummary{}, Barriers: []Barrier{},
+		CallSiteCoverage: "positive_only", CandidateRegionCoverage: "module_top_level_complete", CallSites: callSites, CandidateRegionCount: 2,
+		CandidateRegions: []CandidateRegion{
+			region(firstRegionID, SourceSpan{StartLine: 1, StartColumn: 0, EndLine: 1, EndColumn: 28}, first.ID, []string{}),
+			region(secondRegionID, SourceSpan{StartLine: 2, StartColumn: 0, EndLine: 2, EndColumn: 28}, second.ID, []string{firstRegionID}),
+		},
+	}
+	_, encoded, err := analysis.Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return VerifiedAnalysis{analysisJSON: encoded}, second
 }
 
 type legalityPLMAdapter struct{}

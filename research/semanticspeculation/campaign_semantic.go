@@ -437,7 +437,6 @@ func (t *SemanticPreDispatchTreatment) Finalize(ctx context.Context) (TreatmentO
 		}
 		outcome.FinalProgramOutcome = "runtime_error"
 		outcome.ErrorClass = *response.Error.ErrorType
-		outcome.ErrorMessage = response.Error.Message
 	default:
 		return TreatmentOutcome{}, errors.New("invalid semantic pre-dispatch Guest status")
 	}

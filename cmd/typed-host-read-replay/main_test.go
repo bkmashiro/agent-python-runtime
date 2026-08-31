@@ -59,6 +59,29 @@ func TestReplayRequestValidate(t *testing.T) {
 	}
 }
 
+func TestReplayRequestValidateExpectedError(t *testing.T) {
+	request := replayRequest{
+		SchemaVersion:        requestSchemaVersion,
+		RunID:                "error-smoke",
+		SourceChunks:         []sourceChunk{{OffsetMilliseconds: 0, Text: "result = sources.read('missing')\n"}},
+		Inputs:               json.RawMessage(`{}`),
+		ExpectedResult:       json.RawMessage(`null`),
+		ExpectedErrorClass:   "RuntimeError",
+		ExpectedErrorMessage: "fixture failure",
+		Provider: providerConfig{
+			Errors:        map[string]string{"missing": "fixture failure"},
+			RequiredCalls: 1,
+		},
+	}
+	if err := request.Validate(); err != nil {
+		t.Fatalf("valid expected error rejected: %v", err)
+	}
+	request.ExpectedErrorMessage = ""
+	if err := request.Validate(); err == nil {
+		t.Fatal("partial expected error accepted")
+	}
+}
+
 func TestFixedProviderReturnsConfiguredValueAndTrace(t *testing.T) {
 	provider := newFixedProvider(providerConfig{
 		Values:        map[string]string{"a": "alpha"},

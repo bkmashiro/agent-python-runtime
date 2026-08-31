@@ -13,6 +13,7 @@ type TreatmentOutcome struct {
 	PrefixPythonExecutions uint32
 	ResultSHA256           string
 	ErrorClass             string
+	ErrorMessage           string
 	LogicalCalls           uint32
 	PhysicalAttempts       uint32
 	PhysicalResultBytes    uint64

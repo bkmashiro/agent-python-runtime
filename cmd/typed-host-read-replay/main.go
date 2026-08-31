@@ -40,12 +40,14 @@ type providerConfig struct {
 }
 
 type replayRequest struct {
-	SchemaVersion  string          `json:"schema_version"`
-	RunID          string          `json:"run_id"`
-	SourceChunks   []sourceChunk   `json:"source_chunks"`
-	Inputs         json.RawMessage `json:"inputs"`
-	ExpectedResult json.RawMessage `json:"expected_result"`
-	Provider       providerConfig  `json:"provider"`
+	SchemaVersion        string          `json:"schema_version"`
+	RunID                string          `json:"run_id"`
+	SourceChunks         []sourceChunk   `json:"source_chunks"`
+	Inputs               json.RawMessage `json:"inputs"`
+	ExpectedResult       json.RawMessage `json:"expected_result"`
+	ExpectedErrorClass   string          `json:"expected_error_class,omitempty"`
+	ExpectedErrorMessage string          `json:"expected_error_message,omitempty"`
+	Provider             providerConfig  `json:"provider"`
 }
 
 func (request replayRequest) Validate() error {
@@ -82,6 +84,14 @@ func (request replayRequest) Validate() error {
 	}
 	if len(request.ExpectedResult) == 0 || !json.Valid(request.ExpectedResult) {
 		return errors.New("expected_result must be valid JSON")
+	}
+	hasErrorClass := strings.TrimSpace(request.ExpectedErrorClass) != ""
+	hasErrorMessage := request.ExpectedErrorMessage != ""
+	if hasErrorClass != hasErrorMessage {
+		return errors.New("expected error class and message must be provided together")
+	}
+	if hasErrorClass && string(request.ExpectedResult) != "null" {
+		return errors.New("expected_result must be null when an error is expected")
 	}
 	if request.Provider.DelayMilliseconds > uint64((30 * time.Second).Milliseconds()) {
 		return errors.New("provider delay exceeds 30 seconds")
@@ -218,6 +228,8 @@ type replayTimings struct {
 type replayOutcome struct {
 	FinalProgramOutcome  string `json:"final_program_outcome"`
 	ResultSHA256         string `json:"result_sha256"`
+	ErrorClass           string `json:"error_class,omitempty"`
+	ErrorMessage         string `json:"error_message,omitempty"`
 	LogicalCalls         uint32 `json:"logical_calls"`
 	PhysicalAttempts     uint32 `json:"physical_attempts"`
 	ReadyBeforeFinalize  uint32 `json:"ready_before_finalize"`
@@ -373,8 +385,12 @@ func executeReplay(ctx context.Context, artifactRoot string, request replayReque
 	if err != nil {
 		return replayOutput{}, err
 	}
-	if outcome.FinalProgramOutcome != "success" || outcome.ResultSHA256 != expectedHash {
-		return replayOutput{}, fmt.Errorf("unexpected result: outcome=%s result=%s expected=%s", outcome.FinalProgramOutcome, outcome.ResultSHA256, expectedHash)
+	if request.ExpectedErrorClass == "" {
+		if outcome.FinalProgramOutcome != "success" || outcome.ResultSHA256 != expectedHash {
+			return replayOutput{}, fmt.Errorf("unexpected result: outcome=%s result=%s expected=%s", outcome.FinalProgramOutcome, outcome.ResultSHA256, expectedHash)
+		}
+	} else if outcome.FinalProgramOutcome != "runtime_error" || outcome.ErrorClass != request.ExpectedErrorClass || outcome.ErrorMessage != request.ExpectedErrorMessage {
+		return replayOutput{}, fmt.Errorf("unexpected error: outcome=%s class=%q message=%q", outcome.FinalProgramOutcome, outcome.ErrorClass, outcome.ErrorMessage)
 	}
 	if outcome.LogicalCalls != request.Provider.RequiredCalls || outcome.PhysicalAttempts != request.Provider.RequiredCalls || trace.Attempts != request.Provider.RequiredCalls {
 		return replayOutput{}, fmt.Errorf("call count mismatch: logical=%d physical=%d provider=%d expected=%d", outcome.LogicalCalls, outcome.PhysicalAttempts, trace.Attempts, request.Provider.RequiredCalls)
@@ -398,6 +414,7 @@ func executeReplay(ctx context.Context, artifactRoot string, request replayReque
 		},
 		Outcome: replayOutcome{
 			FinalProgramOutcome: outcome.FinalProgramOutcome, ResultSHA256: outcome.ResultSHA256,
+			ErrorClass: outcome.ErrorClass, ErrorMessage: outcome.ErrorMessage,
 			LogicalCalls: outcome.LogicalCalls, PhysicalAttempts: outcome.PhysicalAttempts,
 			ReadyBeforeFinalize: outcome.ReadyBeforeFinalize, WorkspaceDisposition: outcome.WorkspaceDisposition,
 		},

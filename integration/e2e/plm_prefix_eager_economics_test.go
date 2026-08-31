@@ -439,7 +439,11 @@ func (treatment *plmPrefixTreatment) Begin(ctx context.Context, _ json.RawMessag
 	artifactSHA := fmt.Sprintf("sha256:%x", artifactDigest[:])
 	allowedImports := []string{"json"}
 	treatment.plugins = treatment.capacity.plugins
-	session, provision, prepareNanos, err := treatment.capacity.NewSession(ctx, treatment.expectedCalls)
+	callBudget := treatment.expectedCalls
+	if callBudget == 0 {
+		callBudget = 1
+	}
+	session, provision, prepareNanos, err := treatment.capacity.NewSession(ctx, callBudget)
 	if err != nil {
 		return err
 	}
@@ -452,7 +456,7 @@ func (treatment *plmPrefixTreatment) Begin(ctx context.Context, _ json.RawMessag
 		return err
 	}
 	treatment.broker = broker
-	table, err := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{MaxCalls: treatment.expectedCalls, MaxCostUnits: uint64(treatment.expectedCalls), MaxResultBytes: uint64(treatment.expectedCalls) * 4096})
+	table, err := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{MaxCalls: callBudget, MaxCostUnits: uint64(callBudget), MaxResultBytes: uint64(callBudget) * 4096})
 	if err != nil {
 		return err
 	}

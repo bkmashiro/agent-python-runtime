@@ -32,26 +32,108 @@ const (
 	plmPrefixEagerProviderDelay = 1500 * time.Millisecond
 )
 
-var plmPrefixEagerChunks = []struct {
+type plmPrefixEagerChunk struct {
 	offset time.Duration
 	source string
-}{
-	{0, "value = sources.read(\"alpha\")\n"},
-	{700 * time.Millisecond, "label = value.upper()\n"},
-	{1400 * time.Millisecond, "result = [label, 12]\nprint(result)\n"},
+}
+
+type plmPrefixEagerCell struct {
+	id                string
+	chunks            []plmPrefixEagerChunk
+	providerResponses map[string]string
+	expectedCalls     uint32
+	expectedResult    json.RawMessage
+	includeImmediate  bool
+}
+
+var plmPrefixEagerCells = map[string]plmPrefixEagerCell{
+	"one-read-gate-rejected-long-tail": {
+		id: "one-read-gate-rejected-long-tail",
+		chunks: []plmPrefixEagerChunk{
+			{0, "value = sources.read(\"alpha\")\n"},
+			{700 * time.Millisecond, "label = value.upper()\n"},
+			{1400 * time.Millisecond, "result = [label, 12]\nprint(result)\n"},
+		},
+		providerResponses: map[string]string{"alpha": "alpha"},
+		expectedCalls:     1, expectedResult: json.RawMessage(`["ALPHA",12]`), includeImmediate: true,
+	},
+	"two-read-gate-rejected-long-tail": {
+		id: "two-read-gate-rejected-long-tail",
+		chunks: []plmPrefixEagerChunk{
+			{0, "left = sources.read(\"alpha\")\nright = sources.read(\"beta\")\n"},
+			{700 * time.Millisecond, "left_label = left.upper()\nright_label = right.upper()\n"},
+			{1400 * time.Millisecond, "result = [left_label, right_label, 12]\nprint(result)\n"},
+		},
+		providerResponses: map[string]string{"alpha": "alpha", "beta": "beta"},
+		expectedCalls:     2, expectedResult: json.RawMessage(`["ALPHA","BETA",12]`),
+	},
+}
+
+func plmPrefixEagerCellFromEnv(t *testing.T) plmPrefixEagerCell {
+	t.Helper()
+	id := os.Getenv("PYSOLATE_PLM_PREFIX_EAGER_CELL")
+	if id == "" {
+		id = "one-read-gate-rejected-long-tail"
+	}
+	cell, ok := plmPrefixEagerCells[id]
+	if !ok {
+		t.Fatalf("unknown PLM prefix EAGER cell %q", id)
+	}
+	return cell
+}
+
+func (cell plmPrefixEagerCell) sourceText() string {
+	var source strings.Builder
+	for _, chunk := range cell.chunks {
+		source.WriteString(chunk.source)
+	}
+	return source.String()
+}
+
+func (cell plmPrefixEagerCell) chunkOffsetsMS() []int {
+	offsets := make([]int, 0, len(cell.chunks))
+	for _, chunk := range cell.chunks {
+		offsets = append(offsets, int(chunk.offset/time.Millisecond))
+	}
+	return offsets
 }
 
 type plmPrefixEagerTracker struct {
 	attempts      atomic.Uint32
 	ready         atomic.Uint32
+	active        atomic.Uint32
+	maxConcurrent atomic.Uint32
+	resultBytes   atomic.Uint64
 	providerNanos atomic.Uint64
 	finalized     atomic.Bool
+	responses     map[string]string
 }
 
-func (tracker *plmPrefixEagerTracker) handler(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+func (tracker *plmPrefixEagerTracker) handler(ctx context.Context, arguments json.RawMessage) (json.RawMessage, error) {
+	var request struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(arguments, &request); err != nil {
+		return nil, fmt.Errorf("decode source path: %w", err)
+	}
+	if request.Path == "" {
+		return nil, fmt.Errorf("source path is required")
+	}
+	body, ok := tracker.responses[request.Path]
+	if !ok {
+		return nil, fmt.Errorf("unknown source path %q", request.Path)
+	}
 	started := time.Now()
 	defer func() { tracker.providerNanos.Add(uint64(time.Since(started))) }()
 	tracker.attempts.Add(1)
+	active := tracker.active.Add(1)
+	for {
+		maximum := tracker.maxConcurrent.Load()
+		if active <= maximum || tracker.maxConcurrent.CompareAndSwap(maximum, active) {
+			break
+		}
+	}
+	defer tracker.active.Add(^uint32(0))
 	timer := time.NewTimer(plmPrefixEagerProviderDelay)
 	defer timer.Stop()
 	select {
@@ -62,13 +144,17 @@ func (tracker *plmPrefixEagerTracker) handler(ctx context.Context, _ json.RawMes
 	if !tracker.finalized.Load() {
 		tracker.ready.Add(1)
 	}
-	return json.RawMessage(`{"body":"alpha"}`), nil
+	result, err := json.Marshal(map[string]string{"body": body})
+	if err == nil {
+		tracker.resultBytes.Add(uint64(len(result)))
+	}
+	return result, err
 }
 
 func (tracker *plmPrefixEagerTracker) observation() semanticspeculation.ProviderObservation {
 	attempts := tracker.attempts.Load()
 	return semanticspeculation.ProviderObservation{
-		Attempts: attempts, ResultBytes: uint64(attempts) * uint64(len(`{"body":"alpha"}`)), CostUnits: uint64(attempts),
+		Attempts: attempts, ResultBytes: tracker.resultBytes.Load(), CostUnits: uint64(attempts),
 		ReadyBeforeFinalize: tracker.ready.Load(),
 		Dispositions:        semanticspeculation.PhysicalDispositions{Consumed: attempts},
 	}
@@ -88,6 +174,7 @@ type plmPrefixEagerSample struct {
 	PrefixAnalysisNanos         uint64                                                `json:"prefix_analysis_nanos,omitempty"`
 	PrefixAdmissionNanos        uint64                                                `json:"prefix_admission_nanos,omitempty"`
 	ProviderNanos               uint64                                                `json:"provider_nanos,omitempty"`
+	ProviderMaxConcurrent       uint32                                                `json:"provider_max_concurrent,omitempty"`
 	FinalExecutionNanos         uint64                                                `json:"final_execution_nanos,omitempty"`
 	PrefixAnalyzerInvocations   uint32                                                `json:"prefix_analyzer_invocations,omitempty"`
 	AnalyzerProvision           wazeroengine.SemanticAnalysisSessionProvisionEvidence `json:"analyzer_provision,omitempty"`
@@ -96,6 +183,7 @@ type plmPrefixEagerSample struct {
 
 type plmPrefixEagerEvidence struct {
 	SchemaVersion                string                                         `json:"schema_version"`
+	CellID                       string                                         `json:"cell_id"`
 	SourceCommit                 string                                         `json:"source_commit"`
 	SourceTree                   string                                         `json:"source_tree"`
 	HostID                       string                                         `json:"host_id"`
@@ -173,10 +261,10 @@ func newPLMPrefixPreparedCapacity(ctx context.Context, artifact []byte, config r
 	}, nil
 }
 
-func (capacity *plmPrefixPreparedCapacity) NewSession(ctx context.Context) (*wazeroengine.SemanticAnalysisSession, wazeroengine.SemanticAnalysisSessionProvisionEvidence, uint64, error) {
+func (capacity *plmPrefixPreparedCapacity) NewSession(ctx context.Context, maxRequests uint32) (*wazeroengine.SemanticAnalysisSession, wazeroengine.SemanticAnalysisSessionProvisionEvidence, uint64, error) {
 	started := time.Now()
 	session, err := capacity.analyzer.NewSemanticAnalysisSession(ctx, wazeroengine.SemanticAnalysisSessionLimits{
-		MaxRequests: 1, MaxCumulativeRequestBytes: semantic.MaxDocumentBytes, MaxDuration: 30 * time.Second,
+		MaxRequests: maxRequests, MaxCumulativeRequestBytes: semantic.MaxDocumentBytes, MaxDuration: 30 * time.Second,
 	})
 	if err != nil {
 		return nil, wazeroengine.SemanticAnalysisSessionProvisionEvidence{}, 0, err
@@ -213,6 +301,7 @@ type plmPrefixTreatment struct {
 	plan                        *capability.Plan
 	adapter                     *e2ePLMAdapter
 	tracker                     *plmPrefixEagerTracker
+	expectedCalls               uint32
 	runID                       string
 	workspaceRoot               string
 	source                      strings.Builder
@@ -238,8 +327,8 @@ type plmPrefixTreatment struct {
 	lifecycle wazeroengine.PLMRunLifecycleEvidence
 }
 
-func newPLMPrefixTreatment(capacity *plmPrefixPreparedCapacity, plan *capability.Plan, adapter *e2ePLMAdapter, tracker *plmPrefixEagerTracker, runID, workspaceRoot string) *plmPrefixTreatment {
-	return &plmPrefixTreatment{capacity: capacity, artifact: capacity.artifact, config: capacity.config, plan: plan, adapter: adapter, tracker: tracker, runID: runID, workspaceRoot: workspaceRoot}
+func newPLMPrefixTreatment(capacity *plmPrefixPreparedCapacity, plan *capability.Plan, adapter *e2ePLMAdapter, tracker *plmPrefixEagerTracker, expectedCalls uint32, runID, workspaceRoot string) *plmPrefixTreatment {
+	return &plmPrefixTreatment{capacity: capacity, artifact: capacity.artifact, config: capacity.config, plan: plan, adapter: adapter, tracker: tracker, expectedCalls: expectedCalls, runID: runID, workspaceRoot: workspaceRoot}
 }
 
 func (treatment *plmPrefixTreatment) Begin(ctx context.Context, _ json.RawMessage) error {
@@ -263,7 +352,7 @@ func (treatment *plmPrefixTreatment) Begin(ctx context.Context, _ json.RawMessag
 	artifactSHA := fmt.Sprintf("sha256:%x", artifactDigest[:])
 	allowedImports := []string{"json"}
 	treatment.plugins = treatment.capacity.plugins
-	session, provision, prepareNanos, err := treatment.capacity.NewSession(ctx)
+	session, provision, prepareNanos, err := treatment.capacity.NewSession(ctx, treatment.expectedCalls)
 	if err != nil {
 		return err
 	}
@@ -276,7 +365,7 @@ func (treatment *plmPrefixTreatment) Begin(ctx context.Context, _ json.RawMessag
 		return err
 	}
 	treatment.broker = broker
-	table, err := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{MaxCalls: 1, MaxCostUnits: 1, MaxResultBytes: 4096})
+	table, err := capability.NewSplitPhaseTable(broker, capability.SplitPhaseLimits{MaxCalls: treatment.expectedCalls, MaxCostUnits: uint64(treatment.expectedCalls), MaxResultBytes: uint64(treatment.expectedCalls) * 4096})
 	if err != nil {
 		return err
 	}
@@ -340,7 +429,7 @@ func (treatment *plmPrefixTreatment) ObserveChunk(ctx context.Context, chunk str
 				admissionNanos = uint64(time.Since(admissionStarted))
 				if err != nil {
 					err = fmt.Errorf("admit prefix: %w", err)
-				} else if added != 1 {
+				} else if added != treatment.expectedCalls {
 					err = fmt.Errorf("prefix admission added %d calls", added)
 				}
 			}
@@ -462,14 +551,14 @@ func TestPLMPrefixPreparedCapacityUsesFreshSessions(t *testing.T) {
 	}
 	defer func() { _ = capacity.Close(context.Background()) }()
 
-	first, firstEvidence, _, err := capacity.NewSession(context.Background())
+	first, firstEvidence, _, err := capacity.NewSession(context.Background(), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := first.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	second, secondEvidence, _, err := capacity.NewSession(context.Background())
+	second, secondEvidence, _, err := capacity.NewSession(context.Background(), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -499,6 +588,7 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	cell := plmPrefixEagerCellFromEnv(t)
 	runs := 5
 	if raw := os.Getenv("PYSOLATE_PLM_PREFIX_EAGER_RUNS"); raw != "" {
 		runs, err = strconv.Atoi(raw)
@@ -506,11 +596,15 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 			t.Fatal("runs must be in [1,10]")
 		}
 	}
+	treatments := []string{"serial_whole_file", "pysolate_pooled_prefix"}
+	if cell.includeImmediate {
+		treatments = append(treatments, "immediate_dispatch_reference")
+	}
 	offset := 0
 	if raw := os.Getenv("PYSOLATE_PLM_PREFIX_EAGER_ORDER_OFFSET"); raw != "" {
 		offset, err = strconv.Atoi(raw)
-		if err != nil || offset < 0 || offset > 2 {
-			t.Fatal("order offset must be in [0,2]")
+		if err != nil || offset < 0 || offset >= len(treatments) {
+			t.Fatalf("order offset must be in [0,%d]", len(treatments)-1)
 		}
 	}
 	config := runtimeconfig.DefaultRunConfig()
@@ -525,20 +619,23 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 			t.Errorf("close pooled analyser capacity: %v", closeErr)
 		}
 	}()
-	treatments := []string{"serial_whole_file", "immediate_dispatch_reference", "pysolate_pooled_prefix"}
 	evidence := plmPrefixEagerEvidence{
-		SchemaVersion: plmPrefixEagerSchema, SourceCommit: os.Getenv("PYSOLATE_EXPERIMENT_SOURCE_COMMIT"), SourceTree: os.Getenv("PYSOLATE_EXPERIMENT_SOURCE_TREE"),
+		SchemaVersion: plmPrefixEagerSchema, CellID: cell.id, SourceCommit: os.Getenv("PYSOLATE_EXPERIMENT_SOURCE_COMMIT"), SourceTree: os.Getenv("PYSOLATE_EXPERIMENT_SOURCE_TREE"),
 		HostID: os.Getenv("EVALUATION_HOST_ID"), ArtifactSHA256: fmt.Sprintf("sha256:%x", artifactDigest[:]), Runs: runs, ProviderDelayMS: int(plmPrefixEagerProviderDelay / time.Millisecond),
-		ChunkOffsetsMS: []int{0, 700, 1400}, SourceSHA256: testDigest(plmPrefixEagerChunks[0].source + plmPrefixEagerChunks[1].source + plmPrefixEagerChunks[2].source),
+		ChunkOffsetsMS: cell.chunkOffsetsMS(), SourceSHA256: testDigest(cell.sourceText()),
 		EagerEstimateScope: "Immediate dispatch is a scheduling reference; supplied EAGER and the local published-gate route are measured separately",
+	}
+	expectedResultSHA, err := playback.CanonicalSHA256(cell.expectedResult)
+	if err != nil {
+		t.Fatal(err)
 	}
 	for trial := 0; trial < runs; trial++ {
 		for order := 0; order < len(treatments); order++ {
 			name := treatments[(trial+offset+order)%len(treatments)]
-			tracker := &plmPrefixEagerTracker{}
+			tracker := &plmPrefixEagerTracker{responses: cell.providerResponses}
 			adapter := &e2ePLMAdapter{handler: capability.HandlerFunc(tracker.handler)}
-			plan := plmE2EPlan(t, 1, adapter)
-			runID := fmt.Sprintf("plm-prefix-eager-%d-%s", trial, name)
+			plan := plmE2EPlan(t, cell.expectedCalls, adapter)
+			runID := fmt.Sprintf("plm-prefix-eager-%s-%d-%s", cell.id, trial, name)
 			workspaceRoot := filepath.Join(t.TempDir(), runID)
 			brokerFactory := func(context.Context) (*capability.Broker, error) {
 				return capability.NewBroker(capability.Config{RunIdentity: runID, Plan: plan})
@@ -552,12 +649,12 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 			case "immediate_dispatch_reference":
 				treatment, err = semanticspeculation.NewEagerGuestTreatment(semanticspeculation.EagerGuestTreatmentConfig{Artifact: artifact, RunConfig: config, Plan: plan, BrokerFactory: brokerFactory, ProviderObservation: tracker.observation, RunID: runID, WorkspaceRoot: workspaceRoot, WorkspaceOwner: runID})
 			case "pysolate_pooled_prefix":
-				treatment = newPLMPrefixTreatment(capacity, plan, adapter, tracker, runID, workspaceRoot)
+				treatment = newPLMPrefixTreatment(capacity, plan, adapter, tracker, cell.expectedCalls, runID, workspaceRoot)
 			}
 			if err != nil {
 				t.Fatal(err)
 			}
-			sample, runErr := runPLMPrefixEagerTreatment(context.Background(), trial, order, name, tracker, treatment)
+			sample, runErr := runPLMPrefixEagerTreatment(context.Background(), trial, order, name, cell, tracker, treatment)
 			if runErr != nil {
 				t.Fatalf("trial=%d treatment=%s: %v", trial, name, runErr)
 			}
@@ -568,7 +665,7 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 				sample.AnalyzerProvision = plm.analyzerProvision
 				sample.AnalyzerSessionPrepareNanos = plm.analyzerSessionPrepareNanos
 				sample.FinalExecutionNanos = plm.finalExecutionNanos
-				if sample.PrefixAnalyzerInvocations != 1 || sample.SplitPhase.Reused != 1 {
+				if sample.PrefixAnalyzerInvocations != 1 || sample.SplitPhase.Reused != cell.expectedCalls || sample.SplitPhase.MaximumConcurrent != cell.expectedCalls {
 					t.Fatalf("prefix path did not run or was not reused: analysis=%d split=%+v", sample.PrefixAnalyzerInvocations, sample.SplitPhase)
 				}
 				if sample.AnalyzerSessionPrepareNanos == 0 || sample.PrefixAnalysisNanos == 0 || sample.PrefixAdmissionNanos == 0 || sample.FinalExecutionNanos == 0 {
@@ -578,8 +675,14 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 					t.Fatalf("prefix analyzer was not provisioned before source arrival: %+v", sample.AnalyzerProvision)
 				}
 			}
-			if sample.Outcome.FinalProgramOutcome != "success" || sample.Outcome.LogicalCalls != 1 || sample.Outcome.PhysicalAttempts != 1 {
+			if sample.Outcome.FinalProgramOutcome != "success" || sample.Outcome.LogicalCalls != cell.expectedCalls || sample.Outcome.PhysicalAttempts != cell.expectedCalls || sample.Outcome.ResultSHA256 != expectedResultSHA {
 				t.Fatalf("invalid outcome: %+v", sample.Outcome)
+			}
+			if name == "pysolate_pooled_prefix" && sample.ProviderMaxConcurrent != cell.expectedCalls {
+				t.Fatalf("Pysolate did not overlap provider calls: %+v", sample)
+			}
+			if name == "serial_whole_file" && sample.ProviderMaxConcurrent != 1 {
+				t.Fatalf("serial treatment overlapped provider calls: %+v", sample)
 			}
 			if sample.ProviderNanos == 0 {
 				t.Fatalf("provider timing was not recorded: %+v", sample)
@@ -602,7 +705,7 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 	}
 }
 
-func runPLMPrefixEagerTreatment(ctx context.Context, trial, order int, name string, tracker *plmPrefixEagerTracker, treatment semanticspeculation.ScheduledTreatment) (plmPrefixEagerSample, error) {
+func runPLMPrefixEagerTreatment(ctx context.Context, trial, order int, name string, cell plmPrefixEagerCell, tracker *plmPrefixEagerTracker, treatment semanticspeculation.ScheduledTreatment) (plmPrefixEagerSample, error) {
 	coldStarted := time.Now()
 	beginStarted := time.Now()
 	if err := treatment.Begin(ctx, json.RawMessage(`{}`)); err != nil {
@@ -610,7 +713,7 @@ func runPLMPrefixEagerTreatment(ctx context.Context, trial, order int, name stri
 	}
 	beginNanos := uint64(time.Since(beginStarted))
 	postBeginStarted := time.Now()
-	for _, chunk := range plmPrefixEagerChunks {
+	for _, chunk := range cell.chunks {
 		due := postBeginStarted.Add(chunk.offset)
 		if delay := time.Until(due); delay > 0 {
 			time.Sleep(delay)
@@ -622,5 +725,5 @@ func runPLMPrefixEagerTreatment(ctx context.Context, trial, order int, name stri
 	tracker.finalized.Store(true)
 	finalizeStarted := time.Now()
 	outcome, err := treatment.Finalize(ctx)
-	return plmPrefixEagerSample{Trial: trial, Order: order, Treatment: name, ColdNanos: uint64(time.Since(coldStarted)), PostBeginNanos: uint64(time.Since(postBeginStarted)), BeginNanos: beginNanos, FinalizeNanos: uint64(time.Since(finalizeStarted)), ProviderNanos: tracker.providerNanos.Load(), Outcome: outcome}, err
+	return plmPrefixEagerSample{Trial: trial, Order: order, Treatment: name, ColdNanos: uint64(time.Since(coldStarted)), PostBeginNanos: uint64(time.Since(postBeginStarted)), BeginNanos: beginNanos, FinalizeNanos: uint64(time.Since(finalizeStarted)), ProviderNanos: tracker.providerNanos.Load(), ProviderMaxConcurrent: tracker.maxConcurrent.Load(), Outcome: outcome}, err
 }

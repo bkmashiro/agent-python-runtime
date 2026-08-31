@@ -35,6 +35,7 @@ type sourceChunk struct {
 type providerConfig struct {
 	DelayMilliseconds uint64            `json:"delay_ms"`
 	Values            map[string]string `json:"values"`
+	Errors            map[string]string `json:"errors,omitempty"`
 	RequiredCalls     uint32            `json:"required_calls"`
 }
 
@@ -85,8 +86,16 @@ func (request replayRequest) Validate() error {
 	if request.Provider.DelayMilliseconds > uint64((30 * time.Second).Milliseconds()) {
 		return errors.New("provider delay exceeds 30 seconds")
 	}
-	if len(request.Provider.Values) == 0 {
-		return errors.New("provider values must not be empty")
+	if len(request.Provider.Values) == 0 && len(request.Provider.Errors) == 0 {
+		return errors.New("provider values or errors must not be empty")
+	}
+	for key, message := range request.Provider.Errors {
+		if key == "" || message == "" {
+			return errors.New("provider errors require non-empty keys and messages")
+		}
+		if _, exists := request.Provider.Values[key]; exists {
+			return fmt.Errorf("provider key %q has both a value and an error", key)
+		}
 	}
 	if request.Provider.RequiredCalls == 0 || request.Provider.RequiredCalls > 128 {
 		return errors.New("provider required_calls must be between 1 and 128")
@@ -113,6 +122,11 @@ func newFixedProvider(config providerConfig) *fixedProvider {
 		values[key] = value
 	}
 	config.Values = values
+	errorsByKey := make(map[string]string, len(config.Errors))
+	for key, message := range config.Errors {
+		errorsByKey[key] = message
+	}
+	config.Errors = errorsByKey
 	return &fixedProvider{config: config}
 }
 
@@ -134,8 +148,9 @@ func (provider *fixedProvider) Handle(ctx context.Context, arguments json.RawMes
 		provider.addElapsed(started)
 		return nil, errors.New("provider path is required")
 	}
-	value, ok := provider.config.Values[input.Path]
-	if !ok {
+	value, hasValue := provider.config.Values[input.Path]
+	errorMessage, hasError := provider.config.Errors[input.Path]
+	if !hasValue && !hasError {
 		provider.addElapsed(started)
 		return nil, fmt.Errorf("unknown provider path %q", input.Path)
 	}
@@ -150,6 +165,10 @@ func (provider *fixedProvider) Handle(ctx context.Context, arguments json.RawMes
 			return nil, ctx.Err()
 		case <-timer.C:
 		}
+	}
+	if hasError {
+		provider.addElapsed(started)
+		return nil, errors.New(errorMessage)
 	}
 	response, err := json.Marshal(struct {
 		Body string `json:"body"`
@@ -363,7 +382,9 @@ func executeReplay(ctx context.Context, artifactRoot string, request replayReque
 	keys := append([]string(nil), trace.Keys...)
 	sort.Strings(keys)
 	for _, key := range keys {
-		if _, ok := request.Provider.Values[key]; !ok {
+		_, hasValue := request.Provider.Values[key]
+		_, hasError := request.Provider.Errors[key]
+		if !hasValue && !hasError {
 			return replayOutput{}, fmt.Errorf("provider trace contains unknown key %q", key)
 		}
 	}

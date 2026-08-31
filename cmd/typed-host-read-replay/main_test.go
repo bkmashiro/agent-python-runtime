@@ -19,6 +19,7 @@ func TestReplayRequestValidate(t *testing.T) {
 		Provider: providerConfig{
 			DelayMilliseconds: 10,
 			Values:            map[string]string{"a": "alpha"},
+			Errors:            map[string]string{},
 			RequiredCalls:     1,
 		},
 	}
@@ -34,15 +35,22 @@ func TestReplayRequestValidate(t *testing.T) {
 			request.SourceChunks[0].OffsetMilliseconds = 30
 			request.SourceChunks[1].OffsetMilliseconds = 20
 		},
-		"inputs":          func(request *replayRequest) { request.Inputs = json.RawMessage(`[]`) },
-		"provider values": func(request *replayRequest) { request.Provider.Values = nil },
-		"required calls":  func(request *replayRequest) { request.Provider.RequiredCalls = 0 },
+		"inputs": func(request *replayRequest) { request.Inputs = json.RawMessage(`[]`) },
+		"provider outcomes": func(request *replayRequest) {
+			request.Provider.Values = nil
+			request.Provider.Errors = nil
+		},
+		"overlapping provider outcome": func(request *replayRequest) {
+			request.Provider.Errors = map[string]string{"a": "failed"}
+		},
+		"required calls": func(request *replayRequest) { request.Provider.RequiredCalls = 0 },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
 			request := valid
 			request.SourceChunks = append([]sourceChunk(nil), valid.SourceChunks...)
 			request.Provider.Values = map[string]string{"a": "alpha"}
+			request.Provider.Errors = map[string]string{}
 			mutate(&request)
 			if err := request.Validate(); err == nil {
 				t.Fatal("invalid request accepted")
@@ -78,6 +86,19 @@ func TestFixedProviderRejectsUnknownKey(t *testing.T) {
 		t.Fatal("unknown key accepted")
 	}
 	if trace := provider.Trace(); trace.Attempts != 1 || len(trace.Keys) != 1 || trace.Keys[0] != "missing" {
+		t.Fatalf("trace=%+v", trace)
+	}
+}
+
+func TestFixedProviderReturnsConfiguredErrorAndTrace(t *testing.T) {
+	provider := newFixedProvider(providerConfig{
+		Errors:        map[string]string{"missing": "fixture failure"},
+		RequiredCalls: 1,
+	})
+	if _, err := provider.Handle(context.Background(), json.RawMessage(`{"path":"missing"}`)); err == nil || err.Error() != "fixture failure" {
+		t.Fatalf("error=%v", err)
+	}
+	if trace := provider.Trace(); trace.Attempts != 1 || len(trace.Keys) != 1 || trace.Keys[0] != "missing" || trace.ResultBytes != 0 {
 		t.Fatalf("trace=%+v", trace)
 	}
 }

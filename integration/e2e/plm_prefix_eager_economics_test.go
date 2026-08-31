@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	plmPrefixEagerSchema        = "pysolate.plm-prefix-eager-economics.v6"
+	plmPrefixEagerSchema        = "pysolate.plm-prefix-eager-economics.v7"
 	plmPrefixEagerProviderDelay = 1500 * time.Millisecond
 )
 
@@ -109,6 +109,15 @@ var plmPrefixEagerCells = map[string]plmPrefixEagerCell{
 		providerResponses: map[string]string{"alpha": "alpha"}, providerDelay: 1500 * time.Millisecond,
 		expectedCalls: 1, expectedPrefixCalls: 1, expectedResult: json.RawMessage(`["ALPHA",12]`), includeImmediate: true,
 	},
+	"compute-heavy-eager-favourable": {
+		id: "compute-heavy-eager-favourable",
+		chunks: []plmPrefixEagerChunk{
+			{0, "acc = 0\nfor i in range(5000000):\n    acc = (acc + ((i * 17) % 97)) % 1000000007\n"},
+			{1400 * time.Millisecond, "result = acc\nprint(result)\n"},
+		},
+		providerResponses: map[string]string{},
+		expectedResult:    json.RawMessage(`239999942`),
+	},
 }
 
 func TestPLMPrefixEagerCellsDefineLowDelayAndShortTail(t *testing.T) {
@@ -119,6 +128,19 @@ func TestPLMPrefixEagerCellsDefineLowDelayAndShortTail(t *testing.T) {
 	shortTail := plmPrefixEagerCells["one-read-gate-eligible-short-tail"]
 	if shortTail.providerDelay != 1500*time.Millisecond || shortTail.chunks[len(shortTail.chunks)-1].offset != 50*time.Millisecond {
 		t.Fatalf("unexpected short-tail cell: %+v", shortTail)
+	}
+}
+
+func TestPLMPrefixEagerCellsDefineComputeHeavyCase(t *testing.T) {
+	cell, ok := plmPrefixEagerCells["compute-heavy-eager-favourable"]
+	if !ok {
+		t.Fatal("compute-heavy cell is missing")
+	}
+	if cell.expectedCalls != 0 || cell.expectedPrefixCalls != 0 || cell.includeImmediate || cell.providerDelayDuration() != 0 {
+		t.Fatalf("unexpected compute-heavy cell: %+v", cell)
+	}
+	if len(cell.chunks) != 2 || cell.chunks[0].offset != 0 || cell.chunks[1].offset != 1400*time.Millisecond {
+		t.Fatalf("unexpected compute-heavy schedule: %+v", cell.chunks)
 	}
 }
 
@@ -144,6 +166,9 @@ func (cell plmPrefixEagerCell) sourceText() string {
 }
 
 func (cell plmPrefixEagerCell) providerDelayDuration() time.Duration {
+	if cell.expectedCalls == 0 {
+		return 0
+	}
 	if cell.providerDelay != 0 {
 		return cell.providerDelay
 	}
@@ -743,10 +768,10 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 			if name == "pysolate_pooled_prefix" && sample.ProviderMaxConcurrent != cell.expectedPrefixCalls {
 				t.Fatalf("Pysolate did not overlap provider calls: %+v", sample)
 			}
-			if name == "serial_whole_file" && sample.ProviderMaxConcurrent != 1 {
+			if name == "serial_whole_file" && cell.expectedCalls > 0 && sample.ProviderMaxConcurrent != 1 {
 				t.Fatalf("serial treatment overlapped provider calls: %+v", sample)
 			}
-			if sample.ProviderNanos == 0 {
+			if cell.expectedCalls > 0 && sample.ProviderNanos == 0 {
 				t.Fatalf("provider timing was not recorded: %+v", sample)
 			}
 			evidence.Samples = append(evidence.Samples, sample)

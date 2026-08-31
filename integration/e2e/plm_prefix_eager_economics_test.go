@@ -77,6 +77,16 @@ var plmPrefixEagerCells = map[string]plmPrefixEagerCell{
 		providerResponses: map[string]string{"alpha": "alpha", "beta": "beta"},
 		expectedCalls:     2, expectedResult: json.RawMessage(`["ALPHA","BETA",12]`),
 	},
+	"two-read-dependent-long-tail": {
+		id: "two-read-dependent-long-tail",
+		chunks: []plmPrefixEagerChunk{
+			{0, "left = sources.read(\"alpha\")\nright = sources.read(left)\n"},
+			{700 * time.Millisecond, "left_label = left.upper()\nright_label = right.upper()\n"},
+			{1400 * time.Millisecond, "result = [left_label, right_label, 12]\nprint(result)\n"},
+		},
+		providerResponses: map[string]string{"alpha": "beta", "beta": "gamma"},
+		expectedCalls:     2, expectedResult: json.RawMessage(`["BETA","GAMMA",12]`),
+	},
 }
 
 func plmPrefixEagerCellFromEnv(t *testing.T) plmPrefixEagerCell {

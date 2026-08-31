@@ -41,6 +41,7 @@ type plmPrefixEagerCell struct {
 	id                  string
 	chunks              []plmPrefixEagerChunk
 	providerResponses   map[string]string
+	providerDelay       time.Duration
 	expectedCalls       uint32
 	expectedPrefixCalls uint32
 	expectedResult      json.RawMessage
@@ -88,6 +89,37 @@ var plmPrefixEagerCells = map[string]plmPrefixEagerCell{
 		providerResponses: map[string]string{"alpha": "beta", "beta": "gamma"},
 		expectedCalls:     2, expectedPrefixCalls: 1, expectedResult: json.RawMessage(`["BETA","GAMMA",12]`),
 	},
+	"one-read-gate-eligible-low-delay": {
+		id: "one-read-gate-eligible-low-delay",
+		chunks: []plmPrefixEagerChunk{
+			{0, "value = sources.read(\"alpha\")\n"},
+			{700 * time.Millisecond, "label = value.upper()\n"},
+			{1400 * time.Millisecond, "result = [label, 12]\nprint(result)\n"},
+		},
+		providerResponses: map[string]string{"alpha": "alpha"}, providerDelay: 25 * time.Millisecond,
+		expectedCalls: 1, expectedPrefixCalls: 1, expectedResult: json.RawMessage(`["ALPHA",12]`), includeImmediate: true,
+	},
+	"one-read-gate-eligible-short-tail": {
+		id: "one-read-gate-eligible-short-tail",
+		chunks: []plmPrefixEagerChunk{
+			{0, "value = sources.read(\"alpha\")\n"},
+			{25 * time.Millisecond, "label = value.upper()\n"},
+			{50 * time.Millisecond, "result = [label, 12]\nprint(result)\n"},
+		},
+		providerResponses: map[string]string{"alpha": "alpha"}, providerDelay: 1500 * time.Millisecond,
+		expectedCalls: 1, expectedPrefixCalls: 1, expectedResult: json.RawMessage(`["ALPHA",12]`), includeImmediate: true,
+	},
+}
+
+func TestPLMPrefixEagerCellsDefineLowDelayAndShortTail(t *testing.T) {
+	lowDelay := plmPrefixEagerCells["one-read-gate-eligible-low-delay"]
+	if lowDelay.providerDelay != 25*time.Millisecond || lowDelay.chunks[len(lowDelay.chunks)-1].offset != 1400*time.Millisecond {
+		t.Fatalf("unexpected low-delay cell: %+v", lowDelay)
+	}
+	shortTail := plmPrefixEagerCells["one-read-gate-eligible-short-tail"]
+	if shortTail.providerDelay != 1500*time.Millisecond || shortTail.chunks[len(shortTail.chunks)-1].offset != 50*time.Millisecond {
+		t.Fatalf("unexpected short-tail cell: %+v", shortTail)
+	}
 }
 
 func plmPrefixEagerCellFromEnv(t *testing.T) plmPrefixEagerCell {
@@ -111,6 +143,13 @@ func (cell plmPrefixEagerCell) sourceText() string {
 	return source.String()
 }
 
+func (cell plmPrefixEagerCell) providerDelayDuration() time.Duration {
+	if cell.providerDelay != 0 {
+		return cell.providerDelay
+	}
+	return plmPrefixEagerProviderDelay
+}
+
 func (cell plmPrefixEagerCell) chunkOffsetsMS() []int {
 	offsets := make([]int, 0, len(cell.chunks))
 	for _, chunk := range cell.chunks {
@@ -128,6 +167,7 @@ type plmPrefixEagerTracker struct {
 	providerNanos atomic.Uint64
 	finalized     atomic.Bool
 	responses     map[string]string
+	delay         time.Duration
 }
 
 func (tracker *plmPrefixEagerTracker) handler(ctx context.Context, arguments json.RawMessage) (json.RawMessage, error) {
@@ -155,7 +195,7 @@ func (tracker *plmPrefixEagerTracker) handler(ctx context.Context, arguments jso
 		}
 	}
 	defer tracker.active.Add(^uint32(0))
-	timer := time.NewTimer(plmPrefixEagerProviderDelay)
+	timer := time.NewTimer(tracker.delay)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
@@ -643,7 +683,7 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 	}()
 	evidence := plmPrefixEagerEvidence{
 		SchemaVersion: plmPrefixEagerSchema, CellID: cell.id, SourceCommit: os.Getenv("PYSOLATE_EXPERIMENT_SOURCE_COMMIT"), SourceTree: os.Getenv("PYSOLATE_EXPERIMENT_SOURCE_TREE"),
-		HostID: os.Getenv("EVALUATION_HOST_ID"), ArtifactSHA256: fmt.Sprintf("sha256:%x", artifactDigest[:]), Runs: runs, ProviderDelayMS: int(plmPrefixEagerProviderDelay / time.Millisecond),
+		HostID: os.Getenv("EVALUATION_HOST_ID"), ArtifactSHA256: fmt.Sprintf("sha256:%x", artifactDigest[:]), Runs: runs, ProviderDelayMS: int(cell.providerDelayDuration() / time.Millisecond),
 		ChunkOffsetsMS: cell.chunkOffsetsMS(), SourceSHA256: testDigest(cell.sourceText()),
 		EagerEstimateScope: "Immediate dispatch is a scheduling reference; supplied EAGER and the local published-gate route are measured separately",
 	}
@@ -654,7 +694,7 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 	for trial := 0; trial < runs; trial++ {
 		for order := 0; order < len(treatments); order++ {
 			name := treatments[(trial+offset+order)%len(treatments)]
-			tracker := &plmPrefixEagerTracker{responses: cell.providerResponses}
+			tracker := &plmPrefixEagerTracker{responses: cell.providerResponses, delay: cell.providerDelayDuration()}
 			adapter := &e2ePLMAdapter{handler: capability.HandlerFunc(tracker.handler)}
 			plan := plmE2EPlan(t, cell.expectedCalls, adapter)
 			runID := fmt.Sprintf("plm-prefix-eager-%s-%d-%s", cell.id, trial, name)

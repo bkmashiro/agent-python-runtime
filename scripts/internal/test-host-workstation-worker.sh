@@ -27,7 +27,7 @@ if [[ ! $source_commit =~ ^[0-9a-f]{40}$ || ! $source_tree =~ ^[0-9a-f]{40}$ || 
   echo "invalid source identity" >&2
   exit 4
 fi
-case "$suite" in baseline|prepared-family|evaluation|evaluation-sweeps|plm-fixed-cost|source-stream-timing|plm-prefix-scaling|plm-numpy-derived|thesis-experiments) ;; *) echo "invalid suite" >&2; exit 5 ;; esac
+case "$suite" in baseline|prepared-family|evaluation|evaluation-sweeps|plm-fixed-cost|source-stream-timing|plm-prefix-scaling|thesis-experiments) ;; *) echo "invalid suite" >&2; exit 5 ;; esac
 if [[ ! $order_offset =~ ^[0-9]+$ || ! $plm_crossover_runs =~ ^[0-9]+$ || ! $cow_fanout_runs =~ ^[0-9]+$ ||
   $plm_crossover_runs -lt 3 || $plm_crossover_runs -gt 20 || $cow_fanout_runs -lt 3 || $cow_fanout_runs -gt 20 ]]; then
   echo "invalid sweep parameters" >&2
@@ -151,21 +151,6 @@ set +e
         --runs "$plm_crossover_runs"
       test -s "$output/plm-prefix-scaling/campaign-manifest.json" || exit $?
       ;;
-    plm-numpy-derived)
-      mkdir -p "$output/plm-numpy-derived"
-      AGENT_RUNTIME_BUILD_CACHE_ROOT="$build_cache_root" AGENT_RUNTIME_BUILD_CACHE_MODE=auto AGENT_RUNTIME_ARTIFACT_PROFILE=numpy-core \
-        GITHUB_SHA="$source_commit" AGENT_RUNTIME_SOURCE_TREE="$source_tree" ./guest/build/build-guest.sh
-      AGENT_RUNTIME_GUEST="$repository/dist/agent-python-runtime-numpy-core.wasm" \
-        ./scripts/run-linux-gitchameleon-numpy-derived.sh \
-        --output "$output/plm-numpy-derived" \
-        --source-commit "$source_commit" \
-        --source-tree "$source_tree" \
-        --source-epoch "$source_epoch" \
-        --host-id "$target" \
-        --runs "$plm_crossover_runs" \
-        --order-offset "$(( order_offset % 2 ))"
-      test -s "$output/plm-numpy-derived/campaign-manifest.json" || exit $?
-      ;;
     thesis-experiments)
       mkdir -p "$output/thesis-experiments"
       AGENT_RUNTIME_BUILD_CACHE_ROOT="$build_cache_root" AGENT_RUNTIME_BUILD_CACHE_MODE=auto AGENT_RUNTIME_ARTIFACT_PROFILE=base \
@@ -227,7 +212,6 @@ PY
   if [[ $suite == plm-fixed-cost ]]; then evidence_dir=plm-fixed-cost; fi
   if [[ $suite == source-stream-timing ]]; then evidence_dir=source-stream-timing; fi
   if [[ $suite == plm-prefix-scaling ]]; then evidence_dir=plm-prefix-scaling; fi
-  if [[ $suite == plm-numpy-derived ]]; then evidence_dir=plm-numpy-derived; fi
   if [[ $suite == thesis-experiments ]]; then evidence_dir=thesis-experiments; fi
   if [[ -n $evidence_dir ]]; then
     mapfile -d '' nested_files < <(python3 - "$evidence_dir" <<'PY'

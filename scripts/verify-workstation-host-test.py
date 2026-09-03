@@ -14,7 +14,7 @@ HEX40 = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 IDENTIFIER = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 SUM_LINE = re.compile(r"^([0-9a-f]{64})  ([^\n]+)$")
-SUITES = {"baseline", "prepared-family", "evaluation", "evaluation-sweeps", "plm-fixed-cost", "source-stream-timing", "plm-prefix-scaling", "plm-numpy-derived", "thesis-experiments"}
+SUITES = {"baseline", "prepared-family", "evaluation", "evaluation-sweeps", "plm-fixed-cost", "source-stream-timing", "plm-prefix-scaling", "thesis-experiments"}
 BUILDERS = {f"gpu{number}.doc.ic.ac.uk" for number in range(31, 36)}
 HOSTS = {"gpu31", "gpu32", "gpu33", "gpu34", "gpu35"}
 

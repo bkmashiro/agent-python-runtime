@@ -1,0 +1,611 @@
+{
+  "dataset": {
+    "commit": "3a1b6045a6b2a276bd24d715589cb041f8eccb93",
+    "name": "GitChameleonBenchmark",
+    "scanned_rows": 328,
+    "selection_rule": "all NumPy rows with no additional dependency, a public assertion oracle, and literal array inputs used by the function under test",
+    "sha256": "978c7c581cad399989cb8399ec208ddd0edb6260ef576b3ce442aeaae455609e"
+  },
+  "mock_stream": {
+    "batch_size": 1,
+    "clock_scope": "complete Host-input prefix at t=0, retained source suffix at fixed mock token rate",
+    "rates_tokens_per_second": [
+      20,
+      50,
+      100,
+      200
+    ],
+    "tokenizer": "cl100k_base",
+    "tokenizer_version": "0.14.0"
+  },
+  "provider_delay_ms": 200,
+  "schema_version": "pysolate.gitchameleon-numpy-derived-plm.v1",
+  "task_count": 15,
+  "tasks": [
+    {
+      "api": "numpy.convolve",
+      "cells": [
+        {
+          "source_window_ms": 5900,
+          "tokens_per_second": 20
+        },
+        {
+          "source_window_ms": 2360,
+          "tokens_per_second": 50
+        },
+        {
+          "source_window_ms": 1180,
+          "tokens_per_second": 100
+        },
+        {
+          "source_window_ms": 590,
+          "tokens_per_second": 200
+        }
+      ],
+      "dataset_row": 67,
+      "example_id": "66",
+      "inputs": [
+        {
+          "body": "1,2,3",
+          "decoder": "int",
+          "name": "arr1",
+          "path": "gitchameleon/66/arr1"
+        },
+        {
+          "body": "0,1,0.5",
+          "decoder": "float",
+          "name": "arr2",
+          "path": "gitchameleon/66/arr2"
+        }
+      ],
+      "oracle": "public assertions plus terminal result sentinel",
+      "prefix": "_host_arr1 = sources.read(\"gitchameleon/66/arr1\")\n_host_arr2 = sources.read(\"gitchameleon/66/arr2\")\n",
+      "source_sha256": "sha256:cc6e603a3474bbe62aa6faaa62a6615ca25046be945286a41d8d1eec79cf4496",
+      "suffix": "arr1 = np.array([int(_item) for _item in _host_arr1.split(\",\")])\narr2 = np.array([float(_item) for _item in _host_arr2.split(\",\")])\ndef apply_convolution_full(arr1 : np.ndarray, arr2 : np.ndarray) -> np.ndarray:\n    return np.convolve(arr1, arr2, mode=\"full\")\n\nassertion_result = apply_convolution_full(arr1, arr2).all() == False\nassert assertion_result\nresult = {\"example_id\": \"66\", \"oracle\": \"passed\"}\n",
+      "suffix_tokens": 118,
+      "target_numpy_version": "1.21.0"
+    },
+    {
+      "api": "numpy.convolve",
+      "cells": [
+        {
+          "source_window_ms": 5900,
+          "tokens_per_second": 20
+        },
+        {
+          "source_window_ms": 2360,
+          "tokens_per_second": 50
+        },
+        {
+          "source_window_ms": 1180,
+          "tokens_per_second": 100
+        },
+        {
+          "source_window_ms": 590,
+          "tokens_per_second": 200
+        }
+      ],
+      "dataset_row": 68,
+      "example_id": "67",
+      "inputs": [
+        {
+          "body": "1,2,3",
+          "decoder": "int",
+          "name": "arr1",
+          "path": "gitchameleon/67/arr1"
+        },
+        {
+          "body": "0,1,0.5",
+          "decoder": "float",
+          "name": "arr2",
+          "path": "gitchameleon/67/arr2"
+        }
+      ],
+      "oracle": "public assertions plus terminal result sentinel",
+      "prefix": "_host_arr1 = sources.read(\"gitchameleon/67/arr1\")\n_host_arr2 = sources.read(\"gitchameleon/67/arr2\")\n",
+      "source_sha256": "sha256:d659164299388ccb5da97027d62ac1ea9f97c1947bc65004dd9a9ddc81bb8031",
+      "suffix": "arr1 = np.array([int(_item) for _item in _host_arr1.split(\",\")])\narr2 = np.array([float(_item) for _item in _host_arr2.split(\",\")])\ndef apply_convolution_valid(arr1 : np.ndarray , arr2 : np.ndarray) -> np.ndarray:\n    return np.convolve(arr1, arr2, mode=\"valid\")\n\nassertion_result = apply_convolution_valid(arr1, arr2).all() == True\nassert assertion_result\nresult = {\"example_id\": \"67\", \"oracle\": \"passed\"}\n",
+      "suffix_tokens": 118,
+      "target_numpy_version": "1.21.0"
+    },
+    {
+      "api": "numpy.correlate",
+      "cells": [
+        {
+          "source_window_ms": 6050,
+          "tokens_per_second": 20
+        },
+        {
+          "source_window_ms": 2420,
+          "tokens_per_second": 50
+        },
+        {
+          "source_window_ms": 1210,
+          "tokens_per_second": 100
+        },
+        {
+          "source_window_ms": 605,
+          "tokens_per_second": 200
+        }
+      ],
+      "dataset_row": 69,
+      "example_id": "68",
+      "inputs": [
+        {
+          "body": "1,2,3",
+          "decoder": "int",
+          "name": "arr1",
+          "path": "gitchameleon/68/arr1"
+        },
+        {
+          "body": "0,1,0.5",
+          "decoder": "float",
+          "name": "arr2",
+          "path": "gitchameleon/68/arr2"
+        }
+      ],
+      "oracle": "public assertions plus terminal result sentinel",
+      "prefix": "_host_arr1 = sources.read(\"gitchameleon/68/arr1\")\n_host_arr2 = sources.read(\"gitchameleon/68/arr2\")\n",
+      "source_sha256": "sha256:7fb179af49a95a1e0b8ef7c2212cdb3c2c80429673533b64081943c106380adb",
+      "suffix": "arr1 = np.array([int(_item) for _item in _host_arr1.split(\",\")])\narr2 = np.array([float(_item) for _item in _host_arr2.split(\",\")])\ndef apply_correlate_full(arr1 : np.ndarray, arr2 : np.ndarray) -> np.ndarray:\n    return np.correlate(arr1, arr2, mode=\"full\")\n\nassertion_value = apply_correlate_full(arr1, arr2).all() == False\nassert assertion_value\nresult = {\"example_id\": \"68\", \"oracle\": \"passed\"}\n",
+      "suffix_tokens": 121,
+      "target_numpy_version": "1.21.0"
+    },
+    {
+      "api": "find_common_type",
+      "cells": [
+        {
+          "source_window_ms": 6000,
+          "tokens_per_second": 20
+        },
+        {
+          "source_window_ms": 2400,
+          "tokens_per_second": 50
+        },
+        {
+          "source_window_ms": 1200,
+          "tokens_per_second": 100
+        },
+        {
+          "source_window_ms": 600,
+          "tokens_per_second": 200
+        }
+      ],
+      "dataset_row": 70,
+      "example_id": "69",
+      "inputs": [
+        {
+          "body": "1,2,3",
+          "decoder": "int",
+          "name": "array1",
+          "path": "gitchameleon/69/array1"
+        },
+        {
+          "body": "4.0,5.0,6.0",
+          "decoder": "float",
+          "name": "array2",
+          "path": "gitchameleon/69/array2"
+        }
+      ],
+      "oracle": "public assertions plus terminal result sentinel",
+      "prefix": "_host_array1 = sources.read(\"gitchameleon/69/array1\")\n_host_array2 = sources.read(\"gitchameleon/69/array2\")\n",
+      "source_sha256": "sha256:38de89e3e869227d8dee9ee9bbb99b59077a5a02c6180b03ededc143904f5965",
+      "suffix": "array1 = np.array([int(_item) for _item in _host_array1.split(\",\")])\narray2 = np.array([float(_item) for _item in _host_array2.split(\",\")])\ndef find_common_type(arr1:np.ndarray, arr2:np.ndarray) -> np.dtype:\n    return np.common_type(arr1, arr2)\n\nexpected_common_type = np.float64\nassertion_value = find_common_type(array1, array2) == expected_common_type\nassert assertion_value\nresult = {\"example_id\": \"69\", \"oracle\": \"passed\"}\n",
+      "suffix_tokens": 120,
+      "target_numpy_version": "1.25.0"
+    },
+    {
+      "api": "find_common_type",
+      "cells": [
+        {
+          "source_window_ms": 6050,
+          "tokens_per_second": 20
+        },
+        {
+          "source_window_ms": 2420,
+          "tokens_per_second": 50
+        },
+        {
+          "source_window_ms": 1210,
+          "tokens_per_second": 100
+        },
+        {
+          "source_window_ms": 605,
+          "tokens_per_second": 200
+        }
+      ],
+      "dataset_row": 71,
+      "example_id": "70",
+      "inputs": [
+        {
+          "body": "1,2,3",
+          "decoder": "int",
+          "name": "array1",
+          "path": "gitchameleon/70/array1"
+        },
+        {
+          "body": "4.0,5.0,6.0",
+          "decoder": "float",
+          "name": "array2",
+          "path": "gitchameleon/70/array2"
+        }
+      ],
+      "oracle": "public assertions plus terminal result sentinel",
+      "prefix": "_host_array1 = sources.read(\"gitchameleon/70/array1\")\n_host_array2 = sources.read(\"gitchameleon/70/array2\")\n",
+      "source_sha256": "sha256:2bb5a6368aa2d02c03c6e616e780d29c295170235d10403d50ed761e37567bdc",
+      "suffix": "array1 = np.array([int(_item) for _item in _host_array1.split(\",\")])\narray2 = np.array([float(_item) for _item in _host_array2.split(\",\")])\ndef find_common_type(arr1:np.ndarray, arr2:np.ndarray) -> np.dtype:\n    return np.find_common_type(arr1, arr2)\n\nexpected_common_type = np.float64\n\nassertion_value = find_common_type(array1, array2) == expected_common_type\nassert assertion_value\nresult = {\"example_id\": \"70\", \"oracle\": \"passed\"}\n",
+      "suffix_tokens": 121,
+      "target_numpy_version": "1.21.0"
+    },
+    {
+      "api": "round_",
+      "cells": [
+        {
+          "source_window_ms": 4900,
+          "tokens_per_second": 20
+        },
+        {
+          "source_window_ms": 1960,
+          "tokens_per_second": 50
+        },
+        {
+          "source_window_ms": 980,
+          "tokens_per_second": 100
+        },
+        {
+          "source_window_ms": 490,
+          "tokens_per_second": 200
+        }
+      ],
+      "dataset_row": 72,
+      "example_id": "71",
+      "inputs": [
+        {
+          "body": "1.5,2.3,3.7",
+          "decoder": "float",
+          "name": "arr",
+          "path": "gitchameleon/71/arr"
+        }
+      ],
+      "oracle": "public assertions plus terminal result sentinel",
+      "prefix": "_host_arr = sources.read(\"gitchameleon/71/arr\")\n",
+      "source_sha256": "sha256:1d1c7551b01b49bbc1273a9d1a02998d94acfaab0494fd6b23f74867c4e5f5a2",
+      "suffix": "arr = np.array([float(_item) for _item in _host_arr.split(\",\")])\ndef custom_round(arr:np.ndarray) -> np.ndarray:\n    return np.round(arr)\n\ndef test_custom_round():\n    result = custom_round(arr)\n    expected = np.array([2.0, 2.0, 4.0])\n    assert np.array_equal(result, expected)\n\ntest_custom_round()\nresult = {\"example_id\": \"71\", \"oracle\": \"passed\"}\n",
+      "suffix_tokens": 98,
+      "target_numpy_version": "1.25.0"
+    },
+    {
+      "api": "product",
+      "cells": [
+        {
+          "source_window_ms": 4050,
+          "tokens_per_second": 20
+        },
+        {
+          "source_window_ms": 1620,
+          "tokens_per_second": 50
+        },
+        {
+          "source_window_ms": 810,
+          "tokens_per_second": 100
+        },
+        {
+          "source_window_ms": 405,
+          "tokens_per_second": 200
+        }
+      ],
+      "dataset_row": 73,
+      "example_id": "72",
+      "inputs": [
+        {
+          "body": "1,2,3,4",
+          "decoder": "int",
+          "name": "arr",
+          "path": "gitchameleon/72/arr"
+        }
+      ],
+      "oracle": "public assertions plus terminal result sentinel",
+      "prefix": "_host_arr = sources.read(\"gitchameleon/72/arr\")\n",
+      "source_sha256": "sha256:5e545b4a3169e725f98a823ea023c874e0c650f68f8c08c75f97d54ed097a6d7",
+      "suffix": "arr = np.array([int(_item) for _item in _host_arr.split(\",\")])\ndef custom_product(arr:np.ndarray) -> np.ndarray:\n    return np.prod(arr)\n\ndef test_custom_product():\n    result = custom_product(arr)\n    expected = 24\n    assert result == expected\n\ntest_custom_product()\nresult = {\"example_id\": \"72\", \"oracle\": \"passed\"}\n",
+      "suffix_tokens": 81,
+      "target_numpy_version": "1.25.0"
+    },
+    {
+      "api": "cumproduct",
+      "cells": [
+        {
+          "source_window_ms": 5000,
+          "tokens_per_second": 20
+        },
+        {
+          "source_window_ms": 2000,
+          "tokens_per_second": 50
+        },
+        {
+          "source_window_ms": 1000,
+          "tokens_per_second": 100
+        },
+        {
+          "source_window_ms": 500,
+          "tokens_per_second": 200
+        }
+      ],
+      "dataset_row": 74,
+      "example_id": "73",
+      "inputs": [
+        {
+          "body": "1,2,3,4",
+          "decoder": "int",
+          "name": "arr",
+          "path": "gitchameleon/73/arr"
+        }
+      ],
+      "oracle": "public assertions plus terminal result sentinel",
+      "prefix": "_host_arr = sources.read(\"gitchameleon/73/arr\")\n",
+      "source_sha256": "sha256:b4a55dd1a3313e3a2297c6c96f96e4c9b445048f4fc279831db65bc1493f403b",
+      "suffix": "arr = np.array([int(_item) for _item in _host_arr.split(\",\")])\ndef custom_cumproduct(arr:np.ndarray) -> np.ndarray:\n    return np.cumprod(arr)\n\ndef test_custom_cumproduct():\n    result = custom_cumproduct(arr)\n    expected = np.array([1, 2, 6, 24])\n    assert np.array_equal(result, expected)\n\ntest_custom_cumproduct()\nresult = {\"example_id\": \"73\", \"oracle\": \"passed\"}\n",
+      "suffix_tokens": 100,
+      "target_numpy_version": "1.25.0"
+    },
+    {
+      "api": "sometrue",
+      "cells": [
+        {
+          "source_window_ms": 4600,
+          "tokens_per_second": 20
+        },
+        {
+          "source_window_ms": 1840,
+          "tokens_per_second": 50
+        },
+        {
+          "source_window_ms": 920,
+          "tokens_per_second": 100
+        },
+        {
+          "source_window_ms": 460,
+          "tokens_per_second": 200
+        }
+      ],
+      "dataset_row": 75,
+      "example_id": "74",
+      "inputs": [
+        {
+          "body": "0,0,1,0",
+          "decoder": "int",
+          "name": "arr",
+          "path": "gitchameleon/74/arr"
+        }
+      ],
+      "oracle": "public assertions plus terminal result sentinel",
+      "prefix": "_host_arr = sources.read(\"gitchameleon/74/arr\")\n",
+      "source_sha256": "sha256:94b6a62fd4d6b44c788713f1051710d1bd79af92fa6ad6a88432f7462c0a4afc",
+      "suffix": "arr = np.array([int(_item) for _item in _host_arr.split(\",\")])\ndef custom_sometrue(arr:np.ndarray) -> np.ndarray:\n    return np.any(arr)\n\n\ndef test_custom_sometrue():\n    result = custom_sometrue(arr)\n    expected = True\n    assert result == expected\n\ntest_custom_sometrue()\nresult = {\"example_id\": \"74\", \"oracle\": \"passed\"}\n",
+      "suffix_tokens": 92,
+      "target_numpy_version": "1.25.0"
+    },
+    {
+      "api": "alltrue",
+      "cells": [
+        {
+          "source_window_ms": 4200,
+          "tokens_per_second": 20
+        },
+        {
+          "source_window_ms": 1680,
+          "tokens_per_second": 50
+        },
+        {
+          "source_window_ms": 840,
+          "tokens_per_second": 100
+        },
+        {
+          "source_window_ms": 420,
+          "tokens_per_second": 200
+        }
+      ],
+      "dataset_row": 76,
+      "example_id": "75",
+      "inputs": [
+        {
+          "body": "1,1,1,1",
+          "decoder": "int",
+          "name": "arr",
+          "path": "gitchameleon/75/arr"
+        }
+      ],
+      "oracle": "public assertions plus terminal result sentinel",
+      "prefix": "_host_arr = sources.read(\"gitchameleon/75/arr\")\n",
+      "source_sha256": "sha256:2ce759ad8dcd71cafeae5bbd13c333f7eaaae7ca41e62ac3fefd571d1f3a7d16",
+      "suffix": "arr = np.array([int(_item) for _item in _host_arr.split(\",\")])\ndef custom_alltrue(arr:np.ndarray) -> np.ndarray:\n    return np.all(arr)\n\n\ndef test_custom_alltrue():\n    result = custom_alltrue(arr)\n    expected = True\n    assert result == expected\n\ntest_custom_alltrue()\nresult = {\"example_id\": \"75\", \"oracle\": \"passed\"}\n",
+      "suffix_tokens": 84,
+      "target_numpy_version": "1.25.0"
+    },
+    {
+      "api": "round_",
+      "cells": [
+        {
+          "source_window_ms": 4950,
+          "tokens_per_second": 20
+        },
+        {
+          "source_window_ms": 1980,
+          "tokens_per_second": 50
+        },
+        {
+          "source_window_ms": 990,
+          "tokens_per_second": 100
+        },
+        {
+          "source_window_ms": 495,
+          "tokens_per_second": 200
+        }
+      ],
+      "dataset_row": 77,
+      "example_id": "76",
+      "inputs": [
+        {
+          "body": "1.5,2.3,3.7",
+          "decoder": "float",
+          "name": "arr",
+          "path": "gitchameleon/76/arr"
+        }
+      ],
+      "oracle": "public assertions plus terminal result sentinel",
+      "prefix": "_host_arr = sources.read(\"gitchameleon/76/arr\")\n",
+      "source_sha256": "sha256:837920678b17928434f5097901da7d1ecb0f5dde135505908b3fcdf801ce284c",
+      "suffix": "arr = np.array([float(_item) for _item in _host_arr.split(\",\")])\ndef custom_round(arr:np.ndarray) -> np.ndarray:\n    return np.round_(arr)\n\ndef test_custom_round():\n    result = custom_round(arr)\n    expected = np.array([2.0, 2.0, 4.0])\n    assert np.array_equal(result, expected)\n\ntest_custom_round()\nresult = {\"example_id\": \"76\", \"oracle\": \"passed\"}\n",
+      "suffix_tokens": 99,
+      "target_numpy_version": "1.21.0"
+    },
+    {
+      "api": "product",
+      "cells": [
+        {
+          "source_window_ms": 4050,
+          "tokens_per_second": 20
+        },
+        {
+          "source_window_ms": 1620,
+          "tokens_per_second": 50
+        },
+        {
+          "source_window_ms": 810,
+          "tokens_per_second": 100
+        },
+        {
+          "source_window_ms": 405,
+          "tokens_per_second": 200
+        }
+      ],
+      "dataset_row": 78,
+      "example_id": "77",
+      "inputs": [
+        {
+          "body": "1,2,3,4",
+          "decoder": "int",
+          "name": "arr",
+          "path": "gitchameleon/77/arr"
+        }
+      ],
+      "oracle": "public assertions plus terminal result sentinel",
+      "prefix": "_host_arr = sources.read(\"gitchameleon/77/arr\")\n",
+      "source_sha256": "sha256:0f815e18f662ba2a967ace68a27b990886b21c16c165de93a3147358d94be288",
+      "suffix": "arr = np.array([int(_item) for _item in _host_arr.split(\",\")])\ndef custom_product(arr:np.ndarray) -> np.ndarray:\n    return np.product(arr)\n\n\ndef test_custom_product():\n    result = custom_product(arr)\n    expected = 24\n    assert result == expected\n\ntest_custom_product()\nresult = {\"example_id\": \"77\", \"oracle\": \"passed\"}\n",
+      "suffix_tokens": 81,
+      "target_numpy_version": "1.21.0"
+    },
+    {
+      "api": "cumproduct",
+      "cells": [
+        {
+          "source_window_ms": 5000,
+          "tokens_per_second": 20
+        },
+        {
+          "source_window_ms": 2000,
+          "tokens_per_second": 50
+        },
+        {
+          "source_window_ms": 1000,
+          "tokens_per_second": 100
+        },
+        {
+          "source_window_ms": 500,
+          "tokens_per_second": 200
+        }
+      ],
+      "dataset_row": 79,
+      "example_id": "78",
+      "inputs": [
+        {
+          "body": "1,2,3,4",
+          "decoder": "int",
+          "name": "arr",
+          "path": "gitchameleon/78/arr"
+        }
+      ],
+      "oracle": "public assertions plus terminal result sentinel",
+      "prefix": "_host_arr = sources.read(\"gitchameleon/78/arr\")\n",
+      "source_sha256": "sha256:2c0a90452f68fad19948ad2bc3673eb6e0bf773c2c815350282326ed32426e27",
+      "suffix": "arr = np.array([int(_item) for _item in _host_arr.split(\",\")])\ndef custom_cumproduct(arr:np.ndarray) -> np.ndarray:\n    return np.cumproduct(arr)\n\ndef test_custom_cumproduct():\n    result = custom_cumproduct(arr)\n    expected = np.array([1, 2, 6, 24])\n    assert np.array_equal(result, expected)\n\ntest_custom_cumproduct()\nresult = {\"example_id\": \"78\", \"oracle\": \"passed\"}\n",
+      "suffix_tokens": 100,
+      "target_numpy_version": "1.21.0"
+    },
+    {
+      "api": "sometrue",
+      "cells": [
+        {
+          "source_window_ms": 4550,
+          "tokens_per_second": 20
+        },
+        {
+          "source_window_ms": 1820,
+          "tokens_per_second": 50
+        },
+        {
+          "source_window_ms": 910,
+          "tokens_per_second": 100
+        },
+        {
+          "source_window_ms": 455,
+          "tokens_per_second": 200
+        }
+      ],
+      "dataset_row": 80,
+      "example_id": "79",
+      "inputs": [
+        {
+          "body": "0,0,1,0",
+          "decoder": "int",
+          "name": "arr",
+          "path": "gitchameleon/79/arr"
+        }
+      ],
+      "oracle": "public assertions plus terminal result sentinel",
+      "prefix": "_host_arr = sources.read(\"gitchameleon/79/arr\")\n",
+      "source_sha256": "sha256:531b77b6260794024b2ac6a870def227ebd1947e0791495598baf271c7fb46b1",
+      "suffix": "arr = np.array([int(_item) for _item in _host_arr.split(\",\")])\ndef custom_anytrue(arr:np.ndarray) -> np.ndarray:\n    return np.sometrue(arr)\n\ndef test_custom_sometrue():\n    result = custom_anytrue(arr)\n    expected = True\n    assert result == expected\n\ntest_custom_sometrue()\nresult = {\"example_id\": \"79\", \"oracle\": \"passed\"}\n",
+      "suffix_tokens": 91,
+      "target_numpy_version": "1.21.0"
+    },
+    {
+      "api": "alltrue",
+      "cells": [
+        {
+          "source_window_ms": 4250,
+          "tokens_per_second": 20
+        },
+        {
+          "source_window_ms": 1700,
+          "tokens_per_second": 50
+        },
+        {
+          "source_window_ms": 850,
+          "tokens_per_second": 100
+        },
+        {
+          "source_window_ms": 425,
+          "tokens_per_second": 200
+        }
+      ],
+      "dataset_row": 81,
+      "example_id": "80",
+      "inputs": [
+        {
+          "body": "1,1,1,1",
+          "decoder": "int",
+          "name": "arr",
+          "path": "gitchameleon/80/arr"
+        }
+      ],
+      "oracle": "public assertions plus terminal result sentinel",
+      "prefix": "_host_arr = sources.read(\"gitchameleon/80/arr\")\n",
+      "source_sha256": "sha256:1b2dad93b1bd31cf05e668ef1d1872d5bb830817f7a127a8c1ba7d4c05ff7e56",
+      "suffix": "arr = np.array([int(_item) for _item in _host_arr.split(\",\")])\ndef custom_alltrue(arr:np.ndarray) -> np.ndarray:\n    return np.alltrue(arr)\n\n\ndef test_custom_alltrue():\n    result = custom_alltrue(arr)\n    expected = True\n    assert result == expected\n\ntest_custom_alltrue()\nresult = {\"example_id\": \"80\", \"oracle\": \"passed\"}\n",
+      "suffix_tokens": 85,
+      "target_numpy_version": "1.21.0"
+    }
+  ]
+}

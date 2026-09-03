@@ -12,7 +12,10 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	"github.com/bkmashiro/agent-python-runtime/runtime/numpycodec"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/resultblob"
+	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
 )
 
 func testPreparedNumpyInput(t *testing.T, body []byte) PreparedNumpyInput {
@@ -362,6 +365,42 @@ func (runner *familyFakeRunner) Close(context.Context) error {
 	return nil
 }
 func (*familyFakeRunner) Properties() engine.Properties { return engine.Properties{Backend: "fake"} }
+
+type familyCapabilityRunner struct {
+	familyFakeRunner
+	trustedPrepare string
+	ref            runtimeconfig.InvocationRef
+}
+
+func (runner *familyCapabilityRunner) RunCapabilitySourcePatchInline(ctx context.Context, _ []byte, _ passregistration.Registration, trustedPrepare string, _ []sourcepatch.CapabilityProjection) (passplugin.CapabilitySourcePatchRun, error) {
+	runner.trustedPrepare = trustedPrepare
+	runner.ref, _ = engine.InvocationRefFromContext(ctx)
+	return passplugin.CapabilitySourcePatchRun{
+		Payload: []byte(`{"schema_version":"pysolate.run-response.v1","run_id":"execution","status":"ok","result":1,"receipts":[],"metrics":{"capability_calls":0,"result_bytes":1}}`),
+		Applied: true,
+	}, nil
+}
+
+func TestPreparedFamilyRunnerForwardsCapabilitySourcePatchWithLifecycle(t *testing.T) {
+	lifecycle, _ := newPreparedFamilyLifecycle(1, 1)
+	member, _ := lifecycle.reserve()
+	delegate := &familyCapabilityRunner{}
+	ref := runtimeconfig.InvocationRef{AgentRunID: "agent", InvocationID: "invocation", InvocationAttempt: 1, ExecutionID: "execution"}
+	runner := newPreparedFamilyRunner(delegate, ref, lifecycle, member)
+	runner.prepare = "sources = object()"
+	runner.preparePrefix = trustedCOWPackageSource
+	request := []byte(`{"run_id":"execution","code":"result=1","inputs":{}}`)
+	result, err := runner.RunCapabilitySourcePatchInline(context.Background(), request, passregistration.Registration{}, "sources = object()", nil)
+	if err != nil || !result.Applied || delegate.trustedPrepare != trustedCOWPackageSource+"sources = object()" || delegate.ref != ref {
+		t.Fatalf("result=%+v err=%v trusted=%q ref=%+v", result, err, delegate.trustedPrepare, delegate.ref)
+	}
+	if state := lifecycle.state(); state.Active != 0 || state.Terminal != 1 {
+		t.Fatalf("state=%+v", state)
+	}
+	if _, err := runner.Run(context.Background(), request, ""); !errors.Is(err, ErrPreparedRunnerConsumed) {
+		t.Fatalf("repeat err=%v", err)
+	}
+}
 
 func TestPreparedFamilyRunnerCloseRetriesDelegateFailure(t *testing.T) {
 	lifecycle, _ := newPreparedFamilyLifecycle(1, 1)

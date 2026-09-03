@@ -182,6 +182,10 @@ func (family *PreparedFamily) NewRunner(ctx context.Context, config PreparedRunn
 		return nil, err
 	}
 	runner := newPreparedFamilyRunner(delegate, config.InvocationRef, family.lifecycle, memberID)
+	runner.preparePrefix = trustedCOWPackageSource
+	if config.Plan != nil {
+		runner.prepare = config.Plan.PythonPrelude()
+	}
 	runner.onTerminal = func(id uint64, runID string, outcome PreparedMemberDisposition, response []byte) {
 		family.recordTerminal(id, runID, outcome, planSHA256, grantsSHA256, decodeWorkspaceRoot(response))
 	}
@@ -209,6 +213,8 @@ func preparedRunnerMechanismsSupported(mechanisms runtimeconfig.MechanismSet) bo
 		ImmutableBranches: mechanisms.ImmutableBranches,
 		PreparedRuntime:   mechanisms.PreparedRuntime,
 		MemoryCOW:         mechanisms.MemoryCOW,
+		SemanticAnalysis:  mechanisms.SemanticAnalysis,
+		SplitPhaseCalls:   mechanisms.SplitPhaseCalls,
 	}
 	return mechanisms == allowed
 }

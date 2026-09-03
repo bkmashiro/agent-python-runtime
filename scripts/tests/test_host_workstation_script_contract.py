@@ -22,8 +22,9 @@ def load_verifier():
 class HostWorkstationScriptContractTests(unittest.TestCase):
     def test_wrapper_is_clean_head_and_enum_only(self) -> None:
         text = WRAPPER.read_text()
-        self.assertIn('case "$suite" in baseline|prepared-family|evaluation|evaluation-sweeps|plm-fixed-cost|source-stream-timing|plm-prefix-scaling|thesis-experiments)', text)
+        self.assertIn('case "$suite" in baseline|prepared-family|evaluation|evaluation-sweeps|plm-fixed-cost|source-stream-timing|plm-prefix-scaling|plm-numpy-derived|thesis-experiments)', text)
         self.assertIn("run-linux-plm-prefix-scaling.sh", WORKER.read_text())
+        self.assertIn("run-linux-gitchameleon-numpy-derived.sh", WORKER.read_text())
         self.assertIn("git status --porcelain", text)
         self.assertIn("git archive --format=tar HEAD", text)
         self.assertIn('case "$gateway" in shell2|shell3)', text)

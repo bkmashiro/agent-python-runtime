@@ -6,7 +6,11 @@ import (
 	"sync"
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
+	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
+	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
 )
 
 var (
@@ -196,10 +200,12 @@ func (lifecycle *preparedFamilyLifecycle) state() PreparedFamilyState {
 }
 
 type preparedFamilyRunner struct {
-	delegate   enginecontract.Runner
-	invocation runtimeconfig.InvocationRef
-	lifecycle  *preparedFamilyLifecycle
-	memberID   uint64
+	delegate      enginecontract.Runner
+	invocation    runtimeconfig.InvocationRef
+	prepare       string
+	preparePrefix string
+	lifecycle     *preparedFamilyLifecycle
+	memberID      uint64
 
 	mu            sync.Mutex
 	closed        bool
@@ -220,13 +226,19 @@ func newPreparedFamilyRunner(delegate enginecontract.Runner, invocation runtimec
 }
 
 func (runner *preparedFamilyRunner) Run(ctx context.Context, request []byte, trustedPrepare string) ([]byte, error) {
+	return runner.runInvocation(ctx, request, trustedPrepare, func(runContext context.Context) ([]byte, error) {
+		return runner.delegate.Run(runContext, request, runner.preparePrefix+trustedPrepare)
+	})
+}
+
+func (runner *preparedFamilyRunner) runInvocation(ctx context.Context, request []byte, trustedPrepare string, execute func(context.Context) ([]byte, error)) ([]byte, error) {
 	runner.mu.Lock()
 	consumed := runner.closed || runner.consumed || runner.running
 	runner.mu.Unlock()
 	if consumed {
 		return nil, ErrPreparedRunnerConsumed
 	}
-	if trustedPrepare != "" {
+	if trustedPrepare != runner.prepare {
 		return nil, ErrPreparedTrustedPrepare
 	}
 	decoded, err := runtimeconfig.DecodeRunRequest(request)
@@ -258,7 +270,7 @@ func (runner *preparedFamilyRunner) Run(ctx context.Context, request []byte, tru
 		runner.finishRun()
 		return nil, err
 	}
-	response, runErr := runner.delegate.Run(runContext, request, "")
+	response, runErr := execute(runContext)
 	disposition := PreparedMemberOK
 	if runErr == nil {
 		decodedResponse, responseErr := runtimeconfig.DecodeAndValidateRunResponse(decoded, response)
@@ -279,6 +291,42 @@ func (runner *preparedFamilyRunner) Run(ctx context.Context, request []byte, tru
 	}
 	runner.finishRun()
 	return response, runErr
+}
+
+// RunCapabilitySourcePatchInline preserves prepared-family single-use and
+// invocation binding while forwarding the final source-patch execution to the
+// prepared child Engine. The trusted source here is the capability prelude for
+// this invocation, not image preparation.
+func (runner *preparedFamilyRunner) RunCapabilitySourcePatchInline(ctx context.Context, request []byte, registration passregistration.Registration, trustedPrepare string, projections []sourcepatch.CapabilityProjection) (passplugin.CapabilitySourcePatchRun, error) {
+	delegate, ok := runner.delegate.(passplugin.CapabilitySourcePatchRunner)
+	if !ok {
+		return passplugin.CapabilitySourcePatchRun{}, ErrPreparedFamilyConfig
+	}
+	var result passplugin.CapabilitySourcePatchRun
+	_, err := runner.runInvocation(ctx, request, trustedPrepare, func(runContext context.Context) ([]byte, error) {
+		var runErr error
+		result, runErr = delegate.RunCapabilitySourcePatchInline(runContext, request, registration, runner.preparePrefix+trustedPrepare, projections)
+		return result.Payload, runErr
+	})
+	return result, err
+}
+
+func (runner *preparedFamilyRunner) SplitPhaseEvidence() capability.SplitPhaseSnapshot {
+	if delegate, ok := runner.delegate.(interface {
+		SplitPhaseEvidence() capability.SplitPhaseSnapshot
+	}); ok {
+		return delegate.SplitPhaseEvidence()
+	}
+	return capability.SplitPhaseSnapshot{}
+}
+
+func (runner *preparedFamilyRunner) PLMRunLifecycleEvidence() PLMRunLifecycleEvidence {
+	if delegate, ok := runner.delegate.(interface {
+		PLMRunLifecycleEvidence() PLMRunLifecycleEvidence
+	}); ok {
+		return delegate.PLMRunLifecycleEvidence()
+	}
+	return PLMRunLifecycleEvidence{SchemaVersion: PLMRunLifecycleSchemaVersion}
 }
 
 func (runner *preparedFamilyRunner) finishRun() {
@@ -334,3 +382,4 @@ func (runner *preparedFamilyRunner) Properties() enginecontract.Properties {
 }
 
 var _ enginecontract.Runner = (*preparedFamilyRunner)(nil)
+var _ passplugin.CapabilitySourcePatchRunner = (*preparedFamilyRunner)(nil)

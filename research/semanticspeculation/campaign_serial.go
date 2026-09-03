@@ -31,6 +31,7 @@ type SerialGuestTreatmentConfig struct {
 	RunID               string
 	WorkspaceRoot       string
 	WorkspaceOwner      string
+	RunnerFactory       func(context.Context, *workspace.Manager, workspace.Ref) (enginecontract.Runner, *capability.Broker, error)
 }
 
 type SerialGuestTreatment struct {
@@ -80,19 +81,24 @@ func (t *SerialGuestTreatment) Begin(ctx context.Context, inputs json.RawMessage
 		return err
 	}
 	t.manager, t.attempt = manager, attempt
-	factory := wazeroengine.Factory{
-		WorkspaceManager: manager,
-		WorkspaceRef:     attempt.Ref(),
-		WorkspaceOwner:   t.config.WorkspaceOwner,
-		BrokerFactory: func(inner context.Context) (*capability.Broker, error) {
-			broker, brokerErr := t.config.BrokerFactory(inner)
-			if brokerErr == nil {
-				t.broker = broker
-			}
-			return broker, brokerErr
-		},
+	var runner enginecontract.Runner
+	if t.config.RunnerFactory != nil {
+		runner, t.broker, err = t.config.RunnerFactory(ctx, manager, attempt.Ref())
+	} else {
+		factory := wazeroengine.Factory{
+			WorkspaceManager: manager,
+			WorkspaceRef:     attempt.Ref(),
+			WorkspaceOwner:   t.config.WorkspaceOwner,
+			BrokerFactory: func(inner context.Context) (*capability.Broker, error) {
+				broker, brokerErr := t.config.BrokerFactory(inner)
+				if brokerErr == nil {
+					t.broker = broker
+				}
+				return broker, brokerErr
+			},
+		}
+		runner, err = factory.New(ctx, t.config.Artifact, t.config.RunConfig)
 	}
-	runner, err := factory.New(ctx, t.config.Artifact, t.config.RunConfig)
 	if err != nil {
 		_ = attempt.Discard()
 		_ = manager.Close()

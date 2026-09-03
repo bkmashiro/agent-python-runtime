@@ -292,26 +292,30 @@ type plmPrefixAnalysisResult struct {
 }
 
 type plmPrefixPreparedCapacity struct {
-	artifact   []byte
-	config     runtimeconfig.RunConfig
-	profile    runtimeconfig.ExecutionProfile
-	plugins    *passplugin.Registry
-	analyzer   *wazeroengine.Engine
-	setupNanos uint64
-	sessions   atomic.Uint32
+	artifact       []byte
+	config         runtimeconfig.RunConfig
+	profile        runtimeconfig.ExecutionProfile
+	allowedImports []string
+	plugins        *passplugin.Registry
+	analyzer       *wazeroengine.Engine
+	setupNanos     uint64
+	sessions       atomic.Uint32
 }
 
 func newPLMPrefixPreparedCapacity(ctx context.Context, artifact []byte, config runtimeconfig.RunConfig) (*plmPrefixPreparedCapacity, error) {
+	return newPLMPrefixPreparedCapacityForProfile(ctx, artifact, config, "base", []string{"json"})
+}
+
+func newPLMPrefixPreparedCapacityForProfile(ctx context.Context, artifact []byte, config runtimeconfig.RunConfig, profileID string, allowedImports []string) (*plmPrefixPreparedCapacity, error) {
 	started := time.Now()
 	artifactDigest := sha256.Sum256(artifact)
 	artifactSHA := fmt.Sprintf("sha256:%x", artifactDigest[:])
-	allowedImports := []string{"json"}
-	profile, err := runtimeconfig.NewExecutionProfile("base", allowedImports)
+	profile, err := runtimeconfig.NewExecutionProfile(profileID, allowedImports)
 	if err != nil {
 		return nil, err
 	}
 	profile, err = profile.BindVerifiedArtifact(runtimeconfig.VerifiedArtifactIdentity{
-		ProfileID: "base", ArtifactSHA256: artifactSHA, ManifestSHA256: testDigest("plm-prefix-eager-manifest"),
+		ProfileID: profileID, ArtifactSHA256: artifactSHA, ManifestSHA256: testDigest("plm-prefix-eager-manifest"),
 		ImportRoots: allowedImports, QualifiedImportRoots: allowedImports,
 	})
 	if err != nil {
@@ -342,7 +346,7 @@ func newPLMPrefixPreparedCapacity(ctx context.Context, artifact []byte, config r
 		return nil, err
 	}
 	return &plmPrefixPreparedCapacity{
-		artifact: artifact, config: config, profile: profile, plugins: plugins, analyzer: analyzer,
+		artifact: artifact, config: config, profile: profile, allowedImports: append([]string(nil), allowedImports...), plugins: plugins, analyzer: analyzer,
 		setupNanos: uint64(time.Since(started)),
 	}, nil
 }
@@ -437,7 +441,7 @@ func (treatment *plmPrefixTreatment) Begin(ctx context.Context, _ json.RawMessag
 	treatment.manager, treatment.attempt = manager, attempt
 	artifactDigest := sha256.Sum256(treatment.artifact)
 	artifactSHA := fmt.Sprintf("sha256:%x", artifactDigest[:])
-	allowedImports := []string{"json"}
+	allowedImports := treatment.capacity.allowedImports
 	treatment.plugins = treatment.capacity.plugins
 	callBudget := treatment.expectedCalls
 	if callBudget == 0 {

@@ -118,7 +118,7 @@ func TestGitChameleonNumPyDerivedManifestCoversDeclaredSubset(t *testing.T) {
 	oneInput, twoInputs := 0, 0
 	for index, task := range manifest.Tasks {
 		expectedID := strconv.Itoa(66 + index)
-		if task.ExampleID != expectedID || task.DatasetRow != 63+index {
+		if task.ExampleID != expectedID || task.DatasetRow != 67+index {
 			t.Fatalf("subset ordering drift at %d: %+v", index, task)
 		}
 		if len(task.Cells) != 4 || task.SuffixTokens <= 0 || len(task.Inputs) < 1 || len(task.Inputs) > 2 {

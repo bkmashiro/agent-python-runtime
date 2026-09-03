@@ -64,12 +64,16 @@ def remove_input_assignments(test_source: str, assignments: dict[str, tuple[Any,
 def build(dataset: pathlib.Path, tokenizer_name: str, tokenizer_version: str) -> dict[str, Any]:
     raw = dataset.read_bytes()
     require(hashlib.sha256(raw).hexdigest() == DATASET_SHA256, "dataset digest drift")
-    rows = {str(row["example_id"]): row for row in (json.loads(line) for line in raw.splitlines())}
+    rows = {
+        str(row["example_id"]): (line_number, row)
+        for line_number, line in enumerate(raw.splitlines(), 1)
+        for row in [json.loads(line)]
+    }
     tiktoken = importlib.import_module("tiktoken")
     encoding = tiktoken.get_encoding(tokenizer_name)
     tasks = []
     for example_id in EXAMPLE_IDS:
-        row = rows[example_id]
+        dataset_row, row = rows[example_id]
         require(row.get("library") == "numpy" and not row.get("additional_dependencies"), f"{example_id}: package-stack drift")
         implementation = str(row["starting_code"]) + str(row["solution"])
         test_source = str(row["test"])
@@ -91,7 +95,7 @@ def build(dataset: pathlib.Path, tokenizer_name: str, tokenizer_version: str) ->
         suffix_tokens = len(encoding.encode(suffix))
         tasks.append({
             "example_id": example_id,
-            "dataset_row": int(example_id) - 3,
+            "dataset_row": dataset_row,
             "target_numpy_version": row["version"],
             "api": row["name_of_class_or_func"],
             "inputs": inputs,

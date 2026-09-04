@@ -1,285 +1,182 @@
 # Pysolate
 
-Pysolate is a small proof of concept for running Agent-authored Python inside a bounded CPython/WASI Guest.
+Pysolate runs Agent-authored Python in a fresh, bounded CPython/WASI Guest.
 
-The Agent submits ordinary Python source. The Host derives its static imports, binds an artifact-qualified profile, starts a fresh Guest, and exposes only explicitly configured Host tools. There is no ambient network, process, package-manager, native-extension, credential, or Host-filesystem authority.
+The Host chooses the Guest artifact, import profile, workspace, capabilities, budgets and external providers. Guest code receives only the authority granted for that run. It has no ambient network, shell, subprocess, package-manager, credential or Host-filesystem access.
 
-## What the PoC proves
+## Why Pysolate
+
+A fresh Guest gives every run private Python state, but isolated execution can still waste time in two places:
+
+- repeated runtime and module setup across runs;
+- synchronous Host calls that wait one after another inside a run.
+
+Pysolate keeps the logical run private while allowing two narrower physical optimisations:
+
+- **Prepare–Linearize–Materialize (PLM)** may start an eligible Host request early. Python still receives its value or error at the original call.
+- **Image-backed copy-on-write (COW)** shares clean, request-independent linear-memory pages while each Guest receives private pages when it writes.
+
+Both mechanisms are explicit opt-in research paths. The default CLI and HTTP paths create a fresh Guest and do not enable them automatically.
+
+## Architecture
 
 ```text
-Agent Python source
-  → conservative Host import inference
-  → Host-owned profile and artifact binding
-  → fresh CPython/WASI Guest
-  → bounded Host tools
-  → Host-authored result, receipts and optional observations
+Agent or harness
+      |
+      | Python source + JSON input
+      v
+Go Host
+  - verifies the Guest artifact
+  - derives and checks imports
+  - binds the workspace and capability Plan
+  - owns credentials, providers and budgets
+      |
+      v
+fresh CPython/WASI Guest
+  - runs normal Python control flow
+  - sees only mounted files and Host-granted tools
+  - returns a bounded result and Host receipts
 ```
 
-The active CLI and HTTP paths deliberately do not enable prepared pools, pinned
-sessions, schedulers, durable transactions, MCP daemons, trace databases,
-production benchmark orchestration, or recovery machinery. An embedding Host may
-explicitly opt into the bounded [Prepared Family](docs/prepared-family-v1.md) API:
-one immutable NumPy input can back fresh, single-use consumers while RunConfig,
-Plan, Broker, invocation identity and private workspace remain per consumer.
-Linux may use qualified private COW; the portable path copies into each fresh
-Guest. This is not a resettable pool and it is never selected implicitly by
-`apyrun` or the HTTP service.
+The Host does not become a second Python scheduler. Branches, loops, exceptions and ordinary computation remain inside CPython.
 
-Continuation-preserving cold-I/O and AST-qualified exact whole-Run reuse remain
-fail-closed and off by default. Semantic reuse is an internal Experimental
-adapter, not an ordinary arbitrary-Python cache. Pysolate also includes an
-optional Host-owned rooted workspace and a complete deterministic storage
-capsule; neither is a transaction system. Historical findings are summarized in
-[docs/research-history.md](docs/research-history.md) and remain available in Git
-history.
+## Current runtime
 
-The refined product direction is an authority-lifecycle runtime for Agent-authored
-programs: ordinary Python provides control flow, while the Host freezes
-identity-bound authority and independently governs workspace, scratch,
-external-effect, and evidence dispositions. CPython/WASI is the current
-substrate, not the intended differentiator. See the
-[authority-lifecycle positioning decision](docs/authority-lifecycle-positioning.md),
-the [Cloudflare comparison reset](docs/research/cloudflare-code-mode-comparison.md),
-and the [proof-first roadmap](docs/proof-first-authority-roadmap.md). The active
-experimental execution architecture is
-[Logical-Time-Preserving PLM](docs/plans/2026-08-28-logical-time-preserving-plm-autonomous-megagoal.md). It uses one Run-owned Broker/table and one exact final Guest. A versioned compiler pass may prepare a Host-private read candidate early, but temporal validation, logical admission, receipt order and V1 materialization remain at the original source call. Strict `IMMUTABLE`, `SNAPSHOT`, `VERSIONED` and `LEASED` candidates require matching Host evidence; `CURRENT` prepares transport only and `WALLCLOCK_OBSERVING` is not staged.
+The maintained execution path provides:
 
-PLM is implemented and exact-Guest tested, but remains default-off. The initial Gate 6 fixture measured `+32.01%` cold and `+48.27%` with Engines precompiled. After the production refactor, the same protocol measures `4.054 s -> 4.141 s` (`+2.15%`) cold and `2.716 s -> 2.801 s` (`+3.12%`) precompiled. These fixture-scoped results are still negative. The contract, [production refactor](docs/research/plm-v1-production-refactor.md), [current economics](docs/evidence/plm-v1-production-economics.json), [fault evidence](docs/evidence/plm-v1-fault-matrix.json) and [small core](docs/research/plm-v1-small-core.md) retain the evidence boundary.
+- a fresh CPython/WASI Guest for every run;
+- verified Guest artifacts and Host-derived import admission;
+- wall-clock, memory, input, output and Host-call bounds;
+- a private `/workspace` and `/tmp`;
+- ordinary Python file APIs over the mounted workspace;
+- typed Host capabilities with strict input and output schemas;
+- per-run capability Plans, budgets and receipts;
+- optional workspace export, storage and restoration;
+- two bounded, credential-free external JSON sources;
+- capture and offline playback for those curated reads;
+- optional Host-side lifecycle and workspace observations.
 
-The Python Future projection, hard-coded `split_phase_sources_read` pass and predecessor `split_phase_capability_calls` issue/collect bridge have been removed. Retained-prefix Guest execution and semantic pre-dispatch remain Historical/Research-only behind `LegacyResearchExecution`. The current [stage-aware pass catalog](docs/source-pass-plugins.md) exposes 17 default-off entries, including `plm_capability_calls`; one bounded pipeline instance selects at most 16. The predecessor correctness record and its unchanged `+151.40%` cold result remain in [unified split-phase evidence v1](docs/research/unified-split-phase-evidence-v1.md).
-The completed foundation records bounded Experimental target-Guest AST planning,
-exact whole-Run single-flight/retention, continuation-preserving cold-I/O evidence and a
-small static source-pass seam while keeping every mechanism off by default.
-Current, Experimental and Proposed claims remain separated in
-[docs/product-direction.md](docs/product-direction.md).
+See [Product direction](docs/product-direction.md) for the boundary between maintained, experimental and proposed work.
 
-An **Experimental** unified execution-profile slice adds deterministic Host
-placement, a verified one-shot native OCI/gVisor backend, private Unix-socket
-transport to the same capability Broker, and runtime-owned native workspace
-leases. It is not an automatic security-equivalent fallback: only preflight or
-Host-authored `runtime_unsupported` outcomes with `not_started/not_started`
-may start a new native execution. See
-[Unified execution profiles](docs/unified-execution-profiles.md).
+## Research mechanisms
+
+### Prepare–Linearize–Materialize
+
+PLM separates the start of a Host request from its original Python call:
+
+```text
+Prepare      start eligible Host work early
+Linearize    validate it when Python reaches the original call
+Materialize  wait if needed, then return the value or raise the error there
+```
+
+Prefix analysis can find a complete call while later source is still arriving. A whole-program pass can place `Prepare` after data dependencies and inside the controlling Python block. The Host, not source analysis, decides whether an operation may be observed earlier.
+
+PLM is implemented, exact-Guest tested and default-off. Unsupported calls keep their normal synchronous behaviour.
+
+- [PLM contract](docs/research/logical-time-plm-v1-contract.md)
+- [Source-pass integration](docs/source-pass-plugins.md)
+- [PLM evidence](docs/evidence/plm-v1-multiread-economics.json)
+
+### Image-backed copy-on-write
+
+The Linux COW path captures trusted, request-independent WebAssembly linear memory and maps it privately into fresh single-use Guests. Clean pages share the sealed image. Pages changed by a run become private.
+
+Run identity, capability Plan, Broker, workspace and request data are created or bound separately for each Guest. The portable fallback copies the prepared state instead of using Linux private mappings.
+
+- [Prepared Family contract](docs/prepared-family-v1.md)
+- [COW evidence](docs/evidence/copy-on-write-economics.json)
+
+Other experimental and historical mechanisms remain documented under [`docs/`](docs/) but are not part of the default runtime path.
 
 ## Requirements
 
-- Go 1.25+
+- Go 1.25 or newer
 - a verified Pysolate Guest distribution containing:
   - `agent-python-runtime.wasm`
   - `manifest.json`
   - `import-inventory.json`
   - `import-qualification.json`
 
-See [docs/development.md](docs/development.md) for building the Guest. For a
-five-minute supervisor walkthrough and an explicit assessment of the remaining
-product distance, see [the demo guide](docs/supervisor-demo-guide.md) and
-[product maturity and roadmap](docs/product-maturity-and-roadmap.md).
+Build the Guest with:
 
-## Build
+```bash
+guest/build/build-guest.sh
+```
+
+See [Development](docs/development.md) for the pinned CPython/WASI build and verification workflow.
+
+## Build and run
+
+Build the CLI:
 
 ```bash
 go build ./cmd/apyrun
 ```
 
-## Run ordinary Python
+Run a small program:
 
 ```bash
 printf '%s' '{"run_id":"demo","code":"result = inputs[\"value\"] + 1","inputs":{"value":41}}' |
   go run ./cmd/apyrun -artifact /path/to/agent-python-runtime.wasm
 ```
 
-The response is a bounded JSON object with status, result, Host receipts, metrics, an optional Python error, and—when a rooted workspace is configured—a Host-authored workspace disposition receipt.
+The response is bounded JSON containing the status, result, metrics, Host receipts and an optional Python error.
 
-For a small, paper-oriented progression from pure computation to one and two
-curated Host source calls, see the runnable
-[controller-boundary examples](examples/controller-boundaries/README.md).
+## Workspace example
 
-## Agent-intuitive stdlib and workspace tools
-
-The Agent does not submit import metadata. Configure the Host profile and workspace:
-
-```json
-{
-  "program_surface": "programmatic",
-  "execution_profile": {
-    "id": "base",
-    "allowed_imports": ["csv"]
-  },
-  "workspace_files": {
-    "metrics.csv": "name,value\nalpha,2\nbeta,3\n"
-  },
-  "max_tool_calls": 4
-}
-```
-
-Then submit only Python:
+The Host can mount a private workspace and allow a small import set. Agent code then uses ordinary Python APIs:
 
 ```python
-import csv
+from pathlib import Path
 
-rows = list(csv.reader(workspace.read_text("metrics.csv").splitlines()))
-total = sum(int(row[1]) for row in rows[1:])
-write_text("summary.txt", str(total))
-result = {
-    "total": total,
-    "files": workspace.list_files(),
-    "summary": read_text("summary.txt"),
-}
+values = [int(line) for line in Path("/workspace/values.txt").read_text().splitlines()]
+Path("/workspace/total.txt").write_text(str(sum(values)))
+result = {"total": sum(values)}
 ```
 
-The Host derives `csv`, verifies it against the Host profile and distribution manifest, and generates a small `workspace` object plus compatibility aliases from the sealed capability specs:
+External systems remain behind typed Host capabilities. Guest code cannot choose arbitrary URLs, credentials, mounts or resource budgets.
 
-```python
-workspace.read_text(path)      # alias: read_text(path)
-workspace.write_text(path, content)  # alias: write_text(path, content)
-workspace.list_files()         # alias: list_files()
-```
-
-The workspace backend is an in-memory PoC store with canonical relative paths and a one-MiB per-file bound. Every Host call is counted and receives a Host-authored receipt.
-
-For ordinary Python file APIs, the Host can instead project a validated directory snapshot or restore a complete Workspace Capsule into a private `/workspace` mount. The Host must explicitly choose `export_on_success`, `export_on_response`, or `discard`; an export is staged until the augmented response remains within its bound, then atomically published for later restoration by another fresh Guest. This surface is mutually exclusive with the three typed in-memory workspace tools; see [Mounted workspaces and capsules](docs/workspace-capsules.md).
-
-Agent code uses ordinary Python filesystem APIs (`pathlib`, `open`, `shutil`,
-`re`, `difflib`, and `hashlib`) against explicit `/workspace` and `/tmp` paths.
-Their authority is bounded by the WASI mounts; they are not Broker tool calls.
-A separate Host-bound read-only Git capability provides `status`, `diff`, `log`,
-`show`, refs and revision resolution. No shell, system binary, Git hook or
-network transport is exposed; see
-[Bounded developer tools](docs/developer-tools.md).
-
-## Curated information sources
-
-The Current Host CLI can configure two credential-free exact-endpoint sources:
-the flat `sources.demo_catalog()` demonstration and the nested versioned
-`sources.benchmark_manifest()` research manifest.
-
-```json
-{
-  "program_surface": "programmatic",
-  "information_sources": {
-    "demo_catalog": {
-      "endpoint": "https://host-selected.example/catalog.json",
-      "timeout_ms": 1000,
-      "max_response_bytes": 65536
-    },
-    "benchmark_manifest": {
-      "endpoint": "https://host-selected.example/benchmark.json",
-      "timeout_ms": 1000,
-      "max_response_bytes": 262144
-    }
-  },
-  "max_tool_calls": 2
-}
-```
-
-Agent Python calls `items = sources.demo_catalog()` or
-`manifest = sources.benchmark_manifest()`. It cannot submit a URL, path, query,
-method, headers, redirect policy, credentials or transport budgets. Each
-private Host adapter performs one GET, refuses redirects, requires status 200
-and JSON media type, bounds time and bytes, rejects ambiguous JSON, and applies
-its sealed capability schema. The benchmark source additionally validates its
-nested schema, version, semantic ID uniqueness, and metric semantics. The
-sources may coexist with a mounted `/workspace`; neither is a generic HTTP
-client.
-
-The Host may capture schema-validated source calls into a minimal protected [Playback Bundle](docs/playback-bundles.md), then run a second fresh Guest offline after the source is unavailable. Playback requires the capture-issued bundle identity in trusted Host config, constructs no HTTP adapter, strictly consumes the recorded operation sequence through the same Broker schemas and receipts, and verifies response status, Agent-result and final-workspace identities. The bundle binds plan, grants, request, artifact/profile and transcript without storing Agent source, final result body, workspace bodies, endpoint URL or credentials.
-
-## Observation and research prototypes
-
-**Current:** `runtime/observe` defines the bounded Host-only
-`pysolate.runtime-observation.v1` contract. A Go Host can attach an `off`,
-`best_effort` or `required` Session through the Run context. It records
-lifecycle, validated capability calls, and initial/final file-level workspace
-deltas; syscall order is explicitly unavailable. `apyrun` does not currently
-expose a durable Recorder configuration. See
-[Runtime observation](docs/research/runtime-observation.md).
-
-The following surfaces are **Experimental**:
-
-- `runtime/compensation` provides Host-owned graded compensation contracts,
-  reverse-topological `plan`/`validate` dry runs, exact-plan review binding,
-  execute-time revalidation and deterministic fake-provider evidence. It is not
-  yet a production external-write journal or real-provider integration; see
-  [Reviewable tool compensation v1](docs/reviewable-tool-compensation-v1.md);
-- capability-boundary branches start a fresh Guest, strictly replay a parent
-  prefix, then use a Host-owned override, recorded suffix, or already sealed
-  live external-read suffix;
-- the **Experimental/Partial** deterministic-verification profile controls the
-  wazero random source and virtual clocks for an exact artifact while denying
-  mounted workspaces and named unsupported workload classes;
-- `research/labstore` is a bounded local typed CAS and retention prototype,
-  outside Runtime core;
-- `pysolate-research` provides bounded inspect/compare, protected branch-plan
-  authoring, caller-supplied DAG export, read-only store stats and synthetic
-  store benchmarking.
-
-Research branch execution is currently available through
-`research/operator.RunBranch`, not through the research CLI. A branch is not a
-Python heap or WebAssembly-memory snapshot, and a child may intentionally
-diverge from its parent. The local store and CLI are not a complete Lab,
-database service, authentication boundary, or combined release proof. See
-[Playback Bundles](docs/playback-bundles.md),
-[Deterministic verification](docs/research/deterministic-verification.md), and
-the [Runtime/Lab boundary](docs/research/lab-boundary.md).
+- [Mounted workspaces and capsules](docs/workspace-capsules.md)
+- [Bounded developer tools](docs/developer-tools.md)
+- [Playback Bundles](docs/playback-bundles.md)
 
 ## Security boundary
 
-The request can provide code, JSON inputs, an optional output schema, and compatibility requirements. It cannot provide:
+A request may provide Python source, JSON input, an optional output schema and compatibility requirements. It cannot provide:
 
 - capabilities or credentials;
 - environment variables or process arguments;
 - network targets;
 - Host paths or mounts;
 - resource budgets;
-- package installation authority.
+- package-installation authority.
 
-Each run gets a newly instantiated Guest module. The Host owns timeout, memory and byte limits. Static imports must appear as simple top-level single-line statements in the initial import preamble. Dynamic, nested, relative, multiline, compound, or late imports fail closed. The trusted CPython Guest validates source again before execution.
-
-See [docs/threat-model.md](docs/threat-model.md) and [docs/source-compatibility.md](docs/source-compatibility.md).
+Pysolate is a research prototype, not a mature multi-tenant service or a completed adversarial-security evaluation. See [Threat model](docs/threat-model.md) and [Source compatibility](docs/source-compatibility.md).
 
 ## Repository map
 
 ```text
 cmd/apyrun/                 JSON stdin/stdout CLI
-runtime/                    request, profile and response contracts
-runtime/engine/wazero/      fresh-instance WASI execution
-runtime/engine/native/      Experimental verified one-shot OCI/gVisor execution
-runtime/placement/          deterministic Host-owned execution placement
-runtime/capability/         small Host tool registry and broker
-runtime/capabilityrpc/      Experimental private native transport adapter
-runtime/compensation/       Experimental reviewable tool compensation contract
-runtime/lifecycle/          backend-neutral lifecycle/resource evidence
-runtime/verification/       independent native evidence verifier
-runtime/workspace/          bounded WASI workspace mount and capsule storage
-runtime/receipt/            Host-authored call receipts
-runtime/observe/            optional bounded Host observation contract
-runtime/playback/           Bundle and Experimental branch contracts
-research/labstore/          Experimental local content-addressed store
-research/operator/          Experimental semantic research APIs
-cmd/pysolate-research/      Experimental local research CLI
+runtime/                    request, execution and lifecycle contracts
+runtime/engine/wazero/      CPython/WASI execution and prepared images
+runtime/capability/         typed Host capabilities, Plans, Broker and PLM
+runtime/workspace/          bounded workspace mounts and capsules
+runtime/playback/           curated-read capture and playback
 guest/                      CPython/WASI Guest source and build
-abi/v1/                     active JSON schemas
-integration/e2e/            focused real-Guest checks
-docs/                       active design and historical summary
+integration/e2e/            real-Guest integration tests
+scripts/                    verification and experiment runners
+docs/                       design, evidence and research records
 ```
 
 ## Verification
 
 ```bash
-go test ./...
-go vet ./...
+go test ./runtime/... ./cmd/apyrun ./cmd/pysolate-httpd
+go vet ./runtime/... ./cmd/apyrun ./cmd/pysolate-httpd
 
 AGENT_RUNTIME_GUEST=/path/to/agent-python-runtime.wasm \
   go test ./integration/e2e -count=1
 ```
 
-With the artifact configured, focused real-Guest tests cover ordinary Python,
-timeout recovery, workspace isolation, automatic import admission, Host
-receipts, Runtime observations, two-source capture/offline playback,
-Experimental/Partial deterministic repeats, and fresh counterfactual branch
-children through the operator API. These focused tests do not by themselves
-claim that the full combined research acceptance workflow has passed.
-
-## Scope
-
-This is a concept verification, not a mature multi-tenant service. The current design prefers small, inspectable code and conservative rejection over compatibility with every valid Python program or operational edge case.
+The exact-Guest suite requires a built and verified Guest distribution. Research packages have separate evidence-pinned gates documented in [Development](docs/development.md). Repository scripts never silently substitute a missing artifact.

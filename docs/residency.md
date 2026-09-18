@@ -48,6 +48,9 @@ Swap configuration, backing storage and kernel pressure affect reclamation.
 
 ## Small benchmark
 
+Recorded pilot data, summaries and the figure are in
+[research/residency](../research/residency/README.md).
+
 `cmd/residency-bench` runs a real NumPy program:
 
 ```text

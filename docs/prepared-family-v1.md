@@ -37,6 +37,11 @@ claiming to invent it:
 The family still does not schedule children or publish workspaces. Existing Host
 and `subagent.Orchestrator` code owns those decisions.
 
+The parent and consumer runtimes share one family-owned wazero compilation cache.
+Each consumer keeps its own Guest state and resource bindings. Closing a consumer
+leaves the cache available to later consumers. The family closes the cache after
+closing its runners and parent.
+
 ## Binary preparation ABI
 
 Add one optional Guest export without changing existing exports:
@@ -62,6 +67,19 @@ instantiate exact artifact
 → dealloc both staging buffers on every outcome
 → seal image or execute one private-copy consumer
 ```
+
+COW consumers use a shorter sequence:
+
+```text
+instantiate with anonymous zero memory
+→ _initialize on that fresh memory
+→ map the prepared image at the same virtual address with MAP_PRIVATE | MAP_FIXED
+→ execute with the saved Python state
+```
+
+`runtime_init` resets the Python preparation namespace. Trusted source and
+prepared arrays then add bindings to that namespace, so package and tool
+preparation preserve an already installed dataset.
 
 The descriptor is bounded canonical JSON with exactly:
 

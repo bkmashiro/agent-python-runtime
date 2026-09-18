@@ -658,8 +658,14 @@ func TestRealGuestCOWSingleUseOutcomeIsolation(t *testing.T) {
 	if err != nil || responseResult(t, afterOverflow) != `{"after_overflow":true}` {
 		t.Fatalf("post-overflow refill err=%v response=%s", err, afterOverflow)
 	}
-	if state := engine.PreparedState(); state.PreparedRuns < 6 || state.FreshFallbackRuns != 0 || state.Ready {
+	if state := engine.PreparedState(); state.PreparedRuns < 6 || state.FreshFallbackRuns != 0 || !state.Ready {
 		t.Fatalf("COW state=%+v", state)
+	}
+	if err := engine.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if state, image := engine.PreparedState(), engine.PreparedImageState(); state.Ready || image.Available {
+		t.Fatalf("closed COW engine retained prepared state: state=%+v image=%+v", state, image)
 	}
 }
 

@@ -271,7 +271,7 @@ func closePreparedInstance(instance *preparedInstance) error {
 type PreparedState struct {
 	SchemaVersion     string  `json:"schema_version"`
 	Selected          bool    `json:"selected"`
-	Ready             bool    `json:"ready"`
+	Ready             bool    `json:"ready"` // A prepared Guest or reusable COW image is available.
 	PreparedRuns      uint64  `json:"prepared_runs"`
 	FreshFallbackRuns uint64  `json:"fresh_fallback_runs"`
 	PrepareMS         float64 `json:"prepare_ms"`

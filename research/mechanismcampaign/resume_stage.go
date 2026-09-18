@@ -103,7 +103,7 @@ func RunResumeStage(ctx context.Context, config ResumeStageConfig) (ResumeStageR
 		if err != nil {
 			return ResumeStageResult{}, err
 		}
-		runConfig.ColdIO = &runtimeconfig.ColdIOPolicy{ColdAfter: 10 * time.Millisecond, PageOutAfter: 20 * time.Millisecond}
+		runConfig.ColdIO = &runtimeconfig.ColdIOPolicy{Strategy: runtimeconfig.ColdIOFixed, ColdAfter: 10 * time.Millisecond, PageOutAfter: 20 * time.Millisecond}
 	}
 	factory := wazeroengine.Factory{
 		Passes:           passes,

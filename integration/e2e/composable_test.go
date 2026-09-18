@@ -685,7 +685,7 @@ func TestRealGuestColdIOContinuationPreservesPythonState(t *testing.T) {
 	}
 	config := runtimeconfig.DefaultRunConfig()
 	config.ColdIO = &runtimeconfig.ColdIOPolicy{
-		ColdAfter: 10 * time.Millisecond, PageOutAfter: 20 * time.Millisecond,
+		Strategy: runtimeconfig.ColdIOFixed, ColdAfter: 10 * time.Millisecond, PageOutAfter: 20 * time.Millisecond,
 	}
 	factory := wazeroengine.Factory{LegacyResearchExecution: true, Passes: passes, BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		return capability.NewBroker(capability.Config{RunIdentity: "cold-python", Plan: plan})

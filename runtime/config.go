@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"errors"
+	"math"
 	"time"
 )
 
@@ -12,11 +13,20 @@ const (
 	hardMaxMemoryPages   = 16384 // 1 GiB in 64 KiB WebAssembly pages.
 )
 
-// ColdIOPolicy is Host-owned Experimental timing policy for one same-slot
-// capability wait. A zero PageOutAfter selects MADV_COLD only.
+type ColdIOStrategy string
+
+const (
+	ColdIONatural  ColdIOStrategy = "natural"
+	ColdIOFixed    ColdIOStrategy = "fixed"
+	ColdIOPressure ColdIOStrategy = "pressure"
+)
+
+// ColdIOPolicy is Host-owned policy for one same-slot capability wait.
 type ColdIOPolicy struct {
-	ColdAfter    time.Duration
-	PageOutAfter time.Duration
+	Strategy          ColdIOStrategy
+	ColdAfter         time.Duration
+	PageOutAfter      time.Duration
+	PressureThreshold float64
 }
 
 // RunConfig is Host-owned authority and resource policy. It is never decoded
@@ -64,6 +74,23 @@ func DefaultRunConfig() RunConfig {
 }
 
 func validateColdIOPolicy(policy ColdIOPolicy, timeout time.Duration) error {
+	switch policy.Strategy {
+	case ColdIONatural:
+		if policy.ColdAfter != 0 || policy.PageOutAfter != 0 || policy.PressureThreshold != 0 {
+			return errors.New("natural cold I/O policy must have zero thresholds")
+		}
+		return nil
+	case ColdIOFixed:
+		if policy.PressureThreshold != 0 {
+			return errors.New("fixed cold I/O policy cannot set pressure threshold")
+		}
+	case ColdIOPressure:
+		if math.IsNaN(policy.PressureThreshold) || policy.PressureThreshold <= 0 || policy.PressureThreshold > 1 {
+			return errors.New("pressure cold I/O threshold must be greater than zero and at most one")
+		}
+	default:
+		return errors.New("cold I/O strategy must be explicit")
+	}
 	if policy.ColdAfter <= 0 || policy.ColdAfter >= timeout {
 		return errors.New("cold I/O threshold must be inside the Run timeout")
 	}

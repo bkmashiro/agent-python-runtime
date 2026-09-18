@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -627,4 +628,61 @@ func unifiedPassCatalog(t *testing.T) *passplugin.Registry {
 func osReadGuestArtifact(t *testing.T) ([]byte, error) {
 	t.Helper()
 	return os.ReadFile(guestArtifact(t))
+}
+
+func TestRealGuestPLMWaitUsesColdResidency(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("cold residency requires Linux")
+	}
+	artifact, err := osReadGuestArtifact(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Uint32
+	adapter := &e2ePLMAdapter{handler: capability.HandlerFunc(func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		calls.Add(1)
+		timer := time.NewTimer(250 * time.Millisecond)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-timer.C:
+			return json.RawMessage(`{"body":"cold-read"}`), nil
+		}
+	})}
+	plan := plmE2EPlan(t, 1, adapter)
+	passes := unifiedPassCatalog(t)
+	for _, name := range []passregistration.Name{sourcepatch.PLMCapabilityCallsName, passregistration.ColdIOResidency} {
+		passes, err = passes.Enable(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := runtimeconfig.DefaultRunConfig()
+	cfg.Timeout = 90 * time.Second
+	cfg.ColdIO = &runtimeconfig.ColdIOPolicy{Strategy: runtimeconfig.ColdIOFixed, ColdAfter: 10 * time.Millisecond, PageOutAfter: 20 * time.Millisecond}
+	runner, err := (wazeroengine.Factory{Passes: passes, LegacyResearchExecution: true, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+		return capability.NewBroker(capability.Config{RunIdentity: "plm-cold", Plan: plan})
+	}}).New(context.Background(), artifact, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	engine := trustedSemanticRunner(t, runner)
+	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "plm-cold", Code: "value = sources.read(\"alpha\")\nresult = value\n", Inputs: json.RawMessage(`{}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution, err := passes.ExecuteCapabilityHostScheduled(context.Background(), sourcepatch.PLMCapabilityCallsName, engine, request, plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan))
+	if err != nil || !execution.Applied {
+		t.Fatalf("execution=%+v err=%v", execution, err)
+	}
+	result, err := decodeSuccessfulGuestResult(execution.Payload)
+	if err != nil || string(result) != `"cold-read"` {
+		t.Fatalf("result=%s err=%v", result, err)
+	}
+	stats := engine.ColdIOEvidence()
+	if calls.Load() != 1 || stats.Waits != 1 || stats.ColdAttempts != 1 || stats.PageOutAttempts != 1 || stats.Resumes != 1 {
+		t.Fatalf("calls=%d stats=%+v", calls.Load(), stats)
+	}
 }

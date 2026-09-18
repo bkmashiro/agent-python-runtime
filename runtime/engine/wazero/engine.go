@@ -328,7 +328,8 @@ type Engine struct {
 	semanticSessionMu   sync.Mutex
 	semanticSessionRuns uint64
 	semanticClosing     bool
-	coldEvidence        coldEvidenceStore
+	coldEvidenceMu      sync.Mutex
+	coldEvidence        ColdIOEvidence
 	semanticLifecycle   semanticAnalysisLifecycleStore
 	preparedRegions     *preparedregion.PreparedRegionTable
 	valueSlots          *valueslot.Table
@@ -391,16 +392,10 @@ func (engine *Engine) ValueSlotEvidence() valueslot.Evidence {
 }
 
 func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Engine, error) {
-	if err := validateProductConstructorConfig(config); err != nil {
-		return nil, err
-	}
 	return newEngine(ctx, wasm, config, nil, nil, nil, nil, nil)
 }
 
 func NewWithBrokerFactory(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, factory BrokerFactory) (*Engine, error) {
-	if err := validateProductConstructorConfig(config); err != nil {
-		return nil, err
-	}
 	return newEngine(ctx, wasm, config, factory, nil, nil, nil, nil)
 }
 
@@ -417,14 +412,10 @@ func validateProductConstructorConfig(config runtimeconfig.RunConfig) error {
 func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, brokerFactory BrokerFactory, binding *workspaceBinding, preparedRegions *preparedregion.PreparedRegionTable, valueSlots *valueslot.Table, compilationCache wazerort.CompilationCache) (*Engine, error) {
 	// A family supplies its cache here; ordinary Engines pass nil and keep their
 	// existing private wazero compilation engine.
-	if err := config.Validate(); err != nil {
+	if err := validateProductConstructorConfig(config); err != nil {
 		return nil, fmt.Errorf("invalid run config: %w", err)
 	}
 	config = cloneFamilyRunConfig(config)
-	if config.ColdIO != nil {
-		policy := *config.ColdIO
-		config.ColdIO = &policy
-	}
 	if len(wasm) < 8 {
 		return nil, errors.New("guest module is too short")
 	}
@@ -1454,7 +1445,7 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 	}()
 	if prepared != nil && prepared.cold != nil {
 		runContext = withColdIOContinuation(runContext, prepared.cold)
-		defer func() { engine.coldEvidence.set(prepared.cold.finish()) }()
+		defer func() { engine.setColdIOEvidence(prepared.cold.finish()) }()
 	}
 	if freshSetupErr != nil {
 		return nil, withGuestDiagnostic(freshSetupErr, stderr.String())
@@ -1709,7 +1700,12 @@ func hostLinearizePLMCall(ctx context.Context, module api.Module, slotPointer, s
 	if !ok {
 		return -1
 	}
-	response, err := table.LinearizeRuntimePLM(ctx, string(append([]byte(nil), slotView...)), append([]byte(nil), requestView...), sourceSeal)
+	slot := string(append([]byte(nil), slotView...))
+	request := append([]byte(nil), requestView...)
+	call := func(callContext context.Context) ([]byte, error) {
+		return table.LinearizeRuntimePLM(callContext, slot, request, sourceSeal)
+	}
+	response, err := awaitColdIO(ctx, coldIOContinuationFromContext(ctx), call)
 	if err != nil || len(response) == 0 || len(response) > int(responseCapacity) {
 		return -1
 	}
@@ -1781,11 +1777,7 @@ func hostCall(
 	}
 	var response []byte
 	var err error
-	if continuation := coldIOContinuationFromContext(ctx); continuation != nil {
-		response, err = continuation.wait(ctx, call)
-	} else {
-		response, err = call(ctx)
-	}
+	response, err = awaitColdIO(ctx, coldIOContinuationFromContext(ctx), call)
 	if err != nil || len(response) > int(responseCapacity) {
 		return -1
 	}

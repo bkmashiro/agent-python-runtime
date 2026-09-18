@@ -3,6 +3,7 @@
 package wazero
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -76,16 +77,29 @@ func TestCOWImageGrowableMappingsExposeZeroTailAndIsolate(t *testing.T) {
 	if first == nil || second == nil {
 		t.Fatal("growable COW allocation failed")
 	}
+	if first[0] != 0 || first[wasmLinearPageSize] != 0 || second[wasmLinearPageSize] != 0 {
+		t.Fatalf("anonymous initialization mismatch: first=%d/%d second-tail=%d", first[0], first[wasmLinearPageSize], second[wasmLinearPageSize])
+	}
+	firstAllocation, err := firstAllocator.Allocation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondAllocation, err := secondAllocator.Allocation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := firstAllocation.restoreBaselineBeforeServe(); err != nil {
+		t.Fatal(err)
+	}
+	if err := secondAllocation.restoreBaselineBeforeServe(); err != nil {
+		t.Fatal(err)
+	}
 	if first[0] != 7 || first[wasmLinearPageSize] != 0 || second[wasmLinearPageSize] != 0 {
 		t.Fatalf("baseline/tail mismatch: first=%d/%d second-tail=%d", first[0], first[wasmLinearPageSize], second[wasmLinearPageSize])
 	}
 	first[wasmLinearPageSize] = 91
 	if second[wasmLinearPageSize] != 0 {
 		t.Fatal("grown private page leaked to sibling")
-	}
-	firstAllocation, err := firstAllocator.Allocation()
-	if err != nil {
-		t.Fatal(err)
 	}
 	if err := firstAllocation.restoreBaselineBeforeServe(); err != nil {
 		t.Fatal(err)
@@ -112,12 +126,25 @@ func TestCOWImagePrivateMappingsIsolateAndDiscard(t *testing.T) {
 	secondAllocator := image.newAllocator()
 	first := firstAllocator.Allocate(wasmLinearPageSize, wasmLinearPageSize).Reallocate(wasmLinearPageSize)
 	second := secondAllocator.Allocate(wasmLinearPageSize, wasmLinearPageSize).Reallocate(wasmLinearPageSize)
-	if first == nil || second == nil || first[0] != 7 || second[0] != 7 {
-		t.Fatalf("baseline mapping failed: first=%v second=%v", first, second)
+	if first == nil || second == nil || first[0] != 0 || second[0] != 0 {
+		t.Fatalf("anonymous initialization failed: first=%v second=%v", first, second)
 	}
 	firstMemory, err := firstAllocator.Allocation()
 	if err != nil {
 		t.Fatal(err)
+	}
+	secondMemory, err := secondAllocator.Allocation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := firstMemory.restoreBaselineBeforeServe(); err != nil {
+		t.Fatal(err)
+	}
+	if err := secondMemory.restoreBaselineBeforeServe(); err != nil {
+		t.Fatal(err)
+	}
+	if first[0] != 7 || second[0] != 7 {
+		t.Fatalf("baseline mapping failed: first=%v second=%v", first, second)
 	}
 	first[0] = 22 // Simulate Wazero data-segment writes during instantiation.
 	if err := firstMemory.restoreBaselineBeforeServe(); err != nil {
@@ -138,16 +165,70 @@ func TestCOWImagePrivateMappingsIsolateAndDiscard(t *testing.T) {
 	if got := firstMemory.Reallocate(1); got != nil {
 		t.Fatal("freed COW memory reallocated")
 	}
-	secondMemory, err := secondAllocator.Allocation()
-	if err != nil {
-		t.Fatal(err)
-	}
 	secondMemory.Free()
 	if err := image.Close(); err != nil {
 		t.Fatal(err)
 	}
 	if err := image.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCOWInitializationStartsWithZeroBSSAndRestoresSnapshot(t *testing.T) {
+	ctx := context.Background()
+	runtime := wazerort.NewRuntime(ctx)
+	defer runtime.Close(ctx)
+	compiled, err := runtime.CompileModule(ctx, cowInitializationOrderModule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, err := runtime.InstantiateModule(ctx, compiled, wazerort.NewModuleConfig().WithName("cow-init-canonical"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer canonical.Close(ctx)
+	initialize := canonical.ExportedFunction("_initialize")
+	if initialize == nil {
+		t.Fatal("_initialize export is missing")
+	}
+	if _, err := initialize.Call(ctx); err != nil {
+		t.Fatalf("canonical _initialize: %v", err)
+	}
+	// Model work performed after the module constructor, before snapshotting.
+	if !canonical.Memory().WriteByte(1, 99) {
+		t.Fatal("write prepared value")
+	}
+	initial, ok := canonical.Memory().Read(0, 2)
+	if !ok || !bytes.Equal(initial, []byte{7, 99}) {
+		t.Fatalf("canonical initialization=%v ok=%v", initial, ok)
+	}
+	snapshot := make([]byte, wasmLinearPageSize)
+	copy(snapshot, initial)
+	image, err := newCOWImage(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer image.Close()
+
+	allocator := image.newAllocator()
+	clone, err := runtime.InstantiateModule(experimental.WithMemoryAllocator(ctx, allocator), compiled, wazerort.NewModuleConfig().WithName("cow-init-clone"))
+	if err != nil {
+		t.Fatalf("instantiate clone: %v", err)
+	}
+	defer clone.Close(ctx)
+	if _, err := clone.ExportedFunction("_initialize").Call(ctx); err != nil {
+		t.Fatalf("clone _initialize did not see zero BSS: %v", err)
+	}
+	allocation, err := allocator.Allocation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := allocation.restoreBaselineBeforeServe(); err != nil {
+		t.Fatal(err)
+	}
+	restored, ok := clone.Memory().Read(0, 2)
+	if !ok || !bytes.Equal(restored, initial) {
+		t.Fatalf("restored snapshot=%v want=%v ok=%v", restored, initial, ok)
 	}
 }
 
@@ -267,6 +348,20 @@ func TestWazeroTinyModuleUsesIsolatedSingleUseCOWMappings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	firstMemory, err := firstAllocator.Allocation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondMemory, err := secondAllocator.Allocation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := firstMemory.restoreBaselineBeforeServe(); err != nil {
+		t.Fatal(err)
+	}
+	if err := secondMemory.restoreBaselineBeforeServe(); err != nil {
+		t.Fatal(err)
+	}
 	readFirst := first.ExportedFunction("read0")
 	readSecond := second.ExportedFunction("read0")
 	writeFirst := first.ExportedFunction("write0")
@@ -295,6 +390,22 @@ func TestWazeroTinyModuleUsesIsolatedSingleUseCOWMappings(t *testing.T) {
 	}
 	if err := image.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func cowInitializationOrderModule() []byte {
+	return []byte{
+		0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+		0x01, 0x04, 0x01, 0x60, 0x00, 0x00,
+		0x03, 0x02, 0x01, 0x00,
+		0x05, 0x04, 0x01, 0x01, 0x01, 0x01,
+		0x07, 0x18, 0x02,
+		0x06, 'm', 'e', 'm', 'o', 'r', 'y', 0x02, 0x00,
+		0x0b, '_', 'i', 'n', 'i', 't', 'i', 'a', 'l', 'i', 'z', 'e', 0x00, 0x00,
+		0x0a, 0x16, 0x01, 0x14, 0x00,
+		0x41, 0x01, 0x2d, 0x00, 0x00, 0x45, 0x04, 0x40, 0x05, 0x00, 0x0b,
+		0x41, 0x01, 0x41, 0x2a, 0x3a, 0x00, 0x00, 0x0b,
+		0x0b, 0x07, 0x01, 0x00, 0x41, 0x00, 0x0b, 0x01, 0x07,
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"unsafe"
 
 	"github.com/tetratelabs/wazero/experimental"
 	"golang.org/x/sys/unix"
@@ -125,7 +126,7 @@ func (image *cowImage) preparedImageState() PreparedImageState {
 	}
 }
 
-func (image *cowImage) mapPrivate() (*cowLinearMemory, error) {
+func (image *cowImage) mapAnonymous() (*cowLinearMemory, error) {
 	image.mu.Lock()
 	defer image.mu.Unlock()
 	if image.closed {
@@ -134,9 +135,9 @@ func (image *cowImage) mapPrivate() (*cowLinearMemory, error) {
 	if image.size > uint64(^uint(0)>>1) {
 		return nil, errCOWAllocationShape
 	}
-	buffer, err := unix.Mmap(image.fd, 0, int(image.size), unix.PROT_READ|unix.PROT_WRITE, unix.MAP_PRIVATE)
+	buffer, err := unix.Mmap(-1, 0, int(image.size), unix.PROT_READ|unix.PROT_WRITE, unix.MAP_PRIVATE|unix.MAP_ANON)
 	if err != nil {
-		return nil, fmt.Errorf("map private COW memory: %w", err)
+		return nil, fmt.Errorf("map anonymous COW memory: %w", err)
 	}
 	image.mappings++
 	return &cowLinearMemory{image: image, buffer: buffer, max: image.size}, nil
@@ -187,7 +188,7 @@ func (allocator *cowAllocator) Allocate(capacity, maximum uint64) experimental.L
 		allocator.err = errCOWAllocationShape
 		return &failedLinearMemory{}
 	}
-	memory, err := allocator.image.mapPrivate()
+	memory, err := allocator.image.mapAnonymous()
 	if err != nil {
 		allocator.err = err
 		return &failedLinearMemory{}
@@ -262,7 +263,12 @@ func (memory *cowLinearMemory) restoreBaselineBeforeServe() error {
 	if memory.freed {
 		return errors.New("restore freed COW memory")
 	}
-	if err := unix.Madvise(memory.buffer, unix.MADV_DONTNEED); err != nil {
+	address := unsafe.Pointer(&memory.buffer[0])
+	// MmapPtr intentionally bypasses x/sys' mapper registry: memory.buffer was
+	// registered by Mmap, and keeping that slice is what lets Munmap track the
+	// fixed remap at the same address and lifetime.
+	_, err := unix.MmapPtr(memory.image.fd, 0, address, uintptr(len(memory.buffer)), unix.PROT_READ|unix.PROT_WRITE, unix.MAP_PRIVATE|unix.MAP_FIXED)
+	if err != nil {
 		return fmt.Errorf("restore sealed COW baseline before serve: %w", err)
 	}
 	return nil

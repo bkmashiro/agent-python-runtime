@@ -462,7 +462,7 @@ def _decode_prepared_numpy_descriptor(descriptor_json: str, body: bytes | bytear
 
 
 def _prepare_numpy_ndarray(descriptor_json: str, body: bytes | bytearray) -> None:
-    global _prepared_globals, _prepared_numpy_installed
+    global _prepared_numpy_installed
     if _prepared_numpy_installed:
         raise RuntimeError("prepared numpy input was already prepared")
     descriptor = _decode_prepared_numpy_descriptor(descriptor_json, body)
@@ -474,18 +474,15 @@ def _prepare_numpy_ndarray(descriptor_json: str, body: bytes | bytearray) -> Non
     array = numpy.frombuffer(backing, dtype=dtype).reshape(tuple(descriptor["shape"]), order="C")
     if not array.flags.c_contiguous or array.nbytes != descriptor["nbytes"]:
         raise ValueError("prepared numpy reconstruction is invalid")
-    _prepared_globals = {"__builtins__": __builtins__, descriptor["name"]: array}
+    _prepared_globals[descriptor["name"]] = array
     _prepared_numpy_installed = True
 
 
 def _prepare(source: str) -> None:
     if not isinstance(source, str):
         raise TypeError("source must be a string")
-    namespace: dict[str, Any] = {"__builtins__": __builtins__}
-    global _prepared_globals
-    # Trusted preparation may intentionally build a streaming session while
-    # definitions are still being installed into this private namespace.
-    _prepared_globals = namespace
+    # Preparation composes within one Guest; _initialize starts a new namespace.
+    namespace = _prepared_globals
     exec(compile(source, "<trusted-prepare>", "exec", dont_inherit=True), namespace, namespace)
 
 

@@ -58,6 +58,29 @@ class PreparedNumpyInputTests(unittest.TestCase):
                 with self.assertRaises((TypeError, ValueError)):
                     agent_runtime._prepare_numpy_ndarray(metadata, body)
 
+    def test_preparation_keeps_dataset_and_late_bound_helpers(self) -> None:
+        agent_runtime._prepare("offset = 1\ndef total():\n    return int(dataset.sum()) + offset\n")
+        agent_runtime._prepare_numpy_ndarray(descriptor(self.body), self.body)
+        agent_runtime._prepare("import numpy as np\noffset = 2\n")
+        response = json.loads(agent_runtime._execute(json.dumps({
+            "run_id": "prepared-composition", "code": "result = total()", "inputs": {},
+        })))
+        self.assertEqual("ok", response["status"], response)
+        self.assertEqual(12, response["result"])
+        agent_runtime._initialize("{}")
+        for name in ("dataset", "total", "offset", "np"):
+            self.assertNotIn(name, agent_runtime._prepared_globals)
+
+    def test_dataset_survives_later_package_and_tool_preparation(self) -> None:
+        agent_runtime._prepare_numpy_ndarray(descriptor(self.body), self.body)
+        agent_runtime._prepare("import numpy as np\n")
+        agent_runtime._prepare("def read_count():\n    return 3\n")
+        response = json.loads(agent_runtime._execute(json.dumps({
+            "run_id": "prepared-family", "code": "result = int(dataset.sum()) + read_count()", "inputs": {},
+        })))
+        self.assertEqual("ok", response["status"], response)
+        self.assertEqual(13, response["result"])
+
     def test_initialize_clears_prepared_value(self) -> None:
         agent_runtime._prepare_numpy_ndarray(descriptor(self.body), self.body)
         agent_runtime._initialize("{}")

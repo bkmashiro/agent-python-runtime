@@ -23,9 +23,6 @@ const (
 	PLMCapabilityCallsName         passregistration.Name = "plm_capability_calls"
 	PLMCapabilityCallsVersion                            = "pysolate.plm-capability-calls-pass.v1"
 	PLMCapabilityCallsConfigSHA256                       = "sha256:18861b30178031a491a1728dbb37d5476ffaff5f3f915934b8a338d4542da0fb"
-	DataLocalNumpySumName          passregistration.Name = "data_local_numpy_sum"
-	DataLocalNumpySumVersion                             = "pysolate.data-local-numpy-sum-pass.v2"
-	DataLocalNumpySumConfigSHA256                        = "sha256:391f84660ff12c489c3275ae9073622d1baf4ea6b54a629b51804b331a1b4c7b"
 )
 
 var (
@@ -76,10 +73,6 @@ type PureScalarFold struct {
 }
 
 type PLMCapabilityCalls struct {
-	registration passregistration.Registration
-}
-
-type DataLocalNumpySum struct {
 	registration passregistration.Registration
 }
 
@@ -142,34 +135,12 @@ func (pass PLMCapabilityCalls) Registration() passregistration.Registration {
 
 func (pass PLMCapabilityCalls) HostScheduled() bool { return true }
 
-func NewDataLocalNumpySum(analyzerSHA256 string) (DataLocalNumpySum, error) {
-	definition, err := passregistration.Define(
-		DataLocalNumpySumName, DataLocalNumpySumVersion, passregistration.StageWholeProgramPatch,
-		passregistration.ExecutionPatch, passregistration.PatchBindings(),
-	)
-	if err != nil {
-		return DataLocalNumpySum{}, err
-	}
-	registration, err := definition.Register(analyzerSHA256, DataLocalNumpySumConfigSHA256)
-	if err != nil {
-		return DataLocalNumpySum{}, err
-	}
-	return DataLocalNumpySum{registration: registration}, nil
-}
-
-func (pass DataLocalNumpySum) Registration() passregistration.Registration { return pass.registration }
-func (pass DataLocalNumpySum) ValueSlotBound() bool                        { return true }
-
 func (pass PureScalarFold) Transform(ctx context.Context, transformer Transformer, source string) (Patch, error) {
 	return transform(ctx, transformer, source, pass.registration, PureScalarFoldName, nil)
 }
 
 func (pass PureScalarCSE) Transform(ctx context.Context, transformer Transformer, source string) (Patch, error) {
 	return transform(ctx, transformer, source, pass.registration, PureScalarCSEName, nil)
-}
-
-func (pass DataLocalNumpySum) Transform(ctx context.Context, transformer Transformer, source string) (Patch, error) {
-	return transform(ctx, transformer, source, pass.registration, DataLocalNumpySumName, nil)
 }
 
 func transform(ctx context.Context, transformer Transformer, source string, registration passregistration.Registration, expectedName passregistration.Name, projections []CapabilityProjection) (Patch, error) {

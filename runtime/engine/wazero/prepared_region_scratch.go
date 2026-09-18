@@ -58,37 +58,27 @@ func (engine *Engine) ExecutePreparedRegionScratch(ctx context.Context, request 
 	defer cancel()
 	stderr := &boundedDiagnostic{}
 	stdout := &forbiddenStdout{}
-	started := time.Now()
-	evidence.ModuleInstantiations = 1
 	evidence.FreshModule = true
-	module, err := engine.runtime.InstantiateModule(scratchContext, engine.compiled, engine.baseModuleConfig(stderr, stdout))
-	evidence.InstantiateNanos = uint64(time.Since(started))
-	if err != nil {
+	prepared, setup, err := engine.newFreshGuest(scratchContext, stderr, stdout, false)
+	evidence.ModuleInstantiations = setup.ModuleInstantiations
+	evidence.InstantiateNanos = setup.InstantiateNanos
+	evidence.InitializeCalls = setup.InitializeCalls
+	evidence.InitializeNanos = setup.InitializeNanos
+	evidence.RuntimeInitCalls = setup.RuntimeInitCalls
+	evidence.RuntimeInitNanos = setup.RuntimeInitNanos
+	if prepared == nil {
 		return result, evidence, fmt.Errorf("instantiate prepared region scratch Guest: %w", err)
 	}
 	defer func() {
 		started := time.Now()
-		executionErr = errors.Join(executionErr, module.Close(context.Background()))
+		executionErr = errors.Join(executionErr, closePreparedInstance(prepared))
 		evidence.CloseNanos = uint64(time.Since(started))
 	}()
-
-	started = time.Now()
-	evidence.InitializeCalls = 1
-	if err := callNoArgs(scratchContext, module, "_initialize"); err != nil {
-		evidence.InitializeNanos = uint64(time.Since(started))
+	if err != nil {
 		return result, evidence, withGuestDiagnostic(err, stderr.String())
 	}
-	evidence.InitializeNanos = uint64(time.Since(started))
-	started = time.Now()
-	evidence.RuntimeInitCalls = 1
-	if err := callStatusWithBytes(scratchContext, module, "runtime_init", []byte("{}")); err != nil {
-		evidence.RuntimeInitNanos = uint64(time.Since(started))
-		return result, evidence, withGuestDiagnostic(err, stderr.String())
-	}
-	evidence.RuntimeInitNanos = uint64(time.Since(started))
-
-	started = time.Now()
-	payload, err := callGuestResponse(scratchContext, module, "runtime_execute_prepared_region_scratch", request, engine.config.MaxResponseBytes)
+	started := time.Now()
+	payload, err := callGuestResponse(scratchContext, prepared.module, "runtime_execute_prepared_region_scratch", request, engine.config.MaxResponseBytes)
 	evidence.ExecuteNanos = uint64(time.Since(started))
 	if err != nil {
 		if scratchContext.Err() != nil {

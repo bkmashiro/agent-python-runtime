@@ -109,6 +109,13 @@ deterministic replay, external-effect reconciliation or transaction semantics.
 The repository also contains bounded **Experimental** work whose label is part
 of its contract:
 
+The former `runtime/composable` body-free aggregate evidence package and
+`runtime/compensation` reviewable-tool package are retired legacy experiment
+APIs, not product surfaces. Historical research descriptions and frozen
+evidence remain available for provenance; the underlying workspace, subagent,
+Agent Function, workflow, capability and approval execution paths remain where
+they exercise real runtime behavior.
+
 - `pysolate.playback-branch.v1` counterfactual branches at captured
   capability-operation boundaries, with a strictly replayed parent prefix and
   Host-owned override, recorded, or sealed live external-read suffix;
@@ -116,8 +123,6 @@ of its contract:
   **Experimental/Partial**, which binds an exact artifact and controls wazero
   random plus wall/monotonic clocks while denying mounted workspaces and known
   unsupported import classes;
-- `runtime/composable`, a strict body-free evidence decoder/verifier that accepts
-  only claims supported by versioned mechanism records;
 - `runtime/workspace` portable immutable root/lineage records and explicit select,
   plus `runtime/subagent` bounded structured fork/join with private child branches;
 - `runtime/agentfunction` project-private Host-instrumented result retention and

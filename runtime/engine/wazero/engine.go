@@ -72,7 +72,7 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 		}
 		return nil, err
 	}
-	runner, err := newEngine(ctx, wasm, config, factory.BrokerFactory, binding, factory.PreparedRegions, factory.ValueSlots)
+	runner, err := newEngine(ctx, wasm, config, factory.BrokerFactory, binding, factory.PreparedRegions, factory.ValueSlots, nil)
 	if err != nil && factory.ValueSlots != nil {
 		err = errors.Join(err, factory.ValueSlots.Close())
 	}
@@ -193,6 +193,79 @@ type preparedInstance struct {
 	stdout    *forbiddenStdout
 	temporary *workspace.Temporary
 	cold      coldIOContinuation
+}
+
+// freshGuestLifecycle records the setup work performed by newFreshGuest.
+// Callers decide which counters to publish when setup fails; this keeps the
+// analyzer and scratch evidence semantics distinct from PLM run evidence.
+type freshGuestLifecycle struct {
+	ModuleInstantiations uint32
+	InitializeCalls      uint32
+	RuntimeInitCalls     uint32
+	InstantiateNanos     uint64
+	InitializeNanos      uint64
+	RuntimeInitNanos     uint64
+}
+
+// newFreshGuest is the one ordinary fresh-Guest setup path. It deliberately
+// does not cover COW clones: those run _initialize against a private mapping,
+// restore the sealed image, and do not call runtime_init.
+//
+// On initialization failure the instance is returned so the caller retains
+// the same cleanup/lifecycle ownership it had before this helper existed.
+func (engine *Engine) newFreshGuest(ctx context.Context, stderr *boundedDiagnostic, stdout *forbiddenStdout, mountWorkspace bool) (*preparedInstance, freshGuestLifecycle, error) {
+	lifecycle := freshGuestLifecycle{ModuleInstantiations: 1}
+	var (
+		moduleConfig wazerort.ModuleConfig
+		temporary    *workspace.Temporary
+		err          error
+	)
+	if mountWorkspace {
+		moduleConfig, temporary, err = engine.moduleConfig(stderr, stdout)
+	} else {
+		moduleConfig = engine.baseModuleConfig(stderr, stdout)
+	}
+	if err != nil {
+		return nil, lifecycle, err
+	}
+	started := time.Now()
+	module, err := engine.runtime.InstantiateModule(ctx, engine.compiled, moduleConfig)
+	lifecycle.InstantiateNanos = uint64(time.Since(started))
+	if err != nil {
+		_ = closePreparedInstance(&preparedInstance{temporary: temporary})
+		return nil, lifecycle, err
+	}
+	instance := &preparedInstance{module: module, stderr: stderr, stdout: stdout, temporary: temporary}
+	started = time.Now()
+	lifecycle.InitializeCalls = 1
+	if err := callNoArgs(ctx, module, "_initialize"); err != nil {
+		lifecycle.InitializeNanos = uint64(time.Since(started))
+		return instance, lifecycle, err
+	}
+	lifecycle.InitializeNanos = uint64(time.Since(started))
+	started = time.Now()
+	lifecycle.RuntimeInitCalls = 1
+	if err := callStatusWithBytes(ctx, module, "runtime_init", []byte("{}")); err != nil {
+		lifecycle.RuntimeInitNanos = uint64(time.Since(started))
+		return instance, lifecycle, err
+	}
+	lifecycle.RuntimeInitNanos = uint64(time.Since(started))
+	return instance, lifecycle, nil
+}
+
+func closePreparedInstance(instance *preparedInstance) error {
+	if instance == nil {
+		return nil
+	}
+	var moduleErr error
+	if instance.module != nil {
+		moduleErr = instance.module.Close(context.Background())
+	}
+	var temporaryErr error
+	if instance.temporary != nil {
+		temporaryErr = instance.temporary.Close()
+	}
+	return errors.Join(moduleErr, temporaryErr)
 }
 
 type PreparedState struct {
@@ -321,14 +394,14 @@ func New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (*Eng
 	if err := validateProductConstructorConfig(config); err != nil {
 		return nil, err
 	}
-	return newEngine(ctx, wasm, config, nil, nil, nil, nil)
+	return newEngine(ctx, wasm, config, nil, nil, nil, nil, nil)
 }
 
 func NewWithBrokerFactory(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, factory BrokerFactory) (*Engine, error) {
 	if err := validateProductConstructorConfig(config); err != nil {
 		return nil, err
 	}
-	return newEngine(ctx, wasm, config, factory, nil, nil, nil)
+	return newEngine(ctx, wasm, config, factory, nil, nil, nil, nil)
 }
 
 func validateProductConstructorConfig(config runtimeconfig.RunConfig) error {
@@ -341,7 +414,9 @@ func validateProductConstructorConfig(config runtimeconfig.RunConfig) error {
 	return nil
 }
 
-func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, brokerFactory BrokerFactory, binding *workspaceBinding, preparedRegions *preparedregion.PreparedRegionTable, valueSlots *valueslot.Table) (*Engine, error) {
+func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, brokerFactory BrokerFactory, binding *workspaceBinding, preparedRegions *preparedregion.PreparedRegionTable, valueSlots *valueslot.Table, compilationCache wazerort.CompilationCache) (*Engine, error) {
+	// A family supplies its cache here; ordinary Engines pass nil and keep their
+	// existing private wazero compilation engine.
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid run config: %w", err)
 	}
@@ -364,6 +439,9 @@ func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig,
 		}
 	}
 	runtimeConfig := wazerort.NewRuntimeConfig().WithCloseOnContextDone(true).WithMemoryLimitPages(config.MemoryLimitPages)
+	if compilationCache != nil {
+		runtimeConfig = runtimeConfig.WithCompilationCache(compilationCache)
+	}
 	wasmRuntime := wazerort.NewRuntimeWithConfig(ctx, runtimeConfig)
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, wasmRuntime); err != nil {
 		_ = wasmRuntime.Close(ctx)
@@ -389,11 +467,11 @@ func newEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig,
 	return engine, nil
 }
 
-func newPreparedNumpyCopyEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, brokerFactory BrokerFactory, binding *workspaceBinding, input PreparedNumpyInput) (*Engine, error) {
+func newPreparedNumpyCopyEngine(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig, brokerFactory BrokerFactory, binding *workspaceBinding, input PreparedNumpyInput, compilationCache wazerort.CompilationCache) (*Engine, error) {
 	if input.validateForConfig(config) != nil || len(input.body) == 0 || len(input.descriptorJSON) == 0 {
 		return nil, ErrPreparedNumpyInput
 	}
-	engine, err := newEngine(ctx, wasm, config, brokerFactory, binding, nil, nil)
+	engine, err := newEngine(ctx, wasm, config, brokerFactory, binding, nil, nil, compilationCache)
 	if err != nil {
 		return nil, err
 	}
@@ -759,6 +837,8 @@ func (engine *Engine) Close(ctx context.Context) error {
 		engine.preparedNumpyInput.descriptorJSON = nil
 		engine.preparedNumpyInput = nil
 	}
+	// Do not close engine.compiled explicitly: wazero's CompiledModule.Close
+	// calls DeleteCompiledModule, which would evict a family's shared cache entry.
 	runtimeErr := engine.runtime.Close(ctx)
 	valueSlotErr := engine.valueSlots.Close()
 	var workspaceErr error
@@ -810,35 +890,13 @@ func (engine *Engine) newPrepared(ctx context.Context) (*preparedInstance, error
 	defer cancel()
 	stderr := &boundedDiagnostic{}
 	stdout := &forbiddenStdout{}
-	moduleConfig, temporary, err := engine.moduleConfig(stderr, stdout)
+	prepared, _, err := engine.newFreshGuest(prepareContext, stderr, stdout, true)
 	if err != nil {
-		return nil, err
-	}
-	module, err := engine.runtime.InstantiateModule(prepareContext, engine.compiled, moduleConfig)
-	if err != nil {
-		if temporary != nil {
-			_ = temporary.Close()
-		}
-		return nil, err
-	}
-	failed := true
-	defer func() {
-		if failed {
-			_ = module.Close(context.Background())
-			if temporary != nil {
-				_ = temporary.Close()
-			}
-		}
-	}()
-	if err := callNoArgs(prepareContext, module, "_initialize"); err != nil {
-		return nil, withGuestDiagnostic(err, stderr.String())
-	}
-	if err := callStatusWithBytes(prepareContext, module, "runtime_init", []byte("{}")); err != nil {
+		_ = closePreparedInstance(prepared)
 		return nil, withGuestDiagnostic(err, stderr.String())
 	}
 	stderr.Reset()
-	failed = false
-	return &preparedInstance{module: module, stderr: stderr, stdout: stdout, temporary: temporary}, nil
+	return prepared, nil
 }
 
 func (engine *Engine) takePrepared() *preparedInstance {
@@ -919,12 +977,7 @@ func (engine *Engine) closePrepared() error {
 	if prepared == nil {
 		return nil
 	}
-	moduleErr := prepared.module.Close(context.Background())
-	var temporaryErr error
-	if prepared.temporary != nil {
-		temporaryErr = prepared.temporary.Close()
-	}
-	return errors.Join(moduleErr, temporaryErr)
+	return closePreparedInstance(prepared)
 }
 
 func (engine *Engine) AnalyzeSemantic(ctx context.Context, request []byte) (payload []byte, analysisErr error) {
@@ -946,33 +999,26 @@ func (engine *Engine) AnalyzeSemantic(ctx context.Context, request []byte) (payl
 	defer cancel()
 	stderr := &boundedDiagnostic{}
 	stdout := &forbiddenStdout{}
-	started := time.Now()
-	lifecycle.ModuleInstantiations = 1
-	module, err := engine.runtime.InstantiateModule(analysisContext, engine.compiled, engine.baseModuleConfig(stderr, stdout))
-	lifecycle.InstantiateNanos = uint64(time.Since(started))
-	if err != nil {
+	prepared, setup, err := engine.newFreshGuest(analysisContext, stderr, stdout, false)
+	lifecycle.ModuleInstantiations = setup.ModuleInstantiations
+	lifecycle.InstantiateNanos = setup.InstantiateNanos
+	lifecycle.InitializeCalls = setup.InitializeCalls
+	lifecycle.InitializeNanos = setup.InitializeNanos
+	lifecycle.RuntimeInitCalls = setup.RuntimeInitCalls
+	lifecycle.RuntimeInitNanos = setup.RuntimeInitNanos
+	if prepared == nil {
 		return nil, fmt.Errorf("instantiate semantic analyzer Guest: %w", err)
 	}
+	module := prepared.module
 	defer func() {
 		started := time.Now()
-		analysisErr = errors.Join(analysisErr, module.Close(context.Background()))
+		analysisErr = errors.Join(analysisErr, closePreparedInstance(prepared))
 		lifecycle.CloseNanos += uint64(time.Since(started))
 	}()
-	started = time.Now()
-	lifecycle.InitializeCalls = 1
-	if err := callNoArgs(analysisContext, module, "_initialize"); err != nil {
-		lifecycle.InitializeNanos = uint64(time.Since(started))
+	if err != nil {
 		return nil, withGuestDiagnostic(err, stderr.String())
 	}
-	lifecycle.InitializeNanos = uint64(time.Since(started))
-	started = time.Now()
-	lifecycle.RuntimeInitCalls = 1
-	if err := callStatusWithBytes(analysisContext, module, "runtime_init", []byte("{}")); err != nil {
-		lifecycle.RuntimeInitNanos = uint64(time.Since(started))
-		return nil, withGuestDiagnostic(err, stderr.String())
-	}
-	lifecycle.RuntimeInitNanos = uint64(time.Since(started))
-	started = time.Now()
+	started := time.Now()
 	payload, err = callGuestResponse(analysisContext, module, "runtime_analyze_source", request, engine.config.MaxResponseBytes)
 	lifecycle.AnalyzeNanos = uint64(time.Since(started))
 	if err != nil {
@@ -1104,54 +1150,6 @@ func (engine *Engine) RunCapabilitySourcePatchInline(ctx context.Context, reques
 		inlineCapability:       inline,
 	})
 	return passplugin.CapabilitySourcePatchRun{Payload: payload, Patch: inline.patch, Applied: inline.applied && runErr == nil, PassError: inline.passErr}, runErr
-}
-
-// RunValueSlotSourcePatchDerived executes the single v1 data-local reduction adapter.
-// The pass describes one semantic scalar slot; the Host-selected table owns materialization.
-func (engine *Engine) RunValueSlotSourcePatchDerived(ctx context.Context, request []byte, patch sourcepatch.Patch, registration passregistration.Registration) (passplugin.ValueSlotRun, error) {
-	if !engine.config.Mechanisms.ValueSlots || engine.valueSlots == nil || engine.config.ProgramSurface != runtimeconfig.ProgramSurfaceDirect {
-		return engine.runValueSlotFallback(ctx, request)
-	}
-	spec, strategy, backingIdentity, err := engine.valueSlots.Describe("slot-numpy-sum-v1")
-	if !engine.valueSlots.IsCanonicalNumpyInt64Sum() || err != nil || spec.ID != "slot-numpy-sum-v1" || spec.SourceOccurrence != "line-4:result" ||
-		spec.ProducerIdentity != "numpy-int64-sum-v1" || spec.InputIdentity == "" || spec.PrivacyPartition == "" ||
-		spec.Kind != valueslot.KindJSONScalar || spec.MaxBytes > 32 || spec.ClaimPolicy != valueslot.ClaimSingleUse ||
-		spec.MaxClaims != 1 || strategy != valueslot.StrategyInlineJSON || backingIdentity == "" {
-		return engine.runValueSlotFallback(ctx, request)
-	}
-	runRequest, err := runtimeconfig.DecodeRunRequest(request)
-	if err != nil {
-		return passplugin.ValueSlotRun{}, err
-	}
-	if registration.Name() != sourcepatch.DataLocalNumpySumName || registration.Stage() != passregistration.StageWholeProgramPatch ||
-		!patch.Applied() || patch.Validate(runRequest.Code, registration) != nil {
-		return engine.runValueSlotFallback(ctx, request)
-	}
-	if err := engine.ensureWorkspace(); err != nil {
-		return passplugin.ValueSlotRun{}, err
-	}
-	if err := engine.verifyDataLocalValueInput(); err != nil {
-		if errors.Is(err, valueslot.ErrInvalidEntry) {
-			return engine.runValueSlotFallback(ctx, request)
-		}
-		return passplugin.ValueSlotRun{}, err
-	}
-	patchRaw, err := json.Marshal(patch)
-	if err != nil {
-		return passplugin.ValueSlotRun{}, err
-	}
-	prepares := make(chan string)
-	close(prepares)
-	payload, runErr := engine.runWithPrepares(ctx, request, prepares, false, &derivedSelection{
-		export: "runtime_select_source_pass_execution", payload: append(patchRaw, '\n'),
-		sourceValidationExport: "runtime_validate_source_for_patch",
-	})
-	return passplugin.ValueSlotRun{Payload: payload, Applied: runErr == nil}, runErr
-}
-
-func (engine *Engine) runValueSlotFallback(ctx context.Context, request []byte) (passplugin.ValueSlotRun, error) {
-	payload, err := engine.Run(ctx, request, "")
-	return passplugin.ValueSlotRun{Payload: payload}, err
 }
 
 // RunStream keeps one fresh Guest alive while Host-trusted preparation chunks
@@ -1411,7 +1409,7 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 	stdout := &forbiddenStdout{}
 	var temporary *workspace.Temporary
 	var module api.Module
-	initialized := false
+	var freshSetupErr error
 	if prepared != nil {
 		if plmLifecycle != nil {
 			plmLifecycle.PreparedModule = true
@@ -1420,25 +1418,29 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		stdout = prepared.stdout
 		temporary = prepared.temporary
 		module = prepared.module
-		initialized = true
 	} else {
-		moduleConfig, moduleTemporary, moduleErr := engine.moduleConfig(stderr, stdout)
-		if moduleErr != nil {
-			return nil, moduleErr
+		fresh, setup, setupErr := engine.newFreshGuest(runContext, stderr, stdout, true)
+		if fresh == nil {
+			return nil, fmt.Errorf("instantiate guest: %w", setupErr)
 		}
-		temporary = moduleTemporary
-		instantiateStarted := time.Now()
-		module, err = engine.runtime.InstantiateModule(runContext, engine.compiled, moduleConfig)
+		prepared = fresh
+		temporary = fresh.temporary
+		module = fresh.module
 		if plmLifecycle != nil {
-			plmLifecycle.ModuleInstantiations = 1
+			plmLifecycle.ModuleInstantiations = setup.ModuleInstantiations
 			plmLifecycle.FreshModule = true
-			plmLifecycle.InstantiateNanos = uint64(time.Since(instantiateStarted))
-		}
-		if err != nil {
-			if temporary != nil {
-				_ = temporary.Close()
+			plmLifecycle.InstantiateNanos = setup.InstantiateNanos
+			if setupErr == nil || setup.RuntimeInitCalls != 0 {
+				plmLifecycle.InitializeCalls = setup.InitializeCalls
+				plmLifecycle.InitializeNanos = setup.InitializeNanos
 			}
-			return nil, fmt.Errorf("instantiate guest: %w", err)
+			if setupErr == nil {
+				plmLifecycle.RuntimeInitCalls = setup.RuntimeInitCalls
+				plmLifecycle.RuntimeInitNanos = setup.RuntimeInitNanos
+			}
+		}
+		if setupErr != nil {
+			freshSetupErr = setupErr
 		}
 	}
 	if temporary != nil {
@@ -1454,23 +1456,8 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		runContext = withColdIOContinuation(runContext, prepared.cold)
 		defer func() { engine.coldEvidence.set(prepared.cold.finish()) }()
 	}
-	if !initialized {
-		initializeStarted := time.Now()
-		if err := callNoArgs(runContext, module, "_initialize"); err != nil {
-			return nil, withGuestDiagnostic(err, stderr.String())
-		}
-		if plmLifecycle != nil {
-			plmLifecycle.InitializeCalls = 1
-			plmLifecycle.InitializeNanos = uint64(time.Since(initializeStarted))
-		}
-		runtimeInitStarted := time.Now()
-		if err := callStatusWithBytes(runContext, module, "runtime_init", []byte("{}")); err != nil {
-			return nil, withGuestDiagnostic(err, stderr.String())
-		}
-		if plmLifecycle != nil {
-			plmLifecycle.RuntimeInitCalls = 1
-			plmLifecycle.RuntimeInitNanos = uint64(time.Since(runtimeInitStarted))
-		}
+	if freshSetupErr != nil {
+		return nil, withGuestDiagnostic(freshSetupErr, stderr.String())
 	}
 	if engine.preparedNumpyInput != nil {
 		if err := callPreparedNumpyInput(runContext, module, *engine.preparedNumpyInput); err != nil {
@@ -1627,29 +1614,6 @@ prepareComplete:
 		}
 	}
 	return payload, nil
-}
-
-func (engine *Engine) verifyDataLocalValueInput() error {
-	if engine.valueSlots == nil {
-		return nil
-	}
-	spec, _, _, err := engine.valueSlots.Describe("slot-numpy-sum-v1")
-	if errors.Is(err, valueslot.ErrMissingSlot) {
-		return nil
-	}
-	if err != nil || engine.workspaceLease == nil {
-		return valueslot.ErrInvalidEntry
-	}
-	snapshot, err := engine.workspaceLease.Snapshot()
-	if err != nil {
-		return err
-	}
-	for _, entry := range snapshot.Entries {
-		if entry.Path == "input.npy" && entry.Kind == "file" && entry.SHA256 == spec.InputIdentity {
-			return nil
-		}
-	}
-	return valueslot.ErrInvalidEntry
 }
 
 type brokerContextKey struct{}

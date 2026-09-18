@@ -49,7 +49,6 @@ _PREPARED_REGION_HELPER = "__pysolate_materialize_value__"
 _PREPARED_REGION_PAYLOAD_MAX = 256
 _PLM_PREPARE_HELPER = "_pysolate_plm_prepare"
 _PLM_LINEARIZE_HELPER = "_pysolate_plm_linearize"
-_VALUE_SLOT_HELPER = "_pysolate_materialize_slot"
 _plm_occurrence_counts: dict[str, int] = {}
 _plm_pending_slots: dict[str, list[tuple[str, str, str]]] = {}
 _FUTURE_FLAGS = sum(getattr(__future__, name).compiler_flag for name in __future__.all_feature_names)
@@ -382,6 +381,9 @@ def _initialize(config_json: str) -> None:
     plm_source_pass = sys.modules.get(f"{__name__}.plm_source_pass")
     if plm_source_pass is not None:
         plm_source_pass.reset_state()
+    source_pass = sys.modules.get(f"{__name__}.source_pass")
+    if source_pass is not None:
+        source_pass.reset_state()
 
 
 
@@ -924,6 +926,7 @@ def _validate_request_source(request_json: str) -> int:
 def _validate_request_source_for_patch(request_json: str) -> int:
     """Parse and stage original source; selected-tree admission happens once after lowering."""
     global _validated_request_json, _validated_code, _validated_source_tree, _validated_import_globals
+    _validated_source_tree = None
     if not isinstance(request_json, str):
         return _SOURCE_CONTRACT_INVALID
     request, error = _decode_request(request_json)
@@ -1044,11 +1047,6 @@ def _prepare_source_pass_execution(patch_json: str) -> None:
         and patch.get("pass_version") == "pysolate.plm-capability-calls-pass.v1"
     ):
         allowed_runtime_names = frozenset({_PLM_PREPARE_HELPER, _PLM_LINEARIZE_HELPER})
-    elif (
-        patch.get("pass_name") == "data_local_numpy_sum"
-        and patch.get("pass_version") == "pysolate.data-local-numpy-sum-pass.v2"
-    ):
-        allowed_runtime_names = frozenset({_VALUE_SLOT_HELPER})
     _install_derived_tree(tree, request, allowed_runtime_names, preload_derived_imports=True)
 
 
@@ -1166,34 +1164,6 @@ def _linearize_plm_capability(slot_id: str, capability: str, arguments: dict[str
         raise RuntimeError("PLM Host response is invalid") from exc
 
 
-def _materialize_value_slot(slot_id: str) -> Any:
-    if not isinstance(slot_id, str) or not slot_id.startswith("slot-") or len(slot_id) > 128:
-        raise RuntimeError("value-slot materialization is invalid")
-    import _agent_runtime_host  # type: ignore[import-not-found]
-    response = _agent_runtime_host.materialize_slot(slot_id)
-    if not isinstance(response, bytes) or len(response) < 2:
-        raise RuntimeError("value-slot response is invalid")
-    tag, payload = response[0], response[1:]
-    if tag == 2:
-        return bytes(payload)
-    if tag != 1:
-        raise RuntimeError("value-slot strategy is invalid")
-    try:
-        raw = payload.decode("utf-8", "strict")
-        value = json.loads(raw)
-    except (UnicodeDecodeError, TypeError, ValueError) as exc:
-        raise RuntimeError("value-slot scalar payload is invalid") from exc
-    if isinstance(value, bool):
-        canonical = "true" if value else "false"
-    elif isinstance(value, int) and -(1 << 63) <= value <= (1 << 63) - 1:
-        canonical = str(value)
-    else:
-        raise RuntimeError("value-slot scalar payload is invalid")
-    if raw != canonical:
-        raise RuntimeError("value-slot scalar payload is not canonical")
-    return value
-
-
 def _execute(request_json: str) -> str:
     if not isinstance(request_json, str):
         return _encode(_error("invalid_request", "request_json must be a string"))
@@ -1245,7 +1215,6 @@ def _execute(request_json: str) -> str:
         namespace[_PREPARED_REGION_HELPER] = _materialize_prepared_region
         namespace[_PLM_PREPARE_HELPER] = _prepare_plm_capability
         namespace[_PLM_LINEARIZE_HELPER] = _linearize_plm_capability
-        namespace[_VALUE_SLOT_HELPER] = _materialize_value_slot
         main = namespace.get(_WRAPPER_MAIN)
         if not isinstance(main, types.FunctionType):
             raise RuntimeError("agent output wrapper is unavailable")

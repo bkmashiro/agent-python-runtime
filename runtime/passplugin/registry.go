@@ -52,11 +52,6 @@ type CapabilitySourcePatchPlugin interface {
 	HostScheduled() bool
 }
 
-type ValueSlotSourcePatchPlugin interface {
-	SourcePatchPlugin
-	ValueSlotBound() bool
-}
-
 type SourcePatchRunner interface {
 	Run(context.Context, []byte, string) ([]byte, error)
 	RunSourcePatchDerived(context.Context, []byte, sourcepatch.Patch, passregistration.Registration) ([]byte, error)
@@ -72,19 +67,6 @@ type CapabilitySourcePatchRun struct {
 type CapabilitySourcePatchRunner interface {
 	Run(context.Context, []byte, string) ([]byte, error)
 	RunCapabilitySourcePatchInline(context.Context, []byte, passregistration.Registration, string, []sourcepatch.CapabilityProjection) (CapabilitySourcePatchRun, error)
-}
-
-type ValueSlotSourcePatchRunner interface {
-	Run(context.Context, []byte, string) ([]byte, error)
-	RunValueSlotSourcePatchDerived(context.Context, []byte, sourcepatch.Patch, passregistration.Registration) (ValueSlotRun, error)
-	Close(context.Context) error
-}
-
-type ValueSlotSourcePatchRunnerFactory func(context.Context) (ValueSlotSourcePatchRunner, error)
-
-type ValueSlotRun struct {
-	Payload []byte
-	Applied bool
 }
 
 type Execution struct {
@@ -195,13 +177,9 @@ func NewUnifiedCatalog(config UnifiedCatalogConfig) (*Registry, error) {
 	if err != nil {
 		return nil, err
 	}
-	dataLocal, err := sourcepatch.NewDataLocalNumpySum(passregistration.SemanticAnalyzerSHA256)
-	if err != nil {
-		return nil, err
-	}
 	plugins := []Plugin{
 		semanticAdapter, preparedPureAdapter, preparedNumpyAdapter, preparedValue,
-		cse, fold, plmCapabilities, dataLocal,
+		cse, fold, plmCapabilities,
 	}
 	for _, definition := range passregistration.RuntimeOptimizationDefinitions() {
 		registration, registerErr := definition.Register("", runtimeOptimizationConfigSHA256(definition))
@@ -345,7 +323,6 @@ func unifiedRequirements() map[passregistration.Name]runtimeconfig.MechanismSet 
 		sourcepatch.PureScalarCSEName:                 {SemanticAnalysis: true},
 		sourcepatch.PureScalarFoldName:                {SemanticAnalysis: true},
 		sourcepatch.PLMCapabilityCallsName:            {SplitPhaseCalls: true},
-		sourcepatch.DataLocalNumpySumName:             {ValueSlots: true},
 		passregistration.SourceStreamingExecution:     {Streaming: true, PrivateWorkspace: true},
 		passregistration.StreamedChildFanout:          {Streaming: true, PrivateWorkspace: true, ImmutableBranches: true, ChildFanout: true},
 		passregistration.AgentFunctionRetention:       {ImmutableBranches: true, FunctionCache: true},
@@ -539,9 +516,6 @@ func (registry *Registry) Execute(ctx context.Context, name passregistration.Nam
 	if scheduled, ok := plugin.(HostScheduledSourcePatchPlugin); ok && scheduled.HostScheduled() {
 		return Execution{}, ErrUnsupportedStage
 	}
-	if slotBound, ok := plugin.(ValueSlotSourcePatchPlugin); ok && slotBound.ValueSlotBound() {
-		return Execution{}, ErrUnsupportedStage
-	}
 	if !registry.enabled[name] {
 		payload, runErr := runner.Run(ctx, request, "")
 		return Execution{Payload: payload}, runErr
@@ -583,70 +557,4 @@ func (registry *Registry) ExecuteCapabilityHostScheduled(
 	}
 	result, runErr := runner.RunCapabilitySourcePatchInline(ctx, request, plugin.Registration(), trustedPrepare, projections)
 	return Execution{Payload: result.Payload, Patch: result.Patch, Applied: result.Applied, PassError: result.PassError}, runErr
-}
-
-// ExecuteValueSlot selects and validates one fixed value-slot patch before it
-// invokes the selected runner factory. Rejection and producer failure construct
-// only an ordinary runner and execute the unchanged source.
-func (registry *Registry) ExecuteValueSlot(
-	ctx context.Context,
-	name passregistration.Name,
-	transformer sourcepatch.Transformer,
-	baselineFactory ValueSlotSourcePatchRunnerFactory,
-	selectedFactory ValueSlotSourcePatchRunnerFactory,
-	request []byte,
-	trustedPrepare string,
-) (Execution, error) {
-	if transformer == nil || baselineFactory == nil || selectedFactory == nil {
-		return Execution{}, ErrInvalidPlugin
-	}
-	runRequest, err := runtimeconfig.DecodeRunRequest(request)
-	if err != nil {
-		return Execution{}, err
-	}
-	plugin, exists := registry.Lookup(name)
-	if !exists {
-		return Execution{}, ErrInvalidPlugin
-	}
-	slotPlugin, valueSlotBound := plugin.(ValueSlotSourcePatchPlugin)
-	if !valueSlotBound || !slotPlugin.ValueSlotBound() || plugin.Registration().Stage() != passregistration.StageWholeProgramPatch {
-		return Execution{}, ErrUnsupportedStage
-	}
-	if !registry.enabled[name] {
-		payload, runErr := runValueSlotBaseline(ctx, baselineFactory, request, trustedPrepare)
-		return Execution{Payload: payload}, runErr
-	}
-	patch, passErr := slotPlugin.Transform(ctx, transformer, runRequest.Code)
-	if passErr != nil || !patch.Applied() {
-		payload, runErr := runValueSlotBaseline(ctx, baselineFactory, request, trustedPrepare)
-		return Execution{Payload: payload, Patch: patch, PassError: passErr}, runErr
-	}
-	if validationErr := patch.Validate(runRequest.Code, plugin.Registration()); validationErr != nil {
-		payload, runErr := runValueSlotBaseline(ctx, baselineFactory, request, trustedPrepare)
-		return Execution{Payload: payload, Patch: patch, PassError: validationErr}, runErr
-	}
-	runner, factoryErr := selectedFactory(ctx)
-	if factoryErr != nil || runner == nil {
-		if factoryErr == nil {
-			factoryErr = ErrInvalidPlugin
-		}
-		payload, runErr := runValueSlotBaseline(ctx, baselineFactory, request, trustedPrepare)
-		return Execution{Payload: payload, Patch: patch, PassError: factoryErr}, runErr
-	}
-	result, runErr := runner.RunValueSlotSourcePatchDerived(ctx, request, patch, plugin.Registration())
-	closeErr := runner.Close(ctx)
-	runErr = errors.Join(runErr, closeErr)
-	return Execution{Payload: result.Payload, Patch: patch, Applied: result.Applied && runErr == nil}, runErr
-}
-
-func runValueSlotBaseline(ctx context.Context, factory ValueSlotSourcePatchRunnerFactory, request []byte, trustedPrepare string) ([]byte, error) {
-	runner, err := factory(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if runner == nil {
-		return nil, ErrInvalidPlugin
-	}
-	payload, runErr := runner.Run(ctx, request, trustedPrepare)
-	return payload, errors.Join(runErr, runner.Close(ctx))
 }

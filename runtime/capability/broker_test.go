@@ -100,6 +100,29 @@ func TestBrokerDeniesUnregisteredTool(t *testing.T) {
 	}
 }
 
+func TestBrokerRawCallStillRejectsMalformedJSONBeforeAdmission(t *testing.T) {
+	var handlerCalls atomic.Uint32
+	registry := capability.NewRegistry()
+	if err := registry.Register(stagedTestSpec(), basicGrant(t), capability.HandlerFunc(func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		handlerCalls.Add(1)
+		return json.RawMessage(`{"text":"unexpected"}`), nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := registry.Seal(capability.PlanConfig{MaxCalls: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "raw-boundary", Plan: plan})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := broker.Call(context.Background(), []byte(`{"call_id":"one","call_id":"two","capability":"workspace.read_text","arguments":{"path":"note.txt"}}`))
+	if err != nil || !containsCode(response, "invalid_arguments") || broker.Calls() != 0 || handlerCalls.Load() != 0 {
+		t.Fatalf("malformed response=%s err=%v calls=%d handlers=%d", response, err, broker.Calls(), handlerCalls.Load())
+	}
+}
+
 func TestStreamingBrokerDeniesWriteEvenThroughRawBridge(t *testing.T) {
 	var calls atomic.Uint32
 	registry := capability.NewRegistry()

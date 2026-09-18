@@ -171,7 +171,7 @@ func (family *PreparedFamily) NewRunner(ctx context.Context, config PreparedRunn
 	}
 	var delegate *Engine
 	if family.disposition == PreparedDispositionPrivateCopy {
-		delegate, err = newPreparedNumpyCopyEngine(ctx, family.wasm, childConfig, brokerFactory, binding, family.input)
+		delegate, err = newPreparedNumpyCopyEngine(ctx, family.wasm, childConfig, brokerFactory, binding, family.input, family.compilationCache)
 	} else {
 		delegate, err = family.newCOWChildEngine(ctx, childConfig, brokerFactory, binding)
 	}
@@ -229,7 +229,7 @@ func (family *PreparedFamily) newCOWChildEngine(ctx context.Context, config runt
 	if shared == nil || shared.imageState().PreparedInputSHA256 != family.input.identity {
 		return nil, ErrPreparedFamilyDrift
 	}
-	child, err := newEngine(ctx, family.wasm, config, brokerFactory, binding, nil, nil)
+	child, err := newEngine(ctx, family.wasm, config, brokerFactory, binding, nil, nil, family.compilationCache)
 	if err != nil {
 		return nil, err
 	}
@@ -332,11 +332,17 @@ func (family *PreparedFamily) Close(ctx context.Context) error {
 			return err
 		}
 	}
+	if family.compilationCache != nil {
+		if err := family.compilationCache.Close(ctx); err != nil {
+			return err
+		}
+	}
 	family.mu.Lock()
 	family.input.body = nil
 	family.wasm = nil
 	family.parent = nil
 	family.runners = nil
+	family.compilationCache = nil
 	family.invocations = nil
 	family.invocationIDs = nil
 	family.executionIDs = nil

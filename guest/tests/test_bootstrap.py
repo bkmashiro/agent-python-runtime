@@ -24,18 +24,6 @@ def load_bootstrap():
 
 
 class BootstrapTests(unittest.TestCase):
-    def test_value_slot_helper_reconstructs_scalar_or_private_bytes(self):
-        values = iter((b"\x017", b"\x02abc"))
-        self.native_stub.materialize_slot = lambda slot: next(values)  # type: ignore[attr-defined]
-        self.assertEqual(7, self.runtime._materialize_value_slot("slot-seven"))
-        self.assertEqual(b"abc", self.runtime._materialize_value_slot("slot-bytes"))
-
-    def test_value_slot_helper_rejects_noncanonical_or_unknown_payload(self):
-        for payload in (b"\x0107", b"\x011.0", b"\x01\"text\"", b"\x03abc"):
-            with self.subTest(payload=payload):
-                self.native_stub.materialize_slot = lambda slot, value=payload: value  # type: ignore[attr-defined]
-                with self.assertRaises(RuntimeError):
-                    self.runtime._materialize_value_slot("slot-invalid")
 
     def test_plm_helpers_recompute_actual_request_at_original_linearization_point(self):
         prepared = []
@@ -366,7 +354,6 @@ class BootstrapTests(unittest.TestCase):
         for helper in (
             "_pysolate_plm_prepare",
             "_pysolate_plm_linearize",
-            "_pysolate_materialize_slot",
         ):
             with self.subTest(helper=helper):
                 runtime = load_bootstrap()
@@ -498,6 +485,47 @@ class BootstrapTests(unittest.TestCase):
             setattr(self.runtime.ast, "parse", parse)
 
         self.assertEqual(1, parse_calls)
+
+    def test_generic_patch_execution_reuses_validated_ast_once(self):
+        source = "seed = 7\nfolded = seed * seed + 3\nresult = folded\n"
+        request = {"run_id": "single-parse-generic", "code": source, "inputs": {}}
+        raw = json.dumps(request)
+        patch_request = json.dumps({
+            "pass_name": "pure_scalar_fold",
+            "pass_version": "pysolate.pure-scalar-fold-pass.v1",
+            "registration_sha256": "sha256:" + "a" * 64,
+            "source": source,
+        }, sort_keys=True, separators=(",", ":"))
+        parse = self.runtime.ast.parse
+        parse_calls = 0
+
+        def counted_parse(*args, **kwargs):
+            nonlocal parse_calls
+            parse_calls += 1
+            return parse(*args, **kwargs)
+
+        setattr(self.runtime.ast, "parse", counted_parse)
+        try:
+            self.assertEqual(0, self.runtime._validate_request_source_for_patch(raw))
+            patch = self.runtime._transform_source_pass(patch_request)
+            self.runtime._prepare_source_pass_execution(patch)
+        finally:
+            setattr(self.runtime.ast, "parse", parse)
+
+        self.assertEqual(2, parse_calls)
+
+    def test_source_pass_transform_rejects_source_mismatch_at_bootstrap_boundary(self):
+        source = "seed = 7\nfolded = seed * seed + 3\nresult = folded\n"
+        request = {"run_id": "source-mismatch", "code": source, "inputs": {}}
+        self.assertEqual(0, self.runtime._validate_request_source_for_patch(json.dumps(request)))
+        patch_request = {
+            "pass_name": "pure_scalar_fold",
+            "pass_version": "pysolate.pure-scalar-fold-pass.v1",
+            "registration_sha256": "sha256:" + "a" * 64,
+            "source": source.replace("seed = 7", "seed = 8"),
+        }
+        with self.assertRaisesRegex(ValueError, "does not match the admitted request"):
+            self.runtime._transform_source_pass(json.dumps(patch_request, sort_keys=True, separators=(",", ":")))
 
     def test_patch_fallback_compiles_original_once(self):
         request = {"run_id": "single-compile-fallback", "code": "result = 7\n", "inputs": {}}

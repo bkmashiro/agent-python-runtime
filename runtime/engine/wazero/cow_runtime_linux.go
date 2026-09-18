@@ -143,18 +143,14 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 	lifecycle.ModuleInstantiations++
 	module, err := instantiateCOWModule(ctx, engine.runtime, engine.compiled, moduleConfig, allocator)
 	if err != nil {
-		if temporary != nil {
-			_ = temporary.Close()
-		}
+		_ = closePreparedInstance(&preparedInstance{temporary: temporary})
 		return nil, lifecycle, fmt.Errorf("instantiate COW guest: %w", err)
 	}
+	instance := &preparedInstance{module: module, stderr: stderr, stdout: stdout, temporary: temporary}
 	failed := true
 	defer func() {
 		if failed {
-			_ = module.Close(context.Background())
-			if temporary != nil {
-				_ = temporary.Close()
-			}
+			_ = closePreparedInstance(instance)
 		}
 	}()
 	memory := module.Memory()
@@ -196,7 +192,8 @@ func (runtime *linuxCOWPreparedRuntime) prepare(ctx context.Context, engine *Eng
 		cold = continuation
 	}
 	failed = false
-	return &preparedInstance{module: module, stderr: stderr, stdout: stdout, temporary: temporary, cold: cold}, lifecycle, nil
+	instance.cold = cold
+	return instance, lifecycle, nil
 }
 
 func (runtime *linuxCOWPreparedRuntime) close() error {
@@ -215,16 +212,4 @@ func (runtime *linuxCOWPreparedRuntime) imageState() PreparedImageState {
 	state.ParentTrustedPrepareSHA256 = runtime.parentTrustedPrepareSHA256
 	state.PreparedInputSHA256 = runtime.preparedInputSHA256
 	return state
-}
-
-func closePreparedInstance(instance *preparedInstance) error {
-	if instance == nil {
-		return nil
-	}
-	moduleErr := instance.module.Close(context.Background())
-	var temporaryErr error
-	if instance.temporary != nil {
-		temporaryErr = instance.temporary.Close()
-	}
-	return errors.Join(moduleErr, temporaryErr)
 }

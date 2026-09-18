@@ -159,7 +159,7 @@ func executeBaselineCandidate(ctx context.Context, candidateID string, artifact 
 	}
 	request, _ := json.Marshal(map[string]any{"run_id": "baseline-" + candidateID, "code": source, "inputs": map[string]any{"origin": origin}})
 	recorder.record(Event{Type: "guest.start", ActorID: candidateID, LogicalID: "baseline-" + candidateID, PhysicalID: "baseline-guest-" + candidateID})
-	result, err := streaming.Execute(ctx, runner, attempt, request, plan.StreamingPythonPrelude())
+	result, err := streaming.ExecuteObserved(ctx, runner, attempt, request, plan.StreamingPythonPrelude(), nil)
 	if err != nil {
 		return CandidateStageOutput{}, err
 	}

@@ -9,11 +9,11 @@ const (
 	CanonicalNumpyInt64FileBytes  = 8*1024*1024 + 128
 	CanonicalNumpyInt64FileSHA256 = "sha256:390bd7abd4f26dfdf3440f060f77bd02526e97e0a46838337f56cb8ef978af7e"
 	CanonicalNumpyInt64Sum        = "549755289600"
-	dataLocalNumpyInt64SumProof   = "pysolate.data-local-numpy-int64-sum-proof.v1"
+	canonicalNumpyInt64SumProof   = "pysolate.canonical-numpy-int64-sum-proof.v1"
 )
 
-// NewCanonicalNumpyInt64SumTable is the only producer for the fixed
-// data_local_numpy_sum pass. It accepts one exact immutable fixture revision;
+// NewCanonicalNumpyInt64SumTable is the producer for the fixed prepared-value
+// fixture. It accepts one exact immutable fixture revision;
 // callers cannot attest an arbitrary scalar by copying metadata strings.
 func NewCanonicalNumpyInt64SumTable(input []byte, privacyPartition string) (*Table, error) {
 	if len(input) != CanonicalNumpyInt64FileBytes || fileDigest(input) != CanonicalNumpyInt64FileSHA256 {
@@ -38,7 +38,7 @@ func NewCanonicalNumpyInt64SumTable(input []byte, privacyPartition string) (*Tab
 	if err != nil {
 		return nil, err
 	}
-	table.adapterProof = dataLocalNumpyInt64SumProof
+	table.adapterProof = canonicalNumpyInt64SumProof
 	return table, nil
 }
 
@@ -48,7 +48,7 @@ func (table *Table) IsCanonicalNumpyInt64Sum() bool {
 	}
 	table.mu.Lock()
 	defer table.mu.Unlock()
-	return !table.closed && table.adapterProof == dataLocalNumpyInt64SumProof
+	return !table.closed && table.adapterProof == canonicalNumpyInt64SumProof
 }
 
 func fileDigest(input []byte) string {

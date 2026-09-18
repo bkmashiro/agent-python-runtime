@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
@@ -17,8 +18,8 @@ var ErrUnverifiedAnalysis = errors.New("semantic analysis provenance is unverifi
 // is not a signature or trust anchor against the Host application itself: the Host
 // selects the artifact and remains in the TCB.
 type VerifiedAnalysis struct {
-	analysisJSON []byte
-	properties   enginecontract.Properties
+	analysis   *Analysis
+	properties enginecontract.Properties
 }
 
 // AnalyzeVerified accepts only the concrete target-Guest Wazero engine. Arbitrary
@@ -58,74 +59,86 @@ func analyzeVerified(ctx context.Context, runner enginecontract.Runner, request 
 	if after := cloneProperties(runner.Properties()); !reflect.DeepEqual(properties, after) {
 		return VerifiedAnalysis{}, ErrAnalyzerEngineBinding
 	}
-	_, encoded, err := analysis.Identity()
-	if err != nil {
-		return VerifiedAnalysis{}, err
-	}
-	return VerifiedAnalysis{analysisJSON: encoded, properties: properties}, nil
+	frozen := cloneAnalysis(analysis)
+	return VerifiedAnalysis{analysis: &frozen, properties: properties}, nil
 }
 
 func (verified VerifiedAnalysis) Analysis() (Analysis, error) {
-	if len(verified.analysisJSON) == 0 {
+	if verified.analysis == nil {
 		return Analysis{}, ErrUnverifiedAnalysis
 	}
-	analysis, err := DecodeAnalysis(verified.analysisJSON)
-	if err != nil {
-		return Analysis{}, ErrUnverifiedAnalysis
-	}
-	return analysis, nil
+	return cloneAnalysis(*verified.analysis), nil
 }
 
 // VerifiedWholeRunPlan binds one validated Plan to the exact verified analysis
 // that produced its embedded report. Its fields are intentionally inaccessible.
 type VerifiedWholeRunPlan struct {
-	analysisJSON []byte
-	planJSON     []byte
-	properties   enginecontract.Properties
+	plan       *Plan
+	properties enginecontract.Properties
 }
 
 func BindVerifiedWholeRunPlan(verified VerifiedAnalysis, plan Plan) (VerifiedWholeRunPlan, error) {
-	analysis, err := verified.Analysis()
-	if err != nil || plan.Validate() != nil {
+	if verified.analysis == nil {
 		return VerifiedWholeRunPlan{}, ErrUnverifiedAnalysis
 	}
-	analysisIdentity, _, err := analysis.Identity()
-	if err != nil {
-		return VerifiedWholeRunPlan{}, ErrUnverifiedAnalysis
-	}
-	planAnalysisIdentity, _, err := plan.Analysis.Identity()
-	if err != nil || planAnalysisIdentity != analysisIdentity {
-		return VerifiedWholeRunPlan{}, ErrUnverifiedAnalysis
-	}
-	_, planJSON, err := plan.Identity()
-	if err != nil {
+	frozenPlan := clonePlan(plan)
+	if frozenPlan.Validate() != nil || !reflect.DeepEqual(*verified.analysis, frozenPlan.Analysis) {
 		return VerifiedWholeRunPlan{}, ErrUnverifiedAnalysis
 	}
 	return VerifiedWholeRunPlan{
-		analysisJSON: append([]byte(nil), verified.analysisJSON...),
-		planJSON:     planJSON,
-		properties:   cloneProperties(verified.properties),
+		plan:       &frozenPlan,
+		properties: cloneProperties(verified.properties),
 	}, nil
 }
 
 func (verified VerifiedWholeRunPlan) Bound() (Analysis, Plan, enginecontract.Properties, error) {
-	if len(verified.analysisJSON) == 0 || len(verified.planJSON) == 0 {
+	if verified.plan == nil {
 		return Analysis{}, Plan{}, enginecontract.Properties{}, ErrUnverifiedAnalysis
 	}
-	analysis, err := DecodeAnalysis(verified.analysisJSON)
-	if err != nil {
-		return Analysis{}, Plan{}, enginecontract.Properties{}, ErrUnverifiedAnalysis
+	return cloneAnalysis(verified.plan.Analysis), clonePlan(*verified.plan), cloneProperties(verified.properties), nil
+}
+
+func cloneAnalysis(value Analysis) Analysis {
+	// Analysis has no map fields; copy every mutable slice, including the raw
+	// canonical-argument bytes, so returned reports cannot alias the handle.
+	cloned := value
+	cloned.Functions = slices.Clone(value.Functions)
+	for index := range cloned.Functions {
+		cloned.Functions[index].Calls = slices.Clone(value.Functions[index].Calls)
+		cloned.Functions[index].DirectCapabilities = slices.Clone(value.Functions[index].DirectCapabilities)
 	}
-	plan, err := DecodePlan(verified.planJSON)
-	if err != nil {
-		return Analysis{}, Plan{}, enginecontract.Properties{}, ErrUnverifiedAnalysis
+	cloned.Barriers = slices.Clone(value.Barriers)
+	cloned.CallSites = slices.Clone(value.CallSites)
+	for index := range cloned.CallSites {
+		cloned.CallSites[index].CanonicalArguments = slices.Clone(value.CallSites[index].CanonicalArguments)
 	}
-	return analysis, plan, cloneProperties(verified.properties), nil
+	cloned.CandidateRegions = slices.Clone(value.CandidateRegions)
+	for index := range cloned.CandidateRegions {
+		cloned.CandidateRegions[index].ControlPredecessors = slices.Clone(value.CandidateRegions[index].ControlPredecessors)
+		cloned.CandidateRegions[index].DataDependencies = slices.Clone(value.CandidateRegions[index].DataDependencies)
+		cloned.CandidateRegions[index].LiveIns = slices.Clone(value.CandidateRegions[index].LiveIns)
+		cloned.CandidateRegions[index].LiveOuts = slices.Clone(value.CandidateRegions[index].LiveOuts)
+		cloned.CandidateRegions[index].CapabilityOccurrences = slices.Clone(value.CandidateRegions[index].CapabilityOccurrences)
+		cloned.CandidateRegions[index].Barriers = slices.Clone(value.CandidateRegions[index].Barriers)
+		cloned.CandidateRegions[index].RejectionReasons = slices.Clone(value.CandidateRegions[index].RejectionReasons)
+	}
+	return cloned
+}
+
+func clonePlan(value Plan) Plan {
+	cloned := value
+	cloned.Analysis = cloneAnalysis(value.Analysis)
+	cloned.Regions = slices.Clone(value.Regions)
+	for index := range cloned.Regions {
+		cloned.Regions[index].Dependencies = slices.Clone(value.Regions[index].Dependencies)
+		cloned.Regions[index].RejectionReasons = slices.Clone(value.Regions[index].RejectionReasons)
+	}
+	return cloned
 }
 
 func cloneProperties(properties enginecontract.Properties) enginecontract.Properties {
-	properties.AllowedImports = append([]string(nil), properties.AllowedImports...)
-	properties.AvailableImports = append([]string(nil), properties.AvailableImports...)
-	properties.QualifiedImports = append([]string(nil), properties.QualifiedImports...)
+	properties.AllowedImports = slices.Clone(properties.AllowedImports)
+	properties.AvailableImports = slices.Clone(properties.AvailableImports)
+	properties.QualifiedImports = slices.Clone(properties.QualifiedImports)
 	return properties
 }

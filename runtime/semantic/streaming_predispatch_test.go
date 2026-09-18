@@ -168,11 +168,7 @@ func streamingPrefixAnalysis(t *testing.T, plan *capability.Plan, prefixSource s
 	}
 	prefixSiteID := analysis.CallSites[0].ID
 	analysis.SourceSHA256 = digestText(prefixSource)
-	_, prefixJSON, err := analysis.Identity()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return VerifiedAnalysis{analysisJSON: prefixJSON}, prefixSiteID
+	return VerifiedAnalysis{analysis: &analysis}, prefixSiteID
 }
 
 func TestStreamingPLMPrefixAdmissionPromotesAndReusesFinalSlot(t *testing.T) {
@@ -366,11 +362,7 @@ func TestCanPreissueStreamingPrefixCrossesOnlySafeFunctionDeclarations(t *testin
 	sort.Slice(analysis.CandidateRegions[0].RejectionReasons, func(i, j int) bool {
 		return analysis.CandidateRegions[0].RejectionReasons[i] < analysis.CandidateRegions[0].RejectionReasons[j]
 	})
-	_, encoded, err := analysis.Identity()
-	if err != nil {
-		t.Fatal(err)
-	}
-	unsafe := VerifiedAnalysis{analysisJSON: encoded}
+	unsafe := VerifiedAnalysis{analysis: &analysis}
 	if _, ok := CanPreissueStreamingPrefix(unsafe, plan, site.ID, legalityContext()).QualifiedCall(); ok {
 		t.Fatal("streaming prefix crossed an unsafe function declaration")
 	}
@@ -379,11 +371,7 @@ func TestCanPreissueStreamingPrefixCrossesOnlySafeFunctionDeclarations(t *testin
 		t.Fatal(err)
 	}
 	analysis.CandidateRegions[0].RejectionReasons = []CandidateRejection{CandidateRejectDeclaration}
-	_, encoded, err = analysis.Identity()
-	if err != nil {
-		t.Fatal(err)
-	}
-	genericDeclaration := VerifiedAnalysis{analysisJSON: encoded}
+	genericDeclaration := VerifiedAnalysis{analysis: &analysis}
 	if _, ok := CanPreissueStreamingPrefix(genericDeclaration, plan, site.ID, legalityContext()).QualifiedCall(); ok {
 		t.Fatal("streaming prefix crossed a generic declaration such as an import")
 	}
@@ -419,11 +407,7 @@ func streamingLookaheadWithDeclaration(t *testing.T, plan *capability.Plan) (Ver
 	analysis.ModuleSpan = SourceSpan{StartLine: 1, StartColumn: 0, EndLine: 3, EndColumn: 30}
 	site.Span.StartLine++
 	site.Span.EndLine++
-	_, encoded, err := analysis.Identity()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return VerifiedAnalysis{analysisJSON: encoded}, site
+	return VerifiedAnalysis{analysis: &analysis}, site
 }
 
 func streamingLookaheadAnalysis(t *testing.T, plan *capability.Plan, opaqueControl bool) (VerifiedAnalysis, CallSite) {
@@ -467,11 +451,7 @@ func streamingLookaheadAnalysis(t *testing.T, plan *capability.Plan, opaqueContr
 	sort.Slice(analysis.CallSites, func(i, j int) bool { return analysis.CallSites[i].ID < analysis.CallSites[j].ID })
 	analysis.CandidateRegions = []CandidateRegion{regionOne, regionTwo}
 	analysis.CandidateRegionCount = 2
-	_, encoded, err := analysis.Identity()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return VerifiedAnalysis{analysisJSON: encoded}, second
+	return VerifiedAnalysis{analysis: &analysis}, second
 }
 
 func streamingTestCall(t *testing.T, base QualifiedCall, plan *capability.Plan, line int, key string) QualifiedCall {

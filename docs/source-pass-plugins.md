@@ -54,13 +54,13 @@ The prepared-value binding is analyzer-free. PLM asks the final exact Guest to t
 
 ## Unified optimization catalog
 
-`passplugin.NewDefaultUnifiedCatalog` exposes 17 default-off entries. It is a lookup
+`passplugin.NewDefaultUnifiedCatalog` exposes 16 default-off entries. It is a lookup
 catalog, not one `passpipeline.Pipeline`; any concrete pipeline instance selects at most
 the pipeline's bounded 16 entries:
 
 - the retained stage adapters for semantic analysis, prepared regions and Run bindings;
-- `prepared_pure_region`, `pure_scalar_cse`, `pure_scalar_fold`,
-  `plm_capability_calls` and `data_local_numpy_sum`;
+- `prepared_pure_region`, `pure_scalar_cse`, `pure_scalar_fold` and
+  `plm_capability_calls`;
 - nine `runtime_lowering` passes for historical research streaming, child fanout, Agent Function retention,
   single-flight, fresh workflow re-evaluation, prepared Runtime instantiation, private-memory COW,
   cold-I/O residency and semantic whole-Run reuse.
@@ -104,7 +104,7 @@ after derived execution begins.
 | `pure_scalar_cse` | `whole_program_patch` | runnable source-patch plugin |
 | `pure_scalar_fold` | `whole_program_patch` | runnable source-patch plugin |
 | `plm_capability_calls` | `whole_program_patch` | Plan-bound Prepare/Linearize/Materialize lowering in the final Guest |
-| `data_local_numpy_sum` | `whole_program_patch` | historical analyzer-driven ValueSlot route; superseded by direct binding |
+
 
 ## `plm_capability_calls` v1
 

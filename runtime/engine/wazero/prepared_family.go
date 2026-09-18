@@ -10,6 +10,7 @@ import (
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
+	wazerort "github.com/tetratelabs/wazero"
 )
 
 // PreparedFamilyMode selects the Host-side physical preparation strategy.
@@ -110,16 +111,18 @@ type PreparedFamily struct {
 	identity      string
 	disposition   PreparedPhysicalDisposition
 	lifecycle     *preparedFamilyLifecycle
-	parent        *Engine
-	runners       map[uint64]*preparedFamilyRunner
-	invocations   map[uint64]runtimeconfig.InvocationRef
-	records       map[uint64]PreparedMemberRecord
-	invocationIDs map[string]struct{}
-	executionIDs  map[string]struct{}
-	workspaceRefs map[string]struct{}
-	brokers       map[*capability.Broker]struct{}
-	plans         map[*capability.Plan]struct{}
-	closed        bool
+	// Owned by the family and closed after all parent/child runtimes retire.
+	compilationCache wazerort.CompilationCache
+	parent           *Engine
+	runners          map[uint64]*preparedFamilyRunner
+	invocations      map[uint64]runtimeconfig.InvocationRef
+	records          map[uint64]PreparedMemberRecord
+	invocationIDs    map[string]struct{}
+	executionIDs     map[string]struct{}
+	workspaceRefs    map[string]struct{}
+	brokers          map[*capability.Broker]struct{}
+	plans            map[*capability.Plan]struct{}
+	closed           bool
 }
 
 // PrepareNumpyFamily seals one bounded ndarray input for later fresh consumers.
@@ -147,14 +150,19 @@ func PrepareNumpyFamily(ctx context.Context, wasm []byte, config PreparedFamilyC
 	}
 	family := &PreparedFamily{
 		wasm: append([]byte(nil), wasm...), imageConfig: imageConfig, input: input, identity: identity,
-		disposition: disposition, lifecycle: lifecycle, runners: make(map[uint64]*preparedFamilyRunner),
+		disposition: disposition, lifecycle: lifecycle, compilationCache: wazerort.NewCompilationCache(), runners: make(map[uint64]*preparedFamilyRunner),
 		invocations: make(map[uint64]runtimeconfig.InvocationRef), records: make(map[uint64]PreparedMemberRecord),
 		invocationIDs: make(map[string]struct{}), executionIDs: make(map[string]struct{}), workspaceRefs: make(map[string]struct{}),
 		brokers: make(map[*capability.Broker]struct{}), plans: make(map[*capability.Plan]struct{}),
 	}
 	if disposition == PreparedDispositionPrivateCOW {
-		parent, err := New(ctx, family.wasm, imageConfig)
+		if err := validateProductConstructorConfig(imageConfig); err != nil {
+			_ = family.compilationCache.Close(context.Background())
+			return nil, err
+		}
+		parent, err := newEngine(ctx, family.wasm, imageConfig, nil, nil, nil, nil, family.compilationCache)
 		if err != nil {
+			_ = family.compilationCache.Close(context.Background())
 			return nil, err
 		}
 		if err := parent.PrepareNumpyCOWInput(ctx, input); err != nil {
@@ -165,7 +173,7 @@ func PrepareNumpyFamily(ctx context.Context, wasm []byte, config PreparedFamilyC
 				family.imageConfig.Mechanisms.MemoryCOW = false
 				return family, nil
 			}
-			return nil, errors.Join(err, closeErr)
+			return nil, errors.Join(err, closeErr, family.compilationCache.Close(context.Background()))
 		}
 		family.parent = parent
 		family.input.body = nil

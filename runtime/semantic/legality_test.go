@@ -166,11 +166,7 @@ func TestCanReuseWholeRunMintsOnlyExactEffectFreeCanonicalPlan(t *testing.T) {
 	analysis.CallSites = []CallSite{}
 	analysis.CandidateRegions[0].Effects = EffectSummary{}
 	analysis.CandidateRegions[0].CapabilityOccurrences = []string{}
-	_, encoded, err := analysis.Identity()
-	if err != nil {
-		t.Fatal(err)
-	}
-	verifiedAnalysis = VerifiedAnalysis{analysisJSON: encoded}
+	verifiedAnalysis = VerifiedAnalysis{analysis: &analysis}
 	plan, _, err := BuildWholeRunPlan(analysis, WholeRunConfig{
 		Dependencies:    []Dependency{{Kind: DependencyCanonicalInputs, IdentitySHA256: legalityDigest("inputs")}},
 		InputsCanonical: true, OutputsCanonical: true,
@@ -198,11 +194,7 @@ func TestCanReuseWholeRunMintsOnlyExactEffectFreeCanonicalPlan(t *testing.T) {
 	unsafe := analysis
 	unsafe.ModuleEffects.MayObserveLive = true
 	unsafe.CandidateRegions[0].Effects.MayObserveLive = true
-	_, unsafeEncoded, err := unsafe.Identity()
-	if err != nil {
-		t.Fatal(err)
-	}
-	unsafeVerified := VerifiedAnalysis{analysisJSON: unsafeEncoded}
+	unsafeVerified := VerifiedAnalysis{analysis: &unsafe}
 	unsafePlan, _, err := BuildWholeRunPlan(unsafe, WholeRunConfig{InputsCanonical: true, OutputsCanonical: true})
 	if err != nil {
 		t.Fatal(err)
@@ -276,11 +268,7 @@ func legalityVerifiedAnalysis(t *testing.T, plan *capability.Plan, necessarilyRe
 			CapabilityOccurrences: []string{site.ID}, Barriers: []BarrierCode{}, RejectionReasons: []CandidateRejection{},
 		}},
 	}
-	_, encoded, err := analysis.Identity()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return VerifiedAnalysis{analysisJSON: encoded}, site
+	return VerifiedAnalysis{analysis: &analysis}, site
 }
 
 func legalityVerifiedTwoReadPrefix(t *testing.T, plan *capability.Plan) (VerifiedAnalysis, CallSite) {
@@ -323,11 +311,7 @@ func legalityVerifiedTwoReadPrefix(t *testing.T, plan *capability.Plan) (Verifie
 			region(secondRegionID, SourceSpan{StartLine: 2, StartColumn: 0, EndLine: 2, EndColumn: 28}, second.ID, []string{firstRegionID}),
 		},
 	}
-	_, encoded, err := analysis.Identity()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return VerifiedAnalysis{analysisJSON: encoded}, second
+	return VerifiedAnalysis{analysis: &analysis}, second
 }
 
 type legalityPLMAdapter struct{}

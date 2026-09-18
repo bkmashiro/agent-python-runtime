@@ -88,7 +88,7 @@ func runPreparedCopy(t *testing.T, artifact []byte, profile *runtimeconfig.Execu
 	t.Helper()
 	config := runtimeconfig.DefaultRunConfig()
 	config.ExecutionProfile = profile
-	runner, err := newPreparedNumpyCopyEngine(context.Background(), artifact, config, nil, nil, input)
+	runner, err := newPreparedNumpyCopyEngine(context.Background(), artifact, config, nil, nil, input, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

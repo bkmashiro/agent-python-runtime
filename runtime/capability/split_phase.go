@@ -129,7 +129,7 @@ func NewSplitPhaseTable(owner *Broker, limits SplitPhaseLimits) (*SplitPhaseTabl
 		entriesBySlot: make(map[string]*splitPhaseEntry, limits.MaxCalls),
 		entriesByCall: make(map[string]*splitPhaseEntry, limits.MaxCalls),
 	}
-	if err := owner.AttachStagedClaimer(table); err != nil {
+	if err := owner.attachSplitPhaseTable(table); err != nil {
 		return nil, err
 	}
 	return table, nil
@@ -197,7 +197,8 @@ func (table *SplitPhaseTable) PrepareRuntimePLM(ctx context.Context, slotID stri
 		},
 		Temporal: TemporalEvidence{Mode: contract.Temporal, ResourceIdentity: resourceIdentity},
 	}
-	return table.PrepareOrReuse(ctx, slotID, raw, contract, certificate)
+	call.Arguments = arguments
+	return table.preparePrepared(ctx, slotID, call, prepared, contract, certificate)
 }
 
 // PromoteRuntimePLMSources atomically closes prefix-prepared candidates over
@@ -314,11 +315,21 @@ func (table *SplitPhaseTable) prepare(ctx context.Context, slotID string, raw []
 		return ErrSplitPhaseUnavailable
 	}
 	canonicalArguments := preparedPLM.Arguments()
-	costUnits, maxResultBytes := plmContract.CostUnits, plmContract.MaxResultBytes
 	call.Arguments = canonicalArguments
 	if validatePLMPreparation(table, preparedPLM, call, plmContract, certificate) != nil {
 		return ErrSplitPhaseUnavailable
 	}
+	return table.preparePrepared(ctx, slotID, call, preparedPLM, plmContract, certificate)
+}
+
+func (table *SplitPhaseTable) preparePrepared(ctx context.Context, slotID string, call request, preparedPLM *PreparedPLM, plmContract PLMContract, certificate CandidateCertificate) error {
+	if table == nil || ctx == nil || preparedPLM == nil || !validIdentity(slotID) {
+		return ErrSplitPhaseUnavailable
+	}
+	if preparedPLM.Contract() != plmContract {
+		return ErrSplitPhaseUnavailable
+	}
+	costUnits, maxResultBytes := plmContract.CostUnits, plmContract.MaxResultBytes
 	canonicalRequest, err := json.Marshal(call)
 	if err != nil || len(canonicalRequest) == 0 || len(canonicalRequest) > maxCallBytes {
 		return ErrSplitPhaseUnavailable
@@ -461,25 +472,19 @@ func (table *SplitPhaseTable) LinearizeAndMaterialize(ctx context.Context, slotI
 	if argumentsErr != nil {
 		actualArguments = append(json.RawMessage(nil), logical.ActualArguments...)
 	}
-	argumentsDigest := sha256.Sum256(actualArguments)
 	providerSessionIdentity, providerSessionErr := prepared.ProviderSessionIdentity(ctx)
-	actualBinding := CandidateBinding{
-		RunIdentity: table.RunIdentity(), PlanIdentity: table.PlanIdentity(), SourceSealIdentity: logical.SourceSealIdentity,
-		SiteID: logical.SiteID, Occurrence: logical.Occurrence, Capability: entry.call.Capability, HandlerIdentity: prepared.HandlerIdentity(),
-		ArgumentsSHA256: fmt.Sprintf("sha256:%x", argumentsDigest[:]), AuthorityEpoch: logical.AuthorityEpoch,
-		ProviderSessionIdentity: providerSessionIdentity,
-	}
-	actualCall := entry.call
-	actualCall.Arguments = append(json.RawMessage(nil), actualArguments...)
-	requestCopy, requestErr := json.Marshal(actualCall)
-	if requestErr != nil || len(requestCopy) == 0 || len(requestCopy) > maxCallBytes {
-		return nil, ErrSplitPhaseUnavailable
-	}
+	actualBinding := candidate.Binding
+	actualBinding.SourceSealIdentity = logical.SourceSealIdentity
+	actualBinding.SiteID = logical.SiteID
+	actualBinding.Occurrence = logical.Occurrence
+	actualBinding.AuthorityEpoch = logical.AuthorityEpoch
+	actualBinding.ProviderSessionIdentity = providerSessionIdentity
+	argumentsMatch := argumentsErr == nil && bytes.Equal(actualArguments, entry.call.Arguments)
 
 	validation := PLMValidationResult{}
 	var validationErr error
 	validationStarted := time.Now()
-	if argumentsErr == nil && providerSessionErr == nil && actualBinding == candidate.Binding {
+	if argumentsMatch && providerSessionErr == nil && actualBinding == candidate.Binding {
 		validation, validationErr = prepared.Validate(ctx, PLMValidationRequest{
 			Contract: contract, Certificate: candidate, Logical: logical, Outcome: candidate.Outcome,
 		})
@@ -546,7 +551,7 @@ func (table *SplitPhaseTable) LinearizeAndMaterialize(ctx context.Context, slotI
 	table.mu.Unlock()
 
 	materializationStarted := time.Now()
-	encoded, callErr := table.owner.Call(ctx, requestCopy)
+	logicalResponse, callErr := table.owner.callCanonicalPLM(ctx, entry, actualArguments, argumentsErr == nil)
 	materializationNanos := uint64(time.Since(materializationStarted))
 
 	table.mu.Lock()
@@ -555,8 +560,7 @@ func (table *SplitPhaseTable) LinearizeAndMaterialize(ctx context.Context, slotI
 		entry.jobState = JobFailed
 		table.recordLocked(entry, "job_failed")
 	} else {
-		var logicalResponse response
-		if json.Unmarshal(encoded, &logicalResponse) != nil || logicalResponse.Status != "ok" {
+		if logicalResponse.Status != "ok" {
 			entry.jobState = JobFailed
 			table.recordLocked(entry, "job_failed")
 		} else {
@@ -568,7 +572,11 @@ func (table *SplitPhaseTable) LinearizeAndMaterialize(ctx context.Context, slotI
 		table.recordLocked(entry, "materialized")
 	}
 	table.mu.Unlock()
-	return encoded, callErr
+	encoded, encodeErr := encodeResponse(logicalResponse)
+	if callErr != nil {
+		return encoded, callErr
+	}
+	return encoded, encodeErr
 }
 
 func (table *SplitPhaseTable) rejectPLMCandidateLocked(entry *splitPhaseEntry, reason LinearizationReason) {
@@ -596,6 +604,10 @@ func (table *SplitPhaseTable) Claim(_ context.Context, _ string, _ json.RawMessa
 }
 
 func (table *SplitPhaseTable) ClaimCall(ctx context.Context, callID, capabilityName string, arguments json.RawMessage) (StagedCapabilityOutcome, error) {
+	return table.claimPLM(ctx, callID, capabilityName, arguments)
+}
+
+func (table *SplitPhaseTable) claimPLM(ctx context.Context, callID, capabilityName string, arguments json.RawMessage) (StagedCapabilityOutcome, error) {
 	if table == nil || ctx == nil {
 		return StagedCapabilityOutcome{}, ErrSplitPhaseUnavailable
 	}

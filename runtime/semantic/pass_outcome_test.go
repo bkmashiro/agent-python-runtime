@@ -101,11 +101,7 @@ func semanticPassOutcomeFixture(t *testing.T) (*StreamingSemanticPreDispatch, Ve
 		t.Fatal(err)
 	}
 	analysis.SourceSHA256 = digestText(finalSource)
-	_, analysisJSON, err := analysis.Identity()
-	if err != nil {
-		t.Fatal(err)
-	}
-	verified := VerifiedAnalysis{analysisJSON: analysisJSON}
+	verified := VerifiedAnalysis{analysis: &analysis}
 	registration, err := NewPassRegistration(
 		PassSemanticPreDispatch, SemanticPreDispatchPassVersion,
 		analysis.AnalyzerSHA256, legalityDigest("streaming-pass-outcome-config"),

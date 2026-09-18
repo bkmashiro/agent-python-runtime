@@ -17,7 +17,6 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
-	"github.com/bkmashiro/agent-python-runtime/runtime/composable"
 	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
@@ -240,38 +239,6 @@ func TestRealGuestFullComposableRuntimeNorthStar(t *testing.T) {
 		t.Fatalf("resumed=%+v guest=%+v err=%v", resumed, guestFactory, err)
 	}
 
-	selected := selection.Mechanisms
-	_, mechanismEvidence, err := runtimeconfig.ResolveMechanisms(selected, selected)
-	if err != nil {
-		t.Fatal(err)
-	}
-	evidence := composable.Evidence{
-		SchemaVersion: composable.EvidenceSchemaVersion, SourceCommit: strings.Repeat("a", 40), ArtifactSHA256: hashBytes(artifact),
-		ParentWorkspaceSHA256: baseInfo.WorkspaceSHA256, SelectedRootSHA256: joined.SelectedRoot.IdentitySHA256,
-		Mechanisms: mechanismEvidence,
-		Branch: composable.BranchEvidence{
-			ChangedBytes: joined.ChangedBytes, MaterializedBytes: joined.MaterializedBytes, MaxDepth: joined.MaxBranchDepth,
-			ReachableRoots: joined.ReachableRoots, DiscardedRoots: joined.DiscardedRoots,
-		},
-		Children:  composable.ChildEvidence{Count: joined.ChildCount, Completed: joined.Completed, Timeline: joined.Timeline},
-		Functions: functionStore.Stats(), Flights: flights.Stats(), Workflow: resumed.Metrics,
-		GuestCreated: 4, GuestDestroyed: 4,
-		Prepared: wazeroengine.PreparedState{SchemaVersion: "pysolate.prepared-runtime.v1"},
-		COW:      wazeroengine.COWProbe{SchemaVersion: "pysolate.cow-probe.v1", Platform: goruntime.GOOS},
-		Claims:   []composable.Claim{composable.ClaimCacheReuse, composable.ClaimFreshResume, composable.ClaimRealChildFanout},
-	}
-	if err := evidence.Validate(); err != nil {
-		t.Fatal(err)
-	}
-	encodedEvidence, err := json.Marshal(evidence)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, forbidden := range []string{managerRoot, "right.txt", "normalized", "/Users/", "parent.txt"} {
-		if strings.Contains(string(encodedEvidence), forbidden) {
-			t.Fatalf("evidence leaked %q: %s", forbidden, encodedEvidence)
-		}
-	}
 }
 
 func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {

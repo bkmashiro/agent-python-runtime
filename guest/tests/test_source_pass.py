@@ -3,7 +3,7 @@ import hashlib
 import json
 import unittest
 
-from agent_runtime import plm_source_pass
+from agent_runtime import plm_source_pass, source_pass
 from agent_runtime.source_pass import (
     emit_source_pass_patch_request_json as emit_generic_patch,
     validate_source_pass_execution_request as validate_generic_patch,
@@ -310,45 +310,6 @@ class SourcePassTests(unittest.TestCase):
             plm_source_pass.ast.walk = original_walk
         self.assertEqual("applied", patch["status"])
 
-    def test_data_local_numpy_sum_emits_one_value_slot_materialization(self):
-        source = "import io\nimport numpy as np\ndataset = np.load(io.BytesIO(open('/workspace/input.npy', 'rb').read()), allow_pickle=False)\nresult = int(dataset.sum())\n"
-        raw = request(source, "data_local_numpy_sum", "pysolate.data-local-numpy-sum-pass.v2")
-        patch = json.loads(emit_source_pass_patch_request_json(raw))
-        self.assertEqual("applied", patch["status"])
-        self.assertEqual("pass\npass\npass\nresult = _pysolate_materialize_slot('slot-numpy-sum-v1')\n", patch["derived_source"])
-        tree = validate_source_pass_execution_request(source, json.dumps(patch, separators=(",", ":")))
-        self.assertIsNotNone(tree)
-
-    def test_data_local_numpy_sum_rejects_variants_without_rewrite(self):
-        variants = (
-            "import io\nimport numpy as np\ndataset = np.load(io.BytesIO(open(path, 'rb').read()), allow_pickle=False)\nresult = int(dataset.sum())\n",
-            "import io\nimport numpy as np\ndataset = np.load(io.BytesIO(open('/workspace/input.npy', 'r').read()), allow_pickle=False)\nresult = int(dataset.sum())\n",
-            "import io as bytes_io\nimport numpy as np\ndataset = np.load(bytes_io.BytesIO(open('/workspace/input.npy', 'rb').read()), allow_pickle=False)\nresult = int(dataset.sum())\n",
-            "import io\nimport numpy as np\ndataset = np.load(io.BytesIO(open('/workspace/input.npy', 'rb').read()), allow_pickle=True)\nresult = int(dataset.sum())\n",
-            "import io\nimport numpy as np\nraw = open('/workspace/input.npy', 'rb').read()\ndataset = np.load(io.BytesIO(raw), allow_pickle=False)\nresult = int(dataset.sum())\n",
-            "import numpy as np\ndataset = np.load(path, allow_pickle=False)\nresult = int(dataset.sum())\n",
-            "import numpy as np\ndataset = np.load('/workspace/input.npy')\nresult = int(dataset.sum())\n",
-            "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=True)\nresult = int(dataset.sum())\n",
-            "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\nresult = dataset.sum()\n",
-            "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\nresult = int(dataset.mean())\n",
-            "import numpy as numpy\ndataset = numpy.load('/workspace/input.npy', allow_pickle=False)\nresult = int(dataset.sum())\n",
-            "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\ndataset[0] = 0\nresult = int(dataset.sum())\n",
-            "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\nresult = int(dataset[dataset > 0].sum())\n",
-            "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\nresult = int(sum(map(lambda item: item, dataset)))\n",
-            "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\nresult = locals()\n",
-            "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\nraise RuntimeError('visible')\n",
-            "import numpy as np\ndataset = np.load('/workspace/input.npy', allow_pickle=False)\nprint(dataset.shape)\nresult = int(dataset.sum())\n",
-        )
-        for source in variants:
-            with self.subTest(source=source):
-                raw_request = request(
-                    source,
-                    "data_local_numpy_sum",
-                    "pysolate.data-local-numpy-sum-pass.v2",
-                )
-                patch = json.loads(emit_source_pass_patch_request_json(raw_request))
-                self.assertEqual("not_applicable", patch["status"])
-                self.assertEqual("", patch["derived_source"])
 
     def test_scalar_passes_reject_programs_that_can_observe_compiled_code(self):
         source = (
@@ -399,6 +360,26 @@ class SourcePassTests(unittest.TestCase):
         namespace = {}
         exec(compile(tree, "<agent-run>", "exec"), namespace, namespace)
         self.assertEqual(52, namespace["result"])
+
+    def test_negative_fold_derived_tree_matches_parsed_derived_source(self):
+        source = "seed = 1\nfolded = seed - 3\nresult = folded\n"
+        raw = emit_source_pass_patch_request_json(request(
+            source,
+            "pure_scalar_fold",
+            "pysolate.pure-scalar-fold-pass.v1",
+        ))
+        patch = json.loads(raw)
+        self.assertEqual("applied", patch["status"])
+        self.assertIn("folded = -2", patch["derived_source"])
+        tree = validate_source_pass_execution_request(source, raw)
+        parsed = ast.parse(patch["derived_source"], filename="<agent-run>", mode="exec")
+        self.assertEqual(
+            ast.dump(parsed, include_attributes=False),
+            ast.dump(tree, include_attributes=False),
+        )
+        namespace = {}
+        exec(compile(tree, "<agent-run>", "exec"), namespace, namespace)
+        self.assertEqual(-2, namespace["result"])
 
     def test_pure_scalar_fold_preserves_self_reassignment_values(self):
         source = "a = 1\na = a + 1\nb = a + 1\nresult = [a, b]\n"
@@ -511,6 +492,33 @@ class SourcePassTests(unittest.TestCase):
         tampered = json.dumps(patch, sort_keys=True, separators=(",", ":")) + "\n"
         with self.assertRaisesRegex(ValueError, "does not match"):
             validate_source_pass_execution_request(source, tampered)
+
+    def test_same_guest_selection_rejects_a_different_source_tree(self):
+        source = "seed = 7\nleft = seed * seed\nright = seed * seed\nresult = right\n"
+        raw = emit_source_pass_patch_request_json(request(source))
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            validate_source_pass_execution_request(source.replace("seed = 7", "seed = 8"), raw)
+
+    def test_foreign_selection_reuses_locally_parsed_derived_tree(self):
+        source = "seed = 7\nleft = seed * seed\nright = seed * seed\nresult = right\n"
+        raw = emit_source_pass_patch_request_json(request(source))
+        source_pass.reset_state()
+        parse = source_pass.ast.parse
+        parse_calls = 0
+
+        def counted_parse(*args, **kwargs):
+            nonlocal parse_calls
+            parse_calls += 1
+            return parse(*args, **kwargs)
+
+        source_pass.ast.parse = counted_parse
+        try:
+            tree = validate_source_pass_execution_request(source, raw)
+        finally:
+            source_pass.ast.parse = parse
+
+        self.assertIsNotNone(tree)
+        self.assertEqual(2, parse_calls)
 
 
 if __name__ == "__main__":

@@ -109,6 +109,7 @@ type Broker struct {
 	playbackFailed    bool
 	branch            *branchState
 	lifecycleObserver CallLifecycleObserver
+	splitPhase        *SplitPhaseTable
 }
 
 type request struct {
@@ -196,13 +197,12 @@ func (broker *Broker) AttachStagedClaimer(claimer StagedObservationClaimer) erro
 	if broker == nil || claimer == nil {
 		return ErrInvalidBroker
 	}
+	if table, ok := claimer.(*SplitPhaseTable); ok {
+		return broker.attachSplitPhaseTable(table)
+	}
 	broker.mu.Lock()
 	defer broker.mu.Unlock()
-	if table, ok := claimer.(*SplitPhaseTable); ok &&
-		(table.owner != broker || table.RunIdentity() != broker.config.RunIdentity || table.PlanIdentity() != broker.config.Plan.Identity()) {
-		return ErrInvalidBroker
-	}
-	if broker.calls != 0 || broker.config.StagedClaimer != nil || broker.config.Playback != nil || broker.config.Branch != nil || broker.config.SemanticPreDispatch {
+	if broker.calls != 0 || broker.splitPhase != nil || broker.config.StagedClaimer != nil || broker.config.Playback != nil || broker.config.Branch != nil || broker.config.SemanticPreDispatch {
 		return ErrInvalidBroker
 	}
 	broker.config.StagedClaimer = claimer
@@ -217,8 +217,20 @@ func (broker *Broker) AttachedSplitPhaseTable() *SplitPhaseTable {
 	}
 	broker.mu.Lock()
 	defer broker.mu.Unlock()
-	table, _ := broker.config.StagedClaimer.(*SplitPhaseTable)
-	return table
+	return broker.splitPhase
+}
+
+func (broker *Broker) attachSplitPhaseTable(table *SplitPhaseTable) error {
+	if broker == nil || table == nil || table.owner != broker {
+		return ErrInvalidBroker
+	}
+	broker.mu.Lock()
+	defer broker.mu.Unlock()
+	if broker.calls != 0 || broker.splitPhase != nil || broker.config.StagedClaimer != nil || broker.config.Playback != nil || broker.config.Branch != nil || broker.config.SemanticPreDispatch {
+		return ErrInvalidBroker
+	}
+	broker.splitPhase = table
+	return nil
 }
 
 func (broker *Broker) observeCallLifecycle(ctx context.Context, call request, operation uint32, phase CallLifecyclePhase) {
@@ -265,37 +277,10 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_arguments", Message: "invalid Host tool call"}})
 	}
 
-	broker.mu.Lock()
-	programmaticCall := false
-	if broker.config.ProgrammaticParentCallID != "" {
-		expected := fmt.Sprintf("%s:program:%d", broker.config.ProgrammaticParentCallID, broker.programmaticCalls+1)
-		reservedProgrammaticID := strings.Contains(call.CallID, ":program:")
-		switch {
-		case call.CallID == expected:
-			programmaticCall = true
-		case !broker.config.AllowDirectCalls || reservedProgrammaticID:
-			broker.mu.Unlock()
-			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "programmatic_call_identity_mismatch", Message: "programmatic child call identity does not match its parent and sequence"}})
-		}
+	operation, rejected := broker.admitCall(&call)
+	if rejected != nil {
+		return encodeResponse(*rejected)
 	}
-	if broker.calls >= broker.config.Plan.MaxCalls() {
-		broker.mu.Unlock()
-		broker.failPlayback()
-		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "call_budget_exceeded", Message: "Host tool call budget exhausted"}})
-	}
-	if _, duplicate := broker.seen[call.CallID]; duplicate {
-		broker.mu.Unlock()
-		broker.failPlayback()
-		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "duplicate_call_id", Message: "call_id must be unique"}})
-	}
-	broker.seen[call.CallID] = struct{}{}
-	if programmaticCall {
-		broker.programmaticCalls++
-		call.ParentCallID = broker.config.ProgrammaticParentCallID
-	}
-	operation := broker.calls
-	broker.calls++
-	broker.mu.Unlock()
 
 	registered, ok := broker.config.Plan.lookup(call.Capability)
 	if !ok {
@@ -315,19 +300,8 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 		return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "invalid_arguments", Message: "Host tool arguments do not match the capability schema"}})
 	}
 	call.Arguments = arguments
-	if programmaticCall && broker.config.SourceResolver != nil {
-		bound, found := broker.config.SourceResolver.ResolveSource(SourceBindingRequest{
-			CallID: call.CallID, ParentCallID: call.ParentCallID, Capability: call.Capability,
-			OperationIndex: operation, Arguments: append(json.RawMessage(nil), arguments...), Programmatic: true,
-		})
-		if found {
-			if !receipt.ValidSourceBinding(bound) || bound.Capability != call.Capability {
-				broker.record(call, operation, "denied", nil)
-				return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "source_binding_invalid", Message: "Host source binding is invalid"}})
-			}
-			copy := bound
-			call.Source = &copy
-		}
+	if rejected := broker.bindCallSource(&call, operation); rejected != nil {
+		return encodeResponse(*rejected)
 	}
 	broker.observeCallLifecycle(ctx, call, operation, CallLifecycleIntent)
 	if broker.config.StagedClaimer != nil {
@@ -349,25 +323,14 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 			staged, claimErr = broker.config.StagedClaimer.Claim(ctx, call.Capability, append(json.RawMessage(nil), arguments...))
 		}
 		if claimErr != nil && !errors.Is(claimErr, ErrStagedObservationNotTargeted) {
-			broker.record(call, operation, "error", nil)
-			if errors.Is(claimErr, context.Canceled) || errors.Is(claimErr, context.DeadlineExceeded) {
-				return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "handler_error", Message: "Host tool failed"}})
-			}
-			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "staged_observation_mismatch", Message: "staged observation did not match the dynamic Host call"}})
+			return encodeResponse(broker.failedStaged(call, operation, claimErr))
 		}
 		if claimErr == nil && staged.Validate() != nil {
 			broker.record(call, operation, "error", nil)
 			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_staged_result", Message: "staged observation result is outside the capability schema"}})
 		}
 		if claimErr == nil && staged.ErrorCode != "" {
-			broker.record(call, operation, "error", nil)
-			if staged.ErrorCode == PLMProviderOutcomeUncertainCode {
-				return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: PLMProviderOutcomeUncertainCode, Message: "Provider outcome is uncertain; the operation was not replayed"}})
-			}
-			if staged.ErrorCode == "handler_error" {
-				return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "handler_error", Message: "Host tool failed"}})
-			}
-			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_result", Message: "Host tool returned a result outside its capability schema"}})
+			return encodeResponse(broker.finishStaged(call, operation, staged))
 		}
 		if claimErr == nil {
 			canonicalResult, resultErr := canonicalForSchema(registered.outputSchema, staged.Result)
@@ -378,8 +341,8 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 				broker.record(call, operation, "error", nil)
 				return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_staged_result", Message: "staged observation result is outside the capability schema"}})
 			}
-			broker.record(call, operation, "ok", canonicalResult)
-			return encodeResponse(response{CallID: call.CallID, Status: "ok", Result: canonicalResult})
+			staged.Result = canonicalResult
+			return encodeResponse(broker.finishStaged(call, operation, staged))
 		}
 	}
 	if broker.branch != nil {
@@ -436,12 +399,132 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 		broker.record(call, operation, "ok", canonicalResult)
 		return encodeResponse(response{CallID: call.CallID, Status: "ok", Result: canonicalResult})
 	}
+	dispatched, _ := broker.dispatchRegisteredCall(ctx, call, registered, operation)
+	return encodeResponse(dispatched)
+}
+
+// callCanonicalPLM receives canonical arguments and validated provider outcomes
+// from the Broker's own table. Logical admission is shared with ordinary Call.
+func (broker *Broker) callCanonicalPLM(ctx context.Context, entry *splitPhaseEntry, arguments json.RawMessage, argumentsValid bool) (response, error) {
+	call := entry.call
+	call.Arguments = append(json.RawMessage(nil), arguments...)
+	registered, ok := broker.config.Plan.lookup(call.Capability)
+	if !ok || registered.spec.PLM == nil || registered.spec.Playback != PlaybackLiveOnly {
+		return response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "capability_denied", Message: "Host tool is not granted"}}, nil
+	}
+
+	operation, rejected := broker.admitCall(&call)
+	if rejected != nil {
+		return *rejected, nil
+	}
+
+	if !argumentsValid {
+		broker.record(call, operation, "denied", nil)
+		return response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "invalid_arguments", Message: "Host tool arguments do not match the capability schema"}}, nil
+	}
+	if rejected := broker.bindCallSource(&call, operation); rejected != nil {
+		return *rejected, nil
+	}
+	broker.observeCallLifecycle(ctx, call, operation, CallLifecycleIntent)
+	if !bytes.Equal(arguments, entry.call.Arguments) {
+		broker.record(call, operation, "error", nil)
+		return response{CallID: call.CallID, Status: "error", Error: &callError{Code: "staged_observation_mismatch", Message: "staged observation did not match the dynamic Host call"}}, nil
+	}
+	staged, claimErr := broker.splitPhase.claimPLM(ctx, entry.call.CallID, call.Capability, arguments)
+	if errors.Is(claimErr, ErrStagedObservationNotTargeted) {
+		return broker.dispatchRegisteredCall(ctx, call, registered, operation)
+	}
+	if claimErr != nil {
+		return broker.failedStaged(call, operation, claimErr), nil
+	}
+	return broker.finishStaged(call, operation, staged), nil
+}
+
+func (broker *Broker) admitCall(call *request) (uint32, *response) {
+	broker.mu.Lock()
+	programmaticCall := false
+	if broker.config.ProgrammaticParentCallID != "" {
+		expected := fmt.Sprintf("%s:program:%d", broker.config.ProgrammaticParentCallID, broker.programmaticCalls+1)
+		reservedProgrammaticID := strings.Contains(call.CallID, ":program:")
+		switch {
+		case call.CallID == expected:
+			programmaticCall = true
+		case !broker.config.AllowDirectCalls || reservedProgrammaticID:
+			broker.mu.Unlock()
+			return 0, &response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "programmatic_call_identity_mismatch", Message: "programmatic child call identity does not match its parent and sequence"}}
+		}
+	}
+	if broker.calls >= broker.config.Plan.MaxCalls() {
+		broker.mu.Unlock()
+		broker.failPlayback()
+		return 0, &response{CallID: call.CallID, Status: "error", Error: &callError{Code: "call_budget_exceeded", Message: "Host tool call budget exhausted"}}
+	}
+	if _, duplicate := broker.seen[call.CallID]; duplicate {
+		broker.mu.Unlock()
+		broker.failPlayback()
+		return 0, &response{CallID: call.CallID, Status: "error", Error: &callError{Code: "duplicate_call_id", Message: "call_id must be unique"}}
+	}
+	broker.seen[call.CallID] = struct{}{}
+	if programmaticCall {
+		broker.programmaticCalls++
+		call.ParentCallID = broker.config.ProgrammaticParentCallID
+	}
+	operation := broker.calls
+	broker.calls++
+	broker.mu.Unlock()
+
+	return operation, nil
+}
+
+func (broker *Broker) bindCallSource(call *request, operation uint32) *response {
+	if call.ParentCallID != "" && broker.config.SourceResolver != nil {
+		bound, found := broker.config.SourceResolver.ResolveSource(SourceBindingRequest{
+			CallID: call.CallID, ParentCallID: call.ParentCallID, Capability: call.Capability,
+			OperationIndex: operation, Arguments: append(json.RawMessage(nil), call.Arguments...), Programmatic: true,
+		})
+		if found {
+			if !receipt.ValidSourceBinding(bound) || bound.Capability != call.Capability {
+				broker.record(*call, operation, "denied", nil)
+				return &response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "source_binding_invalid", Message: "Host source binding is invalid"}}
+			}
+			copy := bound
+			call.Source = &copy
+		}
+	}
+	return nil
+}
+
+func (broker *Broker) finishStaged(call request, operation uint32, staged StagedCapabilityOutcome) response {
+	if staged.ErrorCode != "" {
+		broker.record(call, operation, "error", nil)
+		switch staged.ErrorCode {
+		case PLMProviderOutcomeUncertainCode:
+			return response{CallID: call.CallID, Status: "error", Error: &callError{Code: PLMProviderOutcomeUncertainCode, Message: "Provider outcome is uncertain; the operation was not replayed"}}
+		case "handler_error":
+			return response{CallID: call.CallID, Status: "error", Error: &callError{Code: "handler_error", Message: "Host tool failed"}}
+		default:
+			return response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_result", Message: "Host tool returned a result outside its capability schema"}}
+		}
+	}
+	broker.record(call, operation, "ok", staged.Result)
+	return response{CallID: call.CallID, Status: "ok", Result: staged.Result}
+}
+
+func (broker *Broker) failedStaged(call request, operation uint32, err error) response {
+	broker.record(call, operation, "error", nil)
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return response{CallID: call.CallID, Status: "error", Error: &callError{Code: "handler_error", Message: "Host tool failed"}}
+	}
+	return response{CallID: call.CallID, Status: "error", Error: &callError{Code: "staged_observation_mismatch", Message: "staged observation did not match the dynamic Host call"}}
+}
+
+func (broker *Broker) dispatchRegisteredCall(ctx context.Context, call request, registered registration, operation uint32) (response, error) {
 	approvalRequestID := ""
 	if registered.spec.Approval != nil {
 		permit, approvalErr := broker.config.ApprovalController.Authorize(ctx, approval.Proposal{
 			RunID: broker.config.RunIdentity, PlanSHA256: broker.config.Plan.Identity(), CallID: call.CallID,
 			ParentCallID: call.ParentCallID, Capability: call.Capability,
-			Arguments: append([]byte(nil), arguments...), Lease: time.Duration(registered.spec.Approval.LeaseMilliseconds) * time.Millisecond,
+			Arguments: append([]byte(nil), call.Arguments...), Lease: time.Duration(registered.spec.Approval.LeaseMilliseconds) * time.Millisecond,
 		})
 		call.ApprovalRequestID = permit.RequestID
 		if approvalErr != nil {
@@ -455,7 +538,7 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 			case errors.Is(approvalErr, approval.ErrAuditCapacity):
 				code, message = "approval_unavailable", "Host approval audit capacity is exhausted"
 			}
-			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: code, Message: message}})
+			return response{CallID: call.CallID, Status: "denied", Error: &callError{Code: code, Message: message}}, nil
 		}
 		approvalRequestID = permit.RequestID
 		if dispatchErr := broker.config.ApprovalController.BeginDispatch(ctx, approvalRequestID); dispatchErr != nil {
@@ -464,25 +547,26 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 			if errors.Is(dispatchErr, approval.ErrExpired) {
 				code, message = "approval_expired", "Host tool approval lease expired before dispatch"
 			}
-			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: code, Message: message}})
+			return response{CallID: call.CallID, Status: "denied", Error: &callError{Code: code, Message: message}}, nil
 		}
 	}
 	broker.observeCallLifecycle(ctx, call, operation, CallLifecycleStarted)
 	var result json.RawMessage
 	var evidence TransportEvidence
+	var err error
 	if evidenced, ok := registered.handler.(EvidenceHandler); ok {
-		result, evidence, err = evidenced.CallWithEvidence(ctx, append(json.RawMessage(nil), arguments...))
+		result, evidence, err = evidenced.CallWithEvidence(ctx, append(json.RawMessage(nil), call.Arguments...))
 	} else {
-		result, err = registered.handler.Call(ctx, append(json.RawMessage(nil), arguments...))
+		result, err = registered.handler.Call(ctx, append(json.RawMessage(nil), call.Arguments...))
 	}
 	if err != nil {
 		if !broker.completeApproval(approvalRequestID, "error") {
 			broker.record(call, operation, "ambiguous", nil)
-			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "approval_audit_failed", Message: "approved Host tool executed but its audit completion failed"}})
+			return response{CallID: call.CallID, Status: "error", Error: &callError{Code: "approval_audit_failed", Message: "approved Host tool executed but its audit completion failed"}}, nil
 		}
 		broker.failBranch()
 		broker.record(call, operation, "error", nil)
-		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "handler_error", Message: "Host tool failed"}})
+		return response{CallID: call.CallID, Status: "error", Error: &callError{Code: "handler_error", Message: "Host tool failed"}}, nil
 	}
 	canonicalResult, err := canonicalForSchema(registered.outputSchema, result)
 	if err == nil {
@@ -491,21 +575,21 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 	if err != nil || len(canonicalResult) > maxCallBytes || (registered.spec.Playback == PlaybackCaptured && !validLiveTransportEvidence(evidence)) {
 		if !broker.completeApproval(approvalRequestID, "error") {
 			broker.record(call, operation, "ambiguous", nil)
-			return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "approval_audit_failed", Message: "approved Host tool executed but its audit completion failed"}})
+			return response{CallID: call.CallID, Status: "error", Error: &callError{Code: "approval_audit_failed", Message: "approved Host tool executed but its audit completion failed"}}, nil
 		}
 		broker.failBranch()
 		broker.record(call, operation, "error", nil)
-		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_result", Message: "Host tool returned a result outside its capability schema"}})
+		return response{CallID: call.CallID, Status: "error", Error: &callError{Code: "invalid_result", Message: "Host tool returned a result outside its capability schema"}}, nil
 	}
 	if !broker.completeApproval(approvalRequestID, "ok") {
 		broker.record(call, operation, "ambiguous", nil)
-		return encodeResponse(response{CallID: call.CallID, Status: "error", Error: &callError{Code: "approval_audit_failed", Message: "approved Host tool executed but its audit completion failed"}})
+		return response{CallID: call.CallID, Status: "error", Error: &callError{Code: "approval_audit_failed", Message: "approved Host tool executed but its audit completion failed"}}, nil
 	}
 	broker.record(call, operation, "ok", canonicalResult)
 	if registered.spec.Playback == PlaybackCaptured {
-		broker.recordTranscript(operation, call.Capability, arguments, canonicalResult, evidence)
+		broker.recordTranscript(operation, call.Capability, call.Arguments, canonicalResult, evidence)
 	}
-	return encodeResponse(response{CallID: call.CallID, Status: "ok", Result: canonicalResult})
+	return response{CallID: call.CallID, Status: "ok", Result: canonicalResult}, nil
 }
 
 func (broker *Broker) completeApproval(requestID, outcome string) bool {
@@ -623,9 +707,13 @@ func (broker *Broker) Finalize(success bool) error {
 		return err
 	}
 	claimer := broker.config.StagedClaimer
+	splitPhase := broker.splitPhase
 	broker.mu.Unlock()
 	if claimer != nil {
 		return claimer.Finalize(success)
+	}
+	if splitPhase != nil {
+		return splitPhase.Finalize(success)
 	}
 	return nil
 }

@@ -54,7 +54,7 @@ func TestExecutePublishesOnlySuccessfulGuestResponse(t *testing.T) {
 				t.Fatal(err)
 			}
 			ref := attempt.Ref()
-			if _, err := Execute(context.Background(), response, attempt, []byte(`{}`), ""); err == nil {
+			if _, err := ExecuteObserved(context.Background(), response, attempt, []byte(`{}`), "", nil); err == nil {
 				t.Fatal("failed stream published")
 			}
 			if _, err := manager.Acquire(ref, "discard-check"); !errors.Is(err, workspace.ErrWorkspaceNotFound) {
@@ -68,7 +68,7 @@ func TestExecutePublishesSuccessfulAttemptIdentity(t *testing.T) {
 	manager := testManager(t)
 	base, _ := manager.Create(nil, workspace.DefaultLimits())
 	attempt, _ := manager.ForkAttempt(base)
-	result, err := Execute(context.Background(), runnerStub{response: []byte(`{"status":"ok","result":1}`)}, attempt, []byte(`{}`), "")
+	result, err := ExecuteObserved(context.Background(), runnerStub{response: []byte(`{"status":"ok","result":1}`)}, attempt, []byte(`{}`), "", nil)
 	if err != nil || result.PublishedWorkspace != attempt.Ref() || result.PublishedWorkspace == base {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}

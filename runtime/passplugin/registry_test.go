@@ -95,7 +95,6 @@ func TestUnifiedCatalogRegistersEveryOptimizationDefaultOff(t *testing.T) {
 		sourcepatch.PureScalarCSEName:                 passregistration.StageWholeProgramPatch,
 		sourcepatch.PureScalarFoldName:                passregistration.StageWholeProgramPatch,
 		sourcepatch.PLMCapabilityCallsName:            passregistration.StageWholeProgramPatch,
-		sourcepatch.DataLocalNumpySumName:             passregistration.StageWholeProgramPatch,
 		passregistration.SourceStreamingExecution:     passregistration.StageRuntimeLowering,
 		passregistration.StreamedChildFanout:          passregistration.StageRuntimeLowering,
 		passregistration.AgentFunctionRetention:       passregistration.StageRuntimeLowering,

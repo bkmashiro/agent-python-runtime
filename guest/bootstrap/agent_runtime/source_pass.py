@@ -11,8 +11,6 @@ PURE_SCALAR_CSE = "pure_scalar_cse"
 PURE_SCALAR_CSE_VERSION = "pysolate.pure-scalar-cse-pass.v1"
 PURE_SCALAR_FOLD = "pure_scalar_fold"
 PURE_SCALAR_FOLD_VERSION = "pysolate.pure-scalar-fold-pass.v1"
-DATA_LOCAL_NUMPY_SUM = "data_local_numpy_sum"
-DATA_LOCAL_NUMPY_SUM_VERSION = "pysolate.data-local-numpy-sum-pass.v2"
 _REQUEST_KEYS = {"pass_name", "pass_version", "registration_sha256", "source"}
 _PATCH_COMMON_KEYS = {
     "schema_version", "status", "pass_name", "pass_version", "registration_sha256",
@@ -138,12 +136,12 @@ def _closed_scalar_program(tree):
     return last_name == "result"
 
 
-def _pure_scalar_cse(source):
+def _pure_scalar_cse(source, prepared_tree=None):
     if not isinstance(source, str) or not source or len(source.encode("utf-8")) > MAX_SOURCE_BYTES:
         raise ValueError("invalid source pass input")
-    tree = ast.parse(source, filename="<agent-run>", mode="exec")
+    tree = _tree_for_source(source, prepared_tree)
     if not _closed_scalar_program(tree):
-        return tree, "", 0
+        return "", None, 0
     scalar_values = {}
     replacements = []
     index = 0
@@ -184,21 +182,21 @@ def _pure_scalar_cse(source):
         index += 1
 
     if not replacements:
-        return tree, "", 0
+        return "", None, 0
     derived = bytearray(source.encode("utf-8"))
     for start, end, replacement in reversed(replacements):
         derived[start:end] = replacement
     derived_source = derived.decode("utf-8")
     derived_tree = ast.parse(derived_source, filename="<agent-run>", mode="exec")
-    return tree, derived_source, len(replacements)
+    return derived_source, derived_tree, len(replacements)
 
 
-def _pure_scalar_fold(source):
+def _pure_scalar_fold(source, prepared_tree=None):
     if not isinstance(source, str) or not source or len(source.encode("utf-8")) > MAX_SOURCE_BYTES:
         raise ValueError("invalid source pass input")
-    tree = ast.parse(source, filename="<agent-run>", mode="exec")
+    tree = _tree_for_source(source, prepared_tree)
     if not _closed_scalar_program(tree):
-        return tree, "", 0
+        return "", None, 0
     scalar_values = {}
     replacements = []
     for statement in tree.body:
@@ -220,130 +218,39 @@ def _pure_scalar_fold(source):
             replacements.append((start, end, replacement + b" " * (end - start - len(replacement))))
 
     if not replacements:
-        return tree, "", 0
+        return "", None, 0
     derived = bytearray(source.encode("utf-8"))
     for start, end, replacement in reversed(replacements):
         derived[start:end] = replacement
     derived_source = derived.decode("utf-8")
     derived_tree = ast.parse(derived_source, filename="<agent-run>", mode="exec")
-    return tree, derived_source, len(replacements)
-
-
-def _data_local_numpy_sum(source):
-    if (
-        not isinstance(source, str)
-        or not source
-        or "\r" in source
-        or len(source.encode("utf-8")) > MAX_SOURCE_BYTES
-    ):
-        raise ValueError("invalid source pass input")
-    tree = ast.parse(source, filename="<agent-run>", mode="exec")
-    lines = source.splitlines(keepends=True)
-    if len(tree.body) != 4 or len(lines) != 4:
-        return tree, "", 0
-    io_import, numpy_import, load_statement, result_statement = tree.body
-    if (
-        not isinstance(io_import, ast.Import)
-        or len(io_import.names) != 1
-        or io_import.names[0].name != "io"
-        or io_import.names[0].asname is not None
-        or io_import.lineno != 1
-        or io_import.end_lineno != 1
-        or not isinstance(numpy_import, ast.Import)
-        or len(numpy_import.names) != 1
-        or numpy_import.names[0].name != "numpy"
-        or numpy_import.names[0].asname != "np"
-        or numpy_import.lineno != 2
-        or numpy_import.end_lineno != 2
-    ):
-        return tree, "", 0
-    load_assignment = _simple_assignment(load_statement)
-    if load_assignment is None or load_assignment[0] != "dataset" or load_statement.lineno != 3 or load_statement.end_lineno != 3:
-        return tree, "", 0
-    load_call = load_assignment[1]
-    if (
-        not isinstance(load_call, ast.Call)
-        or not isinstance(load_call.func, ast.Attribute)
-        or load_call.func.attr != "load"
-        or not isinstance(load_call.func.value, ast.Name)
-        or load_call.func.value.id != "np"
-        or len(load_call.args) != 1
-        or len(load_call.keywords) != 1
-        or load_call.keywords[0].arg != "allow_pickle"
-        or not isinstance(load_call.keywords[0].value, ast.Constant)
-        or load_call.keywords[0].value.value is not False
-    ):
-        return tree, "", 0
-    bytes_io = load_call.args[0]
-    if (
-        not isinstance(bytes_io, ast.Call)
-        or not isinstance(bytes_io.func, ast.Attribute)
-        or bytes_io.func.attr != "BytesIO"
-        or not isinstance(bytes_io.func.value, ast.Name)
-        or bytes_io.func.value.id != "io"
-        or len(bytes_io.args) != 1
-        or bytes_io.keywords
-    ):
-        return tree, "", 0
-    read_call = bytes_io.args[0]
-    if (
-        not isinstance(read_call, ast.Call)
-        or read_call.args
-        or read_call.keywords
-        or not isinstance(read_call.func, ast.Attribute)
-        or read_call.func.attr != "read"
-    ):
-        return tree, "", 0
-    open_call = read_call.func.value
-    if (
-        not isinstance(open_call, ast.Call)
-        or not isinstance(open_call.func, ast.Name)
-        or open_call.func.id != "open"
-        or len(open_call.args) != 2
-        or open_call.keywords
-        or not isinstance(open_call.args[0], ast.Constant)
-        or open_call.args[0].value != "/workspace/input.npy"
-        or not isinstance(open_call.args[1], ast.Constant)
-        or open_call.args[1].value != "rb"
-    ):
-        return tree, "", 0
-    result_assignment = _simple_assignment(result_statement)
-    if result_assignment is None or result_assignment[0] != "result" or result_statement.lineno != 4 or result_statement.end_lineno != 4:
-        return tree, "", 0
-    outer_call = result_assignment[1]
-    if (
-        not isinstance(outer_call, ast.Call)
-        or not isinstance(outer_call.func, ast.Name)
-        or outer_call.func.id != "int"
-        or len(outer_call.args) != 1
-        or outer_call.keywords
-    ):
-        return tree, "", 0
-    sum_call = outer_call.args[0]
-    if (
-        not isinstance(sum_call, ast.Call)
-        or not isinstance(sum_call.func, ast.Attribute)
-        or sum_call.func.attr != "sum"
-        or not isinstance(sum_call.func.value, ast.Name)
-        or sum_call.func.value.id != "dataset"
-        or sum_call.args
-        or sum_call.keywords
-    ):
-        return tree, "", 0
-    trailing_newline = "\n" if source.endswith("\n") else ""
-    derived_source = "pass\npass\npass\nresult = _pysolate_materialize_slot('slot-numpy-sum-v1')" + trailing_newline
-    ast.parse(derived_source, filename="<agent-run>", mode="exec")
-    return tree, derived_source, 1
+    return derived_source, derived_tree, len(replacements)
 
 
 _TRANSFORMS = {
     (PURE_SCALAR_CSE, PURE_SCALAR_CSE_VERSION): _pure_scalar_cse,
     (PURE_SCALAR_FOLD, PURE_SCALAR_FOLD_VERSION): _pure_scalar_fold,
-    (DATA_LOCAL_NUMPY_SUM, DATA_LOCAL_NUMPY_SUM_VERSION): _data_local_numpy_sum,
 }
 
 
+_pending_selection = None
+
+
+def reset_state():
+    global _pending_selection
+    _pending_selection = None
+
+
+def _tree_for_source(source, prepared_tree):
+    if prepared_tree is None:
+        return ast.parse(source, filename="<agent-run>", mode="exec")
+    if not isinstance(prepared_tree, ast.Module):
+        raise ValueError("invalid prepared source tree")
+    return prepared_tree
+
+
 def emit_source_pass_patch_request_json(request_json, prepared_tree=None):
+    reset_state()
     request = _decode(request_json, _REQUEST_KEYS)
     transform = _TRANSFORMS.get((request["pass_name"], request["pass_version"]))
     if (
@@ -353,7 +260,7 @@ def emit_source_pass_patch_request_json(request_json, prepared_tree=None):
         or not isinstance(request["source"], str)
     ):
         raise ValueError("unsupported source pass")
-    _, derived_source, replacement_count = transform(request["source"])
+    derived_source, derived_tree, replacement_count = transform(request["source"], prepared_tree)
     applied = replacement_count > 0
     patch = {
         "schema_version": PATCH_SCHEMA_VERSION,
@@ -366,13 +273,24 @@ def emit_source_pass_patch_request_json(request_json, prepared_tree=None):
     }
     patch["derived_source"] = derived_source
     patch["derived_source_sha256"] = _digest(derived_source.encode("utf-8")) if applied else ""
+    if applied:
+        global _pending_selection
+        _pending_selection = (request["source"], patch, derived_tree)
     return _contract(patch)
 
 
 def validate_source_pass_execution_request(final_source, patch_json):
+    global _pending_selection
     patch = _decode(patch_json, _PATCH_KEYS)
     if patch["status"] != "applied" or patch["replacement_count"] <= 0:
         raise ValueError("source pass patch is not applicable")
+    pending = _pending_selection
+    _pending_selection = None
+    if pending is not None:
+        pending_source, pending_patch, pending_tree = pending
+        if final_source != pending_source or patch != pending_patch:
+            raise ValueError("source pass patch does not match the original source")
+        return pending_tree
     request = _canonical({
         "pass_name": patch["pass_name"],
         "pass_version": patch["pass_version"],
@@ -380,6 +298,11 @@ def validate_source_pass_execution_request(final_source, patch_json):
         "source": final_source,
     })
     expected = _decode(emit_source_pass_patch_request_json(request), _PATCH_KEYS)
+    local_selection = _pending_selection
+    _pending_selection = None
     if expected != patch:
         raise ValueError("source pass patch does not match the original source")
-    return ast.parse(patch["derived_source"], filename="<agent-run>", mode="exec")
+    if local_selection is None:
+        raise ValueError("source pass derived tree is unavailable")
+    _, _, derived_tree = local_selection
+    return derived_tree

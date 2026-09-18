@@ -9,6 +9,7 @@ import (
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
+	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 	"github.com/tetratelabs/wazero/api"
 )
 
@@ -67,6 +68,7 @@ type SemanticAnalysisSession struct {
 	requests        uint32
 	cumulativeBytes uint64
 	module          api.Module
+	temporary       *workspace.Temporary
 	prepared        *preparedInstance
 	releaseCOW      func()
 	engineLease     bool
@@ -301,28 +303,23 @@ func (session *SemanticAnalysisSession) recordFreshFallback(updatePreparedState 
 }
 
 func (session *SemanticAnalysisSession) ensureFreshModuleLocked(ctx context.Context) error {
-	started := time.Now()
-	session.lifecycle.ModuleInstantiations++
-	module, err := session.engine.runtime.InstantiateModule(ctx, session.engine.compiled, session.engine.baseModuleConfig(session.stderr, session.stdout))
-	session.lifecycle.InstantiateNanos += uint64(time.Since(started))
+	prepared, setup, err := session.engine.newFreshGuest(ctx, session.stderr, session.stdout, false)
+	session.lifecycle.ModuleInstantiations += setup.ModuleInstantiations
+	session.lifecycle.InstantiateNanos += setup.InstantiateNanos
+	session.lifecycle.InitializeCalls += setup.InitializeCalls
+	session.lifecycle.InitializeNanos += setup.InitializeNanos
+	session.lifecycle.RuntimeInitCalls += setup.RuntimeInitCalls
+	session.lifecycle.RuntimeInitNanos += setup.RuntimeInitNanos
+	if prepared != nil {
+		session.module = prepared.module
+		session.temporary = prepared.temporary
+	}
 	if err != nil {
-		return fmt.Errorf("instantiate semantic analyzer session Guest: %w", err)
-	}
-	session.module = module
-	started = time.Now()
-	session.lifecycle.InitializeCalls++
-	if err := callNoArgs(ctx, module, "_initialize"); err != nil {
-		session.lifecycle.InitializeNanos += uint64(time.Since(started))
+		if prepared == nil {
+			return fmt.Errorf("instantiate semantic analyzer session Guest: %w", err)
+		}
 		return withGuestDiagnostic(err, session.stderr.String())
 	}
-	session.lifecycle.InitializeNanos += uint64(time.Since(started))
-	started = time.Now()
-	session.lifecycle.RuntimeInitCalls++
-	if err := callStatusWithBytes(ctx, module, "runtime_init", []byte("{}")); err != nil {
-		session.lifecycle.RuntimeInitNanos += uint64(time.Since(started))
-		return withGuestDiagnostic(err, session.stderr.String())
-	}
-	session.lifecycle.RuntimeInitNanos += uint64(time.Since(started))
 	return nil
 }
 
@@ -349,6 +346,10 @@ func (session *SemanticAnalysisSession) closeLocked() error {
 	if session.module != nil {
 		err = session.module.Close(context.Background())
 		session.module = nil
+	}
+	if session.temporary != nil {
+		err = errors.Join(err, session.temporary.Close())
+		session.temporary = nil
 	}
 	if session.prepared != nil && session.prepared.temporary != nil {
 		err = errors.Join(err, session.prepared.temporary.Close())

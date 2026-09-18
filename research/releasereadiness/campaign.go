@@ -390,7 +390,7 @@ func runLane(ctx context.Context, lane string, artifact []byte, profile runtimec
 	if usesPreDispatch {
 		runResult, err = semantic.ExecuteGeneratedSource(ctx, runner, attempt, request, plan.StreamingPythonPrelude(), generated)
 	} else {
-		runResult, err = streaming.Execute(ctx, runner, attempt, request, plan.StreamingPythonPrelude())
+		runResult, err = streaming.ExecuteObserved(ctx, runner, attempt, request, plan.StreamingPythonPrelude(), nil)
 	}
 	if err != nil {
 		return LaneResult{}, err

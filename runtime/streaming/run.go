@@ -23,11 +23,6 @@ type StreamRunner interface {
 	RunStream(context.Context, []byte, <-chan string) ([]byte, error)
 }
 
-// Execute preserves the complete-source compatibility path.
-func Execute(ctx context.Context, runner engine.Runner, attempt *workspace.Attempt, request []byte, prepare string) (RunResult, error) {
-	return ExecuteObserved(ctx, runner, attempt, request, prepare, nil)
-}
-
 // ExecuteObserved exposes read-only post-run/pre-close evidence without
 // extending the Guest lifetime or transferring runner ownership.
 func ExecuteObserved(ctx context.Context, runner engine.Runner, attempt *workspace.Attempt, request []byte, prepare string, observe func(engine.Runner) error) (RunResult, error) {

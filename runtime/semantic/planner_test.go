@@ -218,11 +218,7 @@ func TestSourceBindingResolverRejectsNonProvenAndAmbiguousOccurrences(t *testing
 	sort.Slice(analysis.CallSites, func(i, j int) bool { return analysis.CallSites[i].ID < analysis.CallSites[j].ID })
 	analysis.CandidateRegions[0].CapabilityOccurrences = append(analysis.CandidateRegions[0].CapabilityOccurrences, duplicate.ID)
 	sort.Strings(analysis.CandidateRegions[0].CapabilityOccurrences)
-	_, encoded, err := analysis.Identity()
-	if err != nil {
-		t.Fatal(err)
-	}
-	planned, err := BuildSourceBoundPlan(VerifiedAnalysis{analysisJSON: encoded}, capabilityPlan, PlannerConfig{})
+	planned, err := BuildSourceBoundPlan(VerifiedAnalysis{analysis: &analysis}, capabilityPlan, PlannerConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -144,3 +144,11 @@ resume time. See `docs/performance-results.md` for measurements.
 The CLI accepts `-cache DIRECTORY` to reuse wazero native compilation across process restarts. It is off by default. Use a private, trusted directory; do not accept a cache path or files controlled by submitted Python. Compilation-cache hits do not share Python state or Host tool authority.
 
 Embedders can create a `wazero.CompilationCache` (in memory or with a directory) and pass `pysolate.WithCompilationCache(ctx, cache)` to any constructor, including the durable constructor. The caller closes the cache after all using Runners. No files are created when this option is absent.
+
+## Bounded durable execution
+
+`durable.NewExecutor(runner, durable.Limits{MaxActive: 2, MaxQueued: 16})` adds a bounded FIFO admission layer. `Submit(ctx, runID)` returns an attempt handle; `Attempt.Wait(ctx)` returns that attempt's output/error, including `ErrParked`. Repeated submission of an already queued/active Run returns `ErrBusy`, and a full queue returns `ErrQueueFull`.
+
+An active Guest blocked in a Host tool keeps its slot. Only return from `Runner.Resume` releases it. A parked logical Run can outlive its Guest without holding an active slot. Persist a decision through `Runner.Decide`, then explicitly `Submit` again. If the previous attempt is still active, wait for it and retry rather than silently dropping a wake-up.
+
+Cancelling the submit context cancels that attempt, leaving durable state resumable. `Executor.Cancel` uses durable cancellation first. `Executor.Close` stops new admission and drains existing jobs; a timeout does not destroy active resources, and Close can be retried. The caller still owns Runner and Store and closes them after drain. There is no background deadline scan, persistent queue, automatic retry or implicit resubmission after restart.

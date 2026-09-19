@@ -103,7 +103,7 @@ Deliver: implemented changes, exact versions/artifacts, concise before/after res
 
 ## Execution pointer
 
-Current: baseline and Go-path improvements verified; integrate the isolated bounded Executor and evaluate the separate Guest-bytecode candidate.
-Next: prove Executor admission/park/cancel/drain behavior, compare fixed-budget workloads, then run final combined regression and report supported modes and trade-offs.
+Current: bounded Executor integrated and verified against a semaphore and unbounded submission. Evaluate the separate Guest-bytecode candidate, then run final combined validation.
+Next: accept or reject the bytecode candidate from same-Go/same-VM comparisons, finish all selected gates, shut down task-owned resources, and publish the final report.
 Blocked: none. Baseline/core source remains archived at ae071608. Measurements run only on the single controlled Linux VM.
 Delivered slices: seeded deterministic preparation plus safe COW park ownership; bounded immutable-history read-ahead; explicit caller-owned/native on-disk compilation cache. Measured results and raw rows are in docs/performance-results.md and docs/performance-data/.

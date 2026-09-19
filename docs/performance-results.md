@@ -41,3 +41,11 @@ Raw data: `performance-data/go-paths/`. Cache constructor rows exclude warm-up; 
 ## PLM fixture correction
 
 An initial diagnostic ended with `sum(...)`, which deliberately makes this small PLM pass fall back. Those rows are not used as evidence for admitted PLM. The harness now uses supported arithmetic and rejects an expected PLM trial unless it actually reports a transformed program. Zero-delay and controlled-delay studies remain separate; fixtures are not claims about real network services.
+
+## Bounded admission and park/re-admit
+
+The executor uses fixed active and queued limits, FIFO ordering, explicit resubmission, cancellation and drain. It does not predict memory usage or choose arbitrary eviction. The real-Guest fixture submits 16 Runs, each privately touches 8 MiB, blocks in a synthetic 200-ms Host call, parks at an approval, and resumes after a persisted decision. Source, Runner, seed, tools and resource envelope are identical between arms; construction and Run creation are outside batch timings. Three separate processes per arm were interleaved on the same VM. Per-request wall latencies and all completion counts are retained in `performance-data/admission/`.
+
+With MaxActive=2, the Executor's park batch was 1.807–1.819 s, versus 1.805–1.819 s for a simple two-slot semaphore. Resume batches were 66–69 ms versus 66–73 ms. Peak simultaneous Host waits stayed at two. This demonstrates bounded behavior with approximately baseline cost, not a throughput improvement over a semaphore.
+
+Unbounded submission reached sixteen Host waits, finishing the park phase around 246–249 ms but sampled process RSS was 607–615 MiB, versus 426–444 MiB for Executor. Once all sixteen Runs were parked, Executor RSS was 402–420 MiB. Measurements are process RSS sampled at tool/park boundaries, not per-Guest memory or a guaranteed global peak. The unbounded arm is a resource/latency trade-off reference, not a same-admission-policy comparison. No default concurrency recommendation follows from this small workload.

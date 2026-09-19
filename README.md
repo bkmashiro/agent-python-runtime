@@ -20,6 +20,8 @@ Both mechanisms are explicit opt-in research paths. The default CLI and HTTP pat
 
 ## Architecture
 
+For a source-reading map and retired execution paths, see [Execution core](docs/execution-core.md).
+
 ```text
 Agent or harness
       |

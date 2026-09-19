@@ -242,7 +242,7 @@ func TestCallJournalRejectsUnsupportedCombinations(t *testing.T) {
 	if _, err := capability.NewBroker(capability.Config{RunIdentity: "journal-playback", Plan: plan, CallJournal: journal, Playback: &capability.PlaybackConfig{}}); !errors.Is(err, capability.ErrInvalidBroker) {
 		t.Fatalf("journal/playback err=%v", err)
 	}
-	if _, err := capability.NewBroker(capability.Config{RunIdentity: "journal-staged", Plan: plan, CallJournal: journal, StagedClaimer: &stagedClaimer{}, SemanticPreDispatch: true}); !errors.Is(err, capability.ErrInvalidBroker) {
+	if _, err := capability.NewBroker(capability.Config{RunIdentity: "journal-staged", Plan: plan, CallJournal: journal, StagedClaimer: &stagedClaimer{}}); !errors.Is(err, capability.ErrInvalidBroker) {
 		t.Fatalf("journal/staged err=%v", err)
 	}
 	owner, err := capability.NewBroker(capability.Config{RunIdentity: "journal-plm", Plan: plan, CallJournal: journal})

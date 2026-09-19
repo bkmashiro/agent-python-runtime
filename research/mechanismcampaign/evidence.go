@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"runtime"
 	"sort"
 	"strings"
 )
@@ -134,56 +133,6 @@ type Evidence struct {
 	FullRun        FullRunEvidence      `json:"full_run"`
 	MatchedControl MatchedControlResult `json:"matched_control"`
 	Mechanisms     []Mechanism          `json:"mechanisms"`
-}
-
-func ProjectEvidence(campaign CampaignResult, matched MatchedControlResult, campaignID, sourceCommit, artifactSHA256, fixtureSHA256 string, schedule GenerationSchedule) (Evidence, error) {
-	var mainEnvelope struct {
-		Result struct {
-			Selected string  `json:"selected"`
-			Total    float64 `json:"total_gbp"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(campaign.Resume.Response, &mainEnvelope); err != nil {
-		return Evidence{}, err
-	}
-	candidates := make(map[string]CandidateEvidence, 2)
-	for _, id := range []string{"brighton", "oxford"} {
-		candidate := campaign.Candidates.Candidates[id]
-		candidates[id] = CandidateEvidence{
-			TotalCostGBP: candidate.TotalCostGBP, SourceSHA256: candidate.SourceSHA256,
-			PhysicalIssues: candidate.ControllerSnapshot.PhysicalIssues, LogicalClaims: candidate.ControllerSnapshot.LogicalClaims,
-			SourceSealed: candidate.ControllerSnapshot.SourceSealed, COWSelected: candidate.COWSelected,
-			ModelSource: candidate.ModelSource, ExecutedSource: candidate.ExecutedSource, GuestResponse: append(json.RawMessage(nil), candidate.Response...),
-		}
-	}
-	candidateResultSHA256, err := candidateOutputsSHA256(campaign.Candidates.Candidates)
-	if err != nil {
-		return Evidence{}, err
-	}
-	full := FullRunEvidence{
-		DurationNS: campaign.DurationNS, OriginLogicalCalls: len(campaign.Origin.LogicalDispositions) + 1,
-		OriginPhysicalComputes: campaign.Origin.PhysicalComputes, OriginRetained: campaign.Origin.Retained.Disposition == "retained",
-		Candidates: candidates, CandidateResultSHA256: candidateResultSHA256,
-		SelectedCandidate: "oxford", SelectedRootSHA256: campaign.Candidates.SelectedRoot.IdentitySHA256,
-		SelectedTreeSHA256:      campaign.Candidates.SelectedInfo.TreeSHA256,
-		ImportedWorkspaceSHA256: campaign.Resume.ImportedInfo.WorkspaceSHA256, BoundRootSHA256: campaign.Resume.BoundRoot.IdentitySHA256,
-		MainSelected: mainEnvelope.Result.Selected, MainTotalGBP: mainEnvelope.Result.Total, MainGuestResponse: append(json.RawMessage(nil), campaign.Resume.Response...),
-		ColdWaits: campaign.Resume.ColdIO.Waits, ColdSucceeded: campaign.Resume.ColdIO.ColdSucceeded,
-		PageOutSucceeded: campaign.Resume.ColdIO.PageOutSucceeded, ColdResumes: campaign.Resume.ColdIO.Resumes,
-		ColdAdvisedBytes:         campaign.Resume.ColdIO.AdvisedBytes,
-		ArgumentMismatchRejected: campaign.Controls.ArgumentMismatchRejected, SourceMismatchRejected: campaign.Controls.SourceMismatchRejected,
-		Events: append([]Event(nil), campaign.Events...),
-	}
-	evidence := Evidence{
-		SchemaVersion: SchemaVersion, CampaignID: campaignID, SourceCommit: sourceCommit,
-		ArtifactSHA256: artifactSHA256, FixtureSHA256: fixtureSHA256, Platform: runtime.GOOS + "/" + runtime.GOARCH,
-		Schedule: schedule, FullRun: full, MatchedControl: matched,
-	}
-	evidence.Mechanisms = projectMechanisms(full.Events)
-	if err := evidence.Validate(); err != nil {
-		return Evidence{}, err
-	}
-	return evidence, nil
 }
 
 func (evidence Evidence) Validate() error {

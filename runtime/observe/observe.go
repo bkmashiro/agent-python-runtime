@@ -171,7 +171,7 @@ func (session *Session) Append(ctx context.Context, kind string, parent *uint32,
 		return Event{}, nil
 	}
 	session.sequence = next
-	return cloneEvent(event), nil
+	return event, nil
 }
 
 // Encode returns the canonical byte representation of one independently valid
@@ -205,20 +205,15 @@ func Decode(raw []byte) (Event, error) {
 			"parent_sequence") || containsNull(fields) {
 		return Event{}, ErrInvalidEvent
 	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
 	var event Event
-	if decoder.Decode(&event) != nil {
-		return Event{}, ErrInvalidEvent
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+	if json.Unmarshal(raw, &event) != nil {
 		return Event{}, ErrInvalidEvent
 	}
 	encoded, err := Encode(event)
 	if err != nil || !bytes.Equal(encoded, raw) {
 		return Event{}, ErrInvalidEvent
 	}
-	return cloneEvent(event), nil
+	return event, nil
 }
 
 func validateEvent(event Event) (Event, error) {

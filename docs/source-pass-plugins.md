@@ -54,12 +54,12 @@ The prepared-value binding is analyzer-free. PLM asks the final exact Guest to t
 
 ## Unified optimization catalog
 
-`passplugin.NewDefaultUnifiedCatalog` exposes 16 default-off entries:
+`passplugin.NewDefaultUnifiedCatalog` exposes 14 default-off entries:
 
-- the retained stage adapters for semantic analysis, prepared regions and Run bindings;
+- the retained stage adapters for prepared regions, prepared NumPy data and Run bindings;
 - `prepared_pure_region`, `pure_scalar_cse`, `pure_scalar_fold` and
   `plm_capability_calls`;
-- nine `runtime_lowering` passes for historical research streaming, child fanout, Agent Function retention,
+- eight `runtime_lowering` passes for child fanout, Agent Function retention,
   single-flight, fresh workflow re-evaluation, prepared Runtime instantiation, private-memory COW,
   cold-I/O residency and semantic whole-Run reuse.
 
@@ -67,7 +67,7 @@ The prepared-value binding is analyzer-free. PLM asks the final exact Guest to t
 all mutable state and lifecycle logic. `ResolveRuntime` applies Host availability after lowering
 and records `pysolate.optimization-pass-selection.v2`. `wazero.Factory.Passes` rejects direct
 optimization flags when a catalog is bound, so selection finishes before Runtime initialization
-or Guest effects. Retained-prefix Guest execution and independent semantic pre-dispatch additionally require `LegacyResearchExecution`; the default product Factory rejects them.
+or Guest effects. Retained-prefix Guest execution and independent semantic pre-dispatch are removed; no compatibility gate remains. Source streaming continues through PLM prefix admission.
 
 Two source-mutating execution patches cannot be enabled together because the repository has no
 automatic ordering contract. Conflicting capability scheduling owners also fail before execution.

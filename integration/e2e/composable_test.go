@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	goruntime "runtime"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -20,226 +19,10 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
-	"github.com/bkmashiro/agent-python-runtime/runtime/streaming"
 	"github.com/bkmashiro/agent-python-runtime/runtime/subagent"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workflow"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
-
-func TestRealGuestFullComposableRuntimeNorthStar(t *testing.T) {
-	artifact, err := os.ReadFile(guestArtifact(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	runtimePasses := unifiedPassCatalog(t)
-	runtimePasses, err = runtimePasses.Enable(
-		passregistration.SourceStreamingExecution,
-		passregistration.StreamedChildFanout,
-		passregistration.AgentFunctionRetention,
-		passregistration.AgentFunctionSingleFlight,
-		passregistration.FreshWorkflowReevaluation,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	selection, err := runtimePasses.LowerMechanisms(runtimeconfig.MechanismSet{StagedObservation: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	managerRoot := filepath.Join(t.TempDir(), "workspaces")
-	if err := os.Mkdir(managerRoot, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	manager, err := workspace.NewManager(managerRoot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer manager.Close()
-	base, err := manager.Create([]workspace.InitialFile{{Path: "input.txt", Data: []byte("seed")}}, workspace.DefaultLimits())
-	if err != nil {
-		t.Fatal(err)
-	}
-	baseInfo, _ := manager.Inspect(base)
-	parentLineage, _, err := manager.PortableIdentity(base)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	completedChildren := make(chan string, 2)
-	childRunner := subagent.FreshRunnerExecutor{
-		Factory: subagent.RunnerFactoryFunc(func(ctx context.Context, descriptor subagent.Descriptor, ref workspace.Ref) (engine.Runner, error) {
-			factory := wazeroengine.Factory{LegacyResearchExecution: true, WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "child-" + descriptor.ChildID}
-			return factory.New(ctx, artifact, runtimeconfig.DefaultRunConfig())
-		}),
-		Builder: subagent.ProgramBuilderFunc(func(descriptor subagent.Descriptor) (subagent.ChildProgram, error) {
-			code := "from pathlib import Path\nPath('/workspace/" + descriptor.ChildID + ".txt').write_text('" + descriptor.ChildID + "')\nresult = {'child': '" + descriptor.ChildID + "'}"
-			request, _ := json.Marshal(map[string]any{"run_id": "child-" + descriptor.ChildID, "code": code, "inputs": map[string]any{}})
-			return subagent.ChildProgram{Request: request}, nil
-		}),
-	}
-	orchestrator, err := subagent.New(subagent.Config{
-		Manager: manager, ParentRef: base, ParentWorkspaceSHA256: baseInfo.WorkspaceSHA256,
-		ParentLineage: parentLineage, MaxFanout: 2, MaxDepth: 2,
-		Executor: subagent.ExecutorFunc(func(ctx context.Context, invocation subagent.Invocation) error {
-			if err := childRunner.Execute(ctx, invocation); err != nil {
-				return err
-			}
-			completedChildren <- invocation.Descriptor.ChildID
-			return nil
-		}),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	parentAttempt, err := manager.ForkAttempt(base)
-	if err != nil {
-		t.Fatal(err)
-	}
-	parentConfig := runtimeconfig.DefaultRunConfig()
-	parentRunner, err := (wazeroengine.Factory{LegacyResearchExecution: true,
-		Passes: runtimePasses, WorkspaceManager: manager, WorkspaceRef: parentAttempt.Ref(), WorkspaceOwner: "composable-parent",
-	}).New(context.Background(), artifact, parentConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
-	streamRunner := parentRunner.(streaming.StreamRunner)
-	prepares, err := streaming.BuildPrepareChunks(streaming.PrepareConfig{Inputs: json.RawMessage(`{}`), Chunks: []string{
-		"from pathlib import Path\n",
-		"Path('/workspace/parent.txt').write_text('parent')\n",
-		"result = {'parent': 'sealed'}\n",
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	prepareChannel := make(chan string)
-	parentDone := make(chan struct {
-		result streaming.RunResult
-		err    error
-	}, 1)
-	go func() {
-		request := []byte(`{"run_id":"composable-parent","code":"result = stream_final","inputs":{}}`)
-		result, err := streaming.ExecuteStream(context.Background(), streamRunner, parentAttempt, request, prepareChannel)
-		parentDone <- struct {
-			result streaming.RunResult
-			err    error
-		}{result, err}
-	}()
-	prepareChannel <- prepares[0]
-	prepareChannel <- prepares[1]
-	for _, id := range []string{"left", "right"} {
-		descriptor := composableDescriptor(id, parentLineage)
-		if err := orchestrator.Stage(context.Background(), descriptor); err != nil {
-			t.Fatal(err)
-		}
-	}
-	seen := map[string]bool{}
-	for range 2 {
-		select {
-		case id := <-completedChildren:
-			seen[id] = true
-		case <-time.After(10 * time.Second):
-			t.Fatal("real child Guest did not complete before parent EOF")
-		}
-	}
-	if !seen["left"] || !seen["right"] {
-		t.Fatalf("started=%v", seen)
-	}
-	for _, prepare := range prepares[2:] {
-		prepareChannel <- prepare
-	}
-	close(prepareChannel)
-	parent := <-parentDone
-	if parent.err != nil || parent.result.PublishedWorkspace == "" {
-		t.Fatalf("parent result=%+v err=%v", parent.result, parent.err)
-	}
-	joined, err := orchestrator.Seal(context.Background(), "right")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if joined.ChangedBytes == 0 || joined.MaterializedBytes == 0 || joined.MaxBranchDepth != 1 || joined.ReachableRoots != 1 || joined.DiscardedRoots != 1 {
-		t.Fatalf("branch measurements=%+v", joined)
-	}
-	if !rootContains(t, manager, joined.SelectedRoot, "right.txt") || rootContains(t, manager, joined.SelectedRoot, "left.txt") {
-		t.Fatal("explicit select returned wrong child root")
-	}
-
-	functionStore, err := agentfunction.NewStore(filepath.Join(t.TempDir(), "functions"), hashCharacter('1'), 1<<20)
-	if err != nil {
-		t.Fatal(err)
-	}
-	flights := agentfunction.NewFlightGroup()
-	functionEngine := agentfunction.Engine{Store: functionStore, CacheEnabled: selection.Mechanisms.FunctionCache, Flights: flights}
-	functionInvocation := composableFunctionInvocation(joined.SelectedRoot.IdentitySHA256)
-	var physicalComputes int
-	var computeMu sync.Mutex
-	compute := func(context.Context, *agentfunction.Guard) ([]byte, error) {
-		computeMu.Lock()
-		physicalComputes++
-		computeMu.Unlock()
-		time.Sleep(10 * time.Millisecond)
-		return []byte(`{"normalized":"right"}`), nil
-	}
-	var functionResults [2]agentfunction.Result
-	var functionErrors [2]error
-	var functionWait sync.WaitGroup
-	functionWait.Add(2)
-	for index := range 2 {
-		index := index
-		go func() {
-			defer functionWait.Done()
-			functionResults[index], functionErrors[index] = functionEngine.Execute(context.Background(), functionInvocation, compute)
-		}()
-	}
-	functionWait.Wait()
-	if functionErrors[0] != nil || functionErrors[1] != nil || physicalComputes != 1 || flights.Stats().Waiters != 1 {
-		t.Fatalf("function errors=%v computes=%d flights=%+v", functionErrors, physicalComputes, flights.Stats())
-	}
-	cached, err := functionEngine.Execute(context.Background(), functionInvocation, compute)
-	if err != nil || !cached.CacheHit || physicalComputes != 1 {
-		t.Fatalf("cached=%+v computes=%d err=%v", cached, physicalComputes, err)
-	}
-
-	guestFactory := &realWorkflowGuestFactory{t: t, artifact: artifact, manager: manager, base: joined.SelectedRoot}
-	observation := "stable"
-	graph := workflow.Graph{SchemaVersion: workflow.GraphSchemaVersion, WorkflowID: "composable-workflow", Nodes: []workflow.Node{
-		{ID: "before", Kind: workflow.Compute, VersionSHA256: hashCharacter('1'), Compute: realWorkflowCompute("before")},
-		{ID: "observation", Kind: workflow.Observation, VersionSHA256: hashCharacter('2'), Dependencies: []string{"before"}, RefreshOnResume: true, Observe: func(context.Context, workflow.Guest, map[string][]byte) (workflow.ObservedValue, error) {
-			return workflow.ObservedValue{Value: []byte(observation), FreshnessSHA256: hashBytes([]byte(observation)), PolicySHA256: hashCharacter('3')}, nil
-		}},
-		{ID: "wait", Kind: workflow.Wait, VersionSHA256: hashCharacter('4'), Dependencies: []string{"observation"}},
-		{ID: "after", Kind: workflow.Compute, VersionSHA256: hashCharacter('5'), Dependencies: []string{"observation"}, Compute: realWorkflowCompute("after")},
-		{ID: "terminal", Kind: workflow.Terminal, VersionSHA256: hashCharacter('6'), Dependencies: []string{"after"}},
-	}}
-	evaluator, err := workflow.New(workflow.Config{
-		Graph: graph, Guests: guestFactory, ResumeEnabled: selection.Mechanisms.FreshReevaluation, Authority: workflowAuthority(),
-		ImmutableRootSHA256: []string{joined.SelectedRoot.IdentitySHA256},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	suspended, err := evaluator.Start(context.Background(), []byte(`{"resume":"fixture"}`))
-	if err != nil || suspended.Disposition != workflow.Suspended || guestFactory.created != 1 || guestFactory.closed != 1 {
-		t.Fatalf("suspended=%+v guest=%+v err=%v", suspended, guestFactory, err)
-	}
-	revokedAuthority := workflowAuthority()
-	revokedAuthority.Revoked = true
-	revokedEvaluator, err := workflow.New(workflow.Config{
-		Graph: graph, Guests: guestFactory, ResumeEnabled: selection.Mechanisms.FreshReevaluation, Authority: revokedAuthority,
-		ImmutableRootSHA256: []string{joined.SelectedRoot.IdentitySHA256},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := revokedEvaluator.Resume(context.Background(), suspended.State); !errors.Is(err, workflow.ErrAuthorityUnavailable) || guestFactory.created != 1 {
-		t.Fatalf("revoked resume created Guest: created=%d err=%v", guestFactory.created, err)
-	}
-	resumed, err := evaluator.Resume(context.Background(), suspended.State)
-	if err != nil || resumed.Disposition != workflow.Completed || guestFactory.created != 2 || guestFactory.closed != 2 || resumed.Metrics.Lookups == 0 {
-		t.Fatalf("resumed=%+v guest=%+v err=%v", resumed, guestFactory, err)
-	}
-
-}
 
 func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 	artifact, err := os.ReadFile(guestArtifact(t))
@@ -248,7 +31,7 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 	}
 	request := plainRequest(t, "from pathlib import Path\nPath('/tmp/prepared-only').write_text('private')\nresult = {'parity': 'same'}")
 	manager, base := newComposableWorkspace(t)
-	baselineFactory := wazeroengine.Factory{LegacyResearchExecution: true, WorkspaceManager: manager, WorkspaceRef: base, WorkspaceOwner: "prepared-parity"}
+	baselineFactory := wazeroengine.Factory{WorkspaceManager: manager, WorkspaceRef: base, WorkspaceOwner: "prepared-parity"}
 	baselineRunner, err := baselineFactory.New(context.Background(), artifact, runtimeconfig.DefaultRunConfig())
 	if err != nil {
 		t.Fatal(err)
@@ -382,8 +165,6 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 func TestComposableFeatureMatrixAndOffStateFallback(t *testing.T) {
 	passes := unifiedPassCatalog(t)
 	passes, err := passes.Enable(
-		passregistration.SourceStreamingExecution,
-		passregistration.StreamedChildFanout,
 		passregistration.AgentFunctionRetention,
 		passregistration.AgentFunctionSingleFlight,
 		passregistration.FreshWorkflowReevaluation,
@@ -392,13 +173,12 @@ func TestComposableFeatureMatrixAndOffStateFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolved, passEvidence, err := passes.ResolveRuntime(runtimeconfig.MechanismSet{StagedObservation: true}, runtimeconfig.MechanismSet{})
+	resolved, passEvidence, err := passes.ResolveRuntime(runtimeconfig.MechanismSet{}, runtimeconfig.MechanismSet{})
 	evidence := passEvidence.Mechanisms
 	if err != nil || resolved != (runtimeconfig.MechanismSet{}) || evidence.Validate() != nil {
 		t.Fatalf("resolved=%+v evidence=%+v err=%v", resolved, evidence, err)
 	}
 	for _, name := range []runtimeconfig.MechanismName{
-		runtimeconfig.MechanismStreaming, runtimeconfig.MechanismChildFanout,
 		runtimeconfig.MechanismFunctionCache, runtimeconfig.MechanismSingleFlight,
 		runtimeconfig.MechanismFreshReevaluation, runtimeconfig.MechanismMemoryCOW,
 	} {
@@ -442,7 +222,7 @@ func TestComposableParentInvalidDiscardsRealChildBranches(t *testing.T) {
 	runnerExecutor := subagent.FreshRunnerExecutor{
 		Factory: subagent.RunnerFactoryFunc(func(ctx context.Context, descriptor subagent.Descriptor, ref workspace.Ref) (engine.Runner, error) {
 			started <- struct{}{}
-			return (wazeroengine.Factory{LegacyResearchExecution: true, WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "invalid-child"}).New(ctx, artifact, runtimeconfig.DefaultRunConfig())
+			return (wazeroengine.Factory{WorkspaceManager: manager, WorkspaceRef: ref, WorkspaceOwner: "invalid-child"}).New(ctx, artifact, runtimeconfig.DefaultRunConfig())
 		}),
 		Builder: subagent.ProgramBuilderFunc(func(descriptor subagent.Descriptor) (subagent.ChildProgram, error) {
 			request := []byte(`{"run_id":"invalid-child","code":"result = 'private'","inputs":{}}`)
@@ -538,9 +318,7 @@ func (factory *realWorkflowGuestFactory) NewGuest(ctx context.Context) (workflow
 		return nil, err
 	}
 	factory.created++
-	runner, err := (wazeroengine.Factory{LegacyResearchExecution: true,
-		WorkspaceManager: factory.manager, WorkspaceRef: branch.Ref(), WorkspaceOwner: "workflow-guest",
-	}).New(ctx, factory.artifact, runtimeconfig.DefaultRunConfig())
+	runner, err := (wazeroengine.Factory{WorkspaceManager: factory.manager, WorkspaceRef: branch.Ref(), WorkspaceOwner: "workflow-guest"}).New(ctx, factory.artifact, runtimeconfig.DefaultRunConfig())
 	if err != nil {
 		_ = branch.Discard()
 		return nil, err
@@ -582,7 +360,7 @@ func TestRealGuestCOWSingleUseOutcomeIsolation(t *testing.T) {
 	}
 	config := runtimeconfig.DefaultRunConfig()
 
-	factory := wazeroengine.Factory{LegacyResearchExecution: true, Passes: passes, WorkspaceManager: manager, WorkspaceRef: base, WorkspaceOwner: "cow-outcome"}
+	factory := wazeroengine.Factory{Passes: passes, WorkspaceManager: manager, WorkspaceRef: base, WorkspaceOwner: "cow-outcome"}
 	runner, err := factory.New(context.Background(), artifact, config)
 	if err != nil {
 		if goruntime.GOOS != "linux" || errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
@@ -687,7 +465,7 @@ func TestRealGuestColdIOContinuationPreservesPythonState(t *testing.T) {
 	config.ColdIO = &runtimeconfig.ColdIOPolicy{
 		Strategy: runtimeconfig.ColdIOFixed, ColdAfter: 10 * time.Millisecond, PageOutAfter: 20 * time.Millisecond,
 	}
-	factory := wazeroengine.Factory{LegacyResearchExecution: true, Passes: passes, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	factory := wazeroengine.Factory{Passes: passes, BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		return capability.NewBroker(capability.Config{RunIdentity: "cold-python", Plan: plan})
 	}}
 	runner, err := factory.New(context.Background(), artifact, config)

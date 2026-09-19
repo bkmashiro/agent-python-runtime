@@ -23,9 +23,8 @@ import (
 func unifiedCatalog(t *testing.T) *passplugin.Registry {
 	t.Helper()
 	catalog, err := passplugin.NewUnifiedCatalog(passplugin.UnifiedCatalogConfig{
-		SemanticPreDispatchConfigSHA256: "sha256:" + strings.Repeat("a", 64),
-		PreparedNumpyLoadConfigSHA256:   "sha256:" + strings.Repeat("b", 64),
-		PreparedPureRegionConfigSHA256:  "sha256:" + strings.Repeat("c", 64),
+		PreparedNumpyLoadConfigSHA256:  "sha256:" + strings.Repeat("b", 64),
+		PreparedPureRegionConfigSHA256: "sha256:" + strings.Repeat("c", 64),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -47,27 +46,6 @@ func TestFactoryRequiresBrokerForProgrammaticToolsAndApproval(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "require a capability Broker factory") {
 			t.Fatalf("factory error = %v", err)
 		}
-	}
-}
-
-func TestFactoryQuarantinesLegacyEarlyExecutionBehindResearchGate(t *testing.T) {
-	for name, mechanisms := range map[string]runtimeconfig.MechanismSet{
-		"semantic pre-dispatch": {SemanticAnalysis: true, SemanticPreDispatch: true, StagedObservation: true},
-		"retained-prefix Guest": {Streaming: true, PrivateWorkspace: true},
-	} {
-		t.Run(name, func(t *testing.T) {
-			config := runtimeconfig.DefaultRunConfig()
-			config.Mechanisms = mechanisms
-			if _, err := (wazeroengine.Factory{}).New(context.Background(), []byte("not wasm"), config); !errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
-				t.Fatalf("default factory error=%v", err)
-			}
-		})
-	}
-	config := runtimeconfig.DefaultRunConfig()
-	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true, SemanticPreDispatch: true, StagedObservation: true}
-	_, err := (wazeroengine.Factory{LegacyResearchExecution: true}).New(context.Background(), []byte("not wasm"), config)
-	if err == nil || !strings.Contains(err.Error(), "requires a capability Broker factory") {
-		t.Fatalf("research-gated factory error=%v", err)
 	}
 }
 
@@ -141,48 +119,10 @@ func TestFactoryFailureClosesTransferredValueSlotTable(t *testing.T) {
 
 func TestFactoryRejectsInvalidMechanismsBeforeArtifactParsing(t *testing.T) {
 	config := runtimeconfig.DefaultRunConfig()
-	config.Mechanisms = runtimeconfig.MechanismSet{Streaming: true}
+	config.Mechanisms = runtimeconfig.MechanismSet{ChildFanout: true}
 	_, err := (wazeroengine.Factory{}).New(context.Background(), []byte("not wasm"), config)
 	if !errors.Is(err, runtimeconfig.ErrInvalidMechanismSet) {
 		t.Fatalf("factory error = %v", err)
-	}
-}
-
-func TestRunStreamRequiresSelectedMechanism(t *testing.T) {
-	runner, err := (wazeroengine.Factory{}).New(context.Background(), []byte{0, 97, 115, 109, 1, 0, 0, 0}, runtimeconfig.DefaultRunConfig())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer runner.Close(context.Background())
-	prepares := make(chan string)
-	close(prepares)
-	streamRunner, ok := runner.(interface {
-		RunStream(context.Context, []byte, <-chan string) ([]byte, error)
-	})
-	if !ok {
-		t.Fatal("runner lacks stream seam")
-	}
-	if _, err := streamRunner.RunStream(context.Background(), []byte(`{}`), prepares); !errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
-		t.Fatalf("RunStream() error = %v", err)
-	}
-}
-
-func TestLowLevelConstructorsCannotBypassLegacyResearchGate(t *testing.T) {
-	for name, mechanisms := range map[string]runtimeconfig.MechanismSet{
-		"semantic pre-dispatch": {SemanticAnalysis: true, SemanticPreDispatch: true, StagedObservation: true},
-		"retained-prefix Guest": {Streaming: true, PrivateWorkspace: true},
-	} {
-		t.Run(name, func(t *testing.T) {
-			config := runtimeconfig.DefaultRunConfig()
-			config.Mechanisms = mechanisms
-			if _, err := wazeroengine.New(context.Background(), []byte("not wasm"), config); !errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
-				t.Fatalf("New error=%v", err)
-			}
-			factory := func(context.Context) (*capability.Broker, error) { return nil, nil }
-			if _, err := wazeroengine.NewWithBrokerFactory(context.Background(), []byte("not wasm"), config, factory); !errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
-				t.Fatalf("NewWithBrokerFactory error=%v", err)
-			}
-		})
 	}
 }
 

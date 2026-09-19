@@ -3,12 +3,11 @@
 Status: **Historical mechanism evidence; literal eager preflight disabled by the 2026-08-14 successor contract.**
 Date: 2026-08-13
 
-> **2026-08-27 successor decision:** retained-prefix Guest execution and literal eager
-> preflight are no longer product paths. They require the explicit
-> `LegacyResearchExecution` gate for historical replay. Current source streaming performs
-> analysis only; admitted Host work enters the unified split-phase table, then one
-> sealed-source lowering precedes one synchronous Guest execution. The remaining text is
-> historical mechanism evidence, not current admission policy.
+> **Archived mechanism:** the retained-prefix executor, literal eager preflight and
+> their compatibility gate have been removed. Reproduction requires a historical
+> checkout (`df191bf1` or the evidence-specific revision). Current source streaming
+> admits Host work into the PLM split-phase table, followed by one synchronous
+> final Guest execution. The remaining text records the old experiment.
 
 ## Research question
 

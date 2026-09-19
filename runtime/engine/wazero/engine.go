@@ -46,10 +46,6 @@ type Factory struct {
 	PreparedRegions  *preparedregion.PreparedRegionTable
 	ValueSlots       *valueslot.Table
 	Passes           *passplugin.Registry
-	// LegacyResearchExecution is the single explicit gate for replaying the
-	// retained-prefix Guest and independent semantic pre-dispatch comparators.
-	// Product execution and the PLM path leave it false.
-	LegacyResearchExecution bool
 	// CompilationCache is caller-owned. The caller controls its lifetime; each
 	// durable Runner supplies one cache for all of its fresh attempts.
 	CompilationCache wazerort.CompilationCache
@@ -86,10 +82,7 @@ func (factory Factory) validatedBinding(config runtimeconfig.RunConfig) (*worksp
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
-	if !factory.LegacyResearchExecution && (config.Mechanisms.Streaming || config.Mechanisms.SemanticPreDispatch) {
-		return nil, runtimeconfig.ErrMechanismDisabled
-	}
-	if (config.Mechanisms.SemanticPreDispatch || config.Mechanisms.SplitPhaseCalls) && factory.BrokerFactory == nil {
+	if config.Mechanisms.SplitPhaseCalls && factory.BrokerFactory == nil {
 		return nil, errors.New("Host scheduling requires a capability Broker factory")
 	}
 	if (config.Mechanisms.ProgrammaticToolCalling || config.Mechanisms.ApprovalSuspension) && factory.BrokerFactory == nil {
@@ -115,7 +108,7 @@ func (factory Factory) validatedBinding(config runtimeconfig.RunConfig) (*worksp
 	if factory.WorkspaceManager != nil {
 		binding = &workspaceBinding{manager: factory.WorkspaceManager, ref: factory.WorkspaceRef, owner: factory.WorkspaceOwner}
 	}
-	if factory.PreparedRegions != nil && (!config.Mechanisms.SemanticAnalysis || config.Mechanisms.Streaming) {
+	if factory.PreparedRegions != nil && !config.Mechanisms.SemanticAnalysis {
 		return nil, errors.New("prepared region table requires non-streaming semantic analysis")
 	}
 	if config.Mechanisms.ValueSlots && factory.ValueSlots == nil {
@@ -405,9 +398,6 @@ func NewWithBrokerFactory(ctx context.Context, wasm []byte, config runtimeconfig
 func validateProductConstructorConfig(config runtimeconfig.RunConfig) error {
 	if err := config.Validate(); err != nil {
 		return err
-	}
-	if config.Mechanisms.Streaming || config.Mechanisms.SemanticPreDispatch {
-		return runtimeconfig.ErrMechanismDisabled
 	}
 	return nil
 }
@@ -1146,16 +1136,6 @@ func (engine *Engine) RunCapabilitySourcePatchInline(ctx context.Context, reques
 	return passplugin.CapabilitySourcePatchRun{Payload: payload, Patch: inline.patch, Applied: inline.applied && runErr == nil, PassError: inline.passErr}, runErr
 }
 
-// RunStream keeps one fresh Guest alive while Host-trusted preparation chunks
-// arrive. It is an internal streaming seam; Agent source still enters only
-// through the final validated request.
-func (engine *Engine) RunStream(ctx context.Context, request []byte, prepares <-chan string) ([]byte, error) {
-	if !engine.config.Mechanisms.Streaming {
-		return nil, runtimeconfig.ErrMechanismDisabled
-	}
-	return engine.runWithPrepares(ctx, request, prepares, true, nil)
-}
-
 type inlineCapabilitySelection struct {
 	request      []byte
 	registration passregistration.Registration
@@ -1271,9 +1251,6 @@ func (engine *Engine) runWithPrepares(ctx context.Context, request []byte, prepa
 		}
 		if broker == nil {
 			return errors.New("capability broker factory returned nil")
-		}
-		if broker.SemanticPreDispatchEnabled() != engine.config.Mechanisms.SemanticPreDispatch {
-			return errors.New("capability Broker semantic pre-dispatch mode does not match Run configuration")
 		}
 		if broker.ApprovalSuspensionEnabled() != engine.config.Mechanisms.ApprovalSuspension {
 			return errors.New("capability Broker approval suspension mode does not match Run configuration")

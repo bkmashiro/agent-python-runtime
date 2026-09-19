@@ -22,9 +22,9 @@ func TestDefaultMechanismsAreAllOff(t *testing.T) {
 	}
 }
 
-func TestFutureCallsDoNotRequireSemanticAnalyzer(t *testing.T) {
+func TestPLMCallsDoNotRequireSeparateSemanticAnalyzer(t *testing.T) {
 	if err := (runtime.MechanismSet{SplitPhaseCalls: true}).Validate(); err != nil {
-		t.Fatalf("direct Future calls unexpectedly require an analyzer: %v", err)
+		t.Fatalf("PLM calls unexpectedly require a separate analyzer: %v", err)
 	}
 }
 
@@ -39,12 +39,9 @@ func TestMechanismDependenciesFailClosed(t *testing.T) {
 		name string
 		set  runtime.MechanismSet
 	}{
-		{"streaming without private workspace", runtime.MechanismSet{Streaming: true}},
-		{"staged observation without streaming", runtime.MechanismSet{StagedObservation: true}},
-		{"semantic pre-dispatch without analysis", runtime.MechanismSet{SemanticPreDispatch: true, StagedObservation: true}},
-		{"semantic pre-dispatch without staged observation", runtime.MechanismSet{SemanticPreDispatch: true, SemanticAnalysis: true}},
-		{"fanout without streaming", runtime.MechanismSet{ImmutableBranches: true, ChildFanout: true}},
-		{"fanout without branches", runtime.MechanismSet{Streaming: true, ChildFanout: true}},
+		{"staged observation without PLM", runtime.MechanismSet{StagedObservation: true}},
+		{"fanout without private workspace", runtime.MechanismSet{ImmutableBranches: true, ChildFanout: true}},
+		{"fanout without branches", runtime.MechanismSet{PrivateWorkspace: true, ChildFanout: true}},
 		{"function cache without branches", runtime.MechanismSet{FunctionCache: true}},
 		{"fresh reevaluation without agent functions", runtime.MechanismSet{FreshReevaluation: true}},
 		{"cow without prepared runtime", runtime.MechanismSet{MemoryCOW: true}},
@@ -116,7 +113,6 @@ func TestSingleFlightDoesNotRequireDurableCache(t *testing.T) {
 
 func TestResolveMechanismsReportsSelectedFallbackAndOff(t *testing.T) {
 	requested := runtime.MechanismSet{
-		Streaming:          true,
 		StagedObservation:  true,
 		ImmutableBranches:  true,
 		ChildFanout:        true,
@@ -143,7 +139,7 @@ func TestResolveMechanismsReportsSelectedFallbackAndOff(t *testing.T) {
 		t.Fatal(err)
 	}
 	if resolved.ChildFanout || resolved.MemoryCOW || resolved.ColdIOContinuation || resolved.SemanticReuse ||
-		!resolved.Streaming || !resolved.SingleFlight || !resolved.SemanticAnalysis || !resolved.SplitPhaseCalls || !resolved.ValueSlots {
+		!resolved.SingleFlight || !resolved.SemanticAnalysis || !resolved.SplitPhaseCalls || !resolved.ValueSlots {
 		t.Fatalf("unexpected resolved set: %#v", resolved)
 	}
 	if err := evidence.Validate(); err != nil {
@@ -164,8 +160,8 @@ func TestResolveMechanismsReportsSelectedFallbackAndOff(t *testing.T) {
 	if got := evidence.Disposition(runtime.MechanismSemanticAnalysis); got != runtime.MechanismSelected {
 		t.Fatalf("semantic analysis disposition = %q", got)
 	}
-	if got := evidence.Disposition(runtime.MechanismStreaming); got != runtime.MechanismSelected {
-		t.Fatalf("streaming disposition = %q", got)
+	if got := evidence.Disposition(runtime.MechanismPrivateWorkspace); got != runtime.MechanismSelected {
+		t.Fatalf("private workspace disposition = %q", got)
 	}
 	if got := evidence.Disposition(runtime.MechanismPreparedRuntime); got != runtime.MechanismSelected {
 		t.Fatalf("prepared disposition = %q", got)
@@ -188,13 +184,13 @@ func TestResolveMechanismsReportsSelectedFallbackAndOff(t *testing.T) {
 }
 
 func TestMechanismEvidenceRejectsUnknownOrPrivateReason(t *testing.T) {
-	requested := runtime.MechanismSet{Streaming: true, PrivateWorkspace: true}
+	requested := runtime.MechanismSet{PrivateWorkspace: true}
 	_, evidence, err := runtime.ResolveMechanisms(requested, runtime.MechanismSet{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for index := range evidence.Mechanisms {
-		if evidence.Mechanisms[index].Name == runtime.MechanismStreaming {
+		if evidence.Mechanisms[index].Name == runtime.MechanismPrivateWorkspace {
 			evidence.Mechanisms[index].Reason = "host path /Users/example/private was unavailable"
 		}
 	}
@@ -207,7 +203,7 @@ func TestMechanismSetDoesNotMutateCapabilityGrants(t *testing.T) {
 	config := runtime.DefaultRunConfig()
 	config.CapabilityGrants["read"] = runtime.CapabilityGrant{Name: "read"}
 	before := map[string]runtime.CapabilityGrant{"read": {Name: "read"}}
-	config.Mechanisms = runtime.MechanismSet{Streaming: true, PrivateWorkspace: true, StagedObservation: true}
+	config.Mechanisms = runtime.MechanismSet{SplitPhaseCalls: true, PrivateWorkspace: true, StagedObservation: true}
 	if err := config.Validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -227,4 +223,11 @@ func sortedKeys(values map[string]any) []string {
 		}
 	}
 	return keys
+}
+
+func TestChildFanoutUsesPrivateBranchesWithoutRetainedPrefixExecution(t *testing.T) {
+	set := runtime.MechanismSet{ChildFanout: true, ImmutableBranches: true, PrivateWorkspace: true}
+	if err := set.Validate(); err != nil {
+		t.Fatal(err)
+	}
 }

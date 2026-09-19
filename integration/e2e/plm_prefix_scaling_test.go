@@ -178,7 +178,6 @@ func TestPLMPrefixSourceScalingFixture(t *testing.T) {
 			SourceCommit: os.Getenv("PYSOLATE_EXPERIMENT_SOURCE_COMMIT"), SourceTree: os.Getenv("PYSOLATE_EXPERIMENT_SOURCE_TREE"),
 			HostID: os.Getenv("EVALUATION_HOST_ID"), ArtifactSHA256: fmt.Sprintf("sha256:%x", artifactDigest[:]), Runs: runs,
 			ProviderDelayMS: int(cell.providerDelayDuration() / time.Millisecond), ChunkOffsetsMS: cell.chunkOffsetsMS(), SourceSHA256: testDigest(cell.sourceText()),
-			EagerEstimateScope: "Controlled Pysolate source-tail overlap; no supplied EAGER runtime claim",
 		},
 		CallCount: calls, SourceWindowMS: windowMS, SourceTreeState: os.Getenv("PYSOLATE_EXPERIMENT_SOURCE_STATE"),
 	}

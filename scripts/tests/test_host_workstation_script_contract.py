@@ -37,7 +37,7 @@ class HostWorkstationScriptContractTests(unittest.TestCase):
         self.assertIn("expected_hostname", text)
         self.assertIn("toolchains/go", text)
         self.assertIn('case "$suite" in', text)
-        self.assertIn("./runtime/prepareddataset", text)
+        self.assertIn("./runtime/preparedregion", text)
         self.assertIn("./runtime/engine/...", text)
         self.assertIn("run-linux-evaluation-suite.sh", text)
         self.assertIn("./scripts/run-linux-evaluation-suite.sh", text)

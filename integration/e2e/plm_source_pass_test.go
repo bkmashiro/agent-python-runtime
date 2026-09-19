@@ -168,7 +168,7 @@ func TestRealGuestStreamingPrefixAndPLMShareOneSplitPhaseOwner(t *testing.T) {
 	}
 
 	plugins := unifiedPassCatalog(t)
-	plugins, err = plugins.Enable(passregistration.SemanticPreDispatch, sourcepatch.PLMCapabilityCallsName)
+	plugins, err = plugins.Enable(sourcepatch.PLMCapabilityCallsName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +176,7 @@ func TestRealGuestStreamingPrefixAndPLMShareOneSplitPhaseOwner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !selection.Mechanisms.SemanticAnalysis || !selection.Mechanisms.SplitPhaseCalls || selection.Mechanisms.SemanticPreDispatch {
+	if selection.Mechanisms.SemanticAnalysis || !selection.Mechanisms.SplitPhaseCalls {
 		t.Fatalf("selection=%+v", selection)
 	}
 	executionConfig := runtimeconfig.DefaultRunConfig()
@@ -661,7 +661,7 @@ func TestRealGuestPLMWaitUsesColdResidency(t *testing.T) {
 	cfg := runtimeconfig.DefaultRunConfig()
 	cfg.Timeout = 90 * time.Second
 	cfg.ColdIO = &runtimeconfig.ColdIOPolicy{Strategy: runtimeconfig.ColdIOFixed, ColdAfter: 10 * time.Millisecond, PageOutAfter: 20 * time.Millisecond}
-	runner, err := (wazeroengine.Factory{Passes: passes, LegacyResearchExecution: true, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	runner, err := (wazeroengine.Factory{Passes: passes, BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		return capability.NewBroker(capability.Config{RunIdentity: "plm-cold", Plan: plan})
 	}}).New(context.Background(), artifact, cfg)
 	if err != nil {

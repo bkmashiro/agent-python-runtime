@@ -12,24 +12,22 @@ type MechanismDisposition string
 type MechanismReason string
 
 const (
-	MechanismApprovalSuspension  MechanismName = "approval_suspension"
-	MechanismColdIOContinuation  MechanismName = "cold_io_continuation"
-	MechanismStreaming           MechanismName = "streaming"
-	MechanismStagedObservation   MechanismName = "staged_observation"
-	MechanismPrivateWorkspace    MechanismName = "private_workspace"
-	MechanismProgrammaticTools   MechanismName = "programmatic_tool_calling"
-	MechanismImmutableBranches   MechanismName = "immutable_branches"
-	MechanismChildFanout         MechanismName = "child_fanout"
-	MechanismFunctionCache       MechanismName = "function_cache"
-	MechanismSingleFlight        MechanismName = "single_flight"
-	MechanismFreshReevaluation   MechanismName = "fresh_reevaluation"
-	MechanismPreparedRuntime     MechanismName = "prepared_runtime"
-	MechanismMemoryCOW           MechanismName = "memory_cow"
-	MechanismSemanticAnalysis    MechanismName = "semantic_analysis"
-	MechanismSemanticPreDispatch MechanismName = "semantic_pre_dispatch"
-	MechanismSemanticReuse       MechanismName = "semantic_reuse"
-	MechanismSplitPhaseCalls     MechanismName = "split_phase_calls"
-	MechanismValueSlots          MechanismName = "value_slots"
+	MechanismApprovalSuspension MechanismName = "approval_suspension"
+	MechanismColdIOContinuation MechanismName = "cold_io_continuation"
+	MechanismStagedObservation  MechanismName = "staged_observation"
+	MechanismPrivateWorkspace   MechanismName = "private_workspace"
+	MechanismProgrammaticTools  MechanismName = "programmatic_tool_calling"
+	MechanismImmutableBranches  MechanismName = "immutable_branches"
+	MechanismChildFanout        MechanismName = "child_fanout"
+	MechanismFunctionCache      MechanismName = "function_cache"
+	MechanismSingleFlight       MechanismName = "single_flight"
+	MechanismFreshReevaluation  MechanismName = "fresh_reevaluation"
+	MechanismPreparedRuntime    MechanismName = "prepared_runtime"
+	MechanismMemoryCOW          MechanismName = "memory_cow"
+	MechanismSemanticAnalysis   MechanismName = "semantic_analysis"
+	MechanismSemanticReuse      MechanismName = "semantic_reuse"
+	MechanismSplitPhaseCalls    MechanismName = "split_phase_calls"
+	MechanismValueSlots         MechanismName = "value_slots"
 
 	MechanismOff      MechanismDisposition = "off"
 	MechanismSelected MechanismDisposition = "selected"
@@ -56,12 +54,10 @@ var mechanismNames = []MechanismName{
 	MechanismPrivateWorkspace,
 	MechanismProgrammaticTools,
 	MechanismSemanticAnalysis,
-	MechanismSemanticPreDispatch,
 	MechanismSemanticReuse,
 	MechanismSingleFlight,
 	MechanismSplitPhaseCalls,
 	MechanismStagedObservation,
-	MechanismStreaming,
 	MechanismValueSlots,
 }
 
@@ -69,7 +65,6 @@ var mechanismNames = []MechanismName{
 // fresh execution with every optional mechanism disabled.
 type MechanismSet struct {
 	ApprovalSuspension      bool
-	Streaming               bool
 	StagedObservation       bool
 	PrivateWorkspace        bool
 	ProgrammaticToolCalling bool
@@ -82,26 +77,16 @@ type MechanismSet struct {
 	MemoryCOW               bool
 	ColdIOContinuation      bool
 	SemanticAnalysis        bool
-	SemanticPreDispatch     bool
 	SemanticReuse           bool
 	SplitPhaseCalls         bool `json:"SplitPhaseCalls,omitempty"`
 	ValueSlots              bool `json:"ValueSlots,omitempty"`
 }
 
 func (set MechanismSet) Validate() error {
-	if set.Streaming && !set.PrivateWorkspace {
+	if set.StagedObservation && !set.SplitPhaseCalls {
 		return ErrInvalidMechanismSet
 	}
-	if set.StagedObservation && !set.Streaming && !set.SemanticPreDispatch && !set.SplitPhaseCalls {
-		return ErrInvalidMechanismSet
-	}
-	if set.SemanticPreDispatch && (!set.SemanticAnalysis || !set.StagedObservation) {
-		return ErrInvalidMechanismSet
-	}
-	if set.SplitPhaseCalls && set.SemanticPreDispatch {
-		return ErrInvalidMechanismSet
-	}
-	if set.ChildFanout && (!set.Streaming || !set.ImmutableBranches) {
+	if set.ChildFanout && (!set.PrivateWorkspace || !set.ImmutableBranches) {
 		return ErrInvalidMechanismSet
 	}
 	if set.FunctionCache && !set.ImmutableBranches {
@@ -138,8 +123,6 @@ func (set MechanismSet) enabled(name MechanismName) bool {
 		return set.ApprovalSuspension
 	case MechanismColdIOContinuation:
 		return set.ColdIOContinuation
-	case MechanismStreaming:
-		return set.Streaming
 	case MechanismStagedObservation:
 		return set.StagedObservation
 	case MechanismPrivateWorkspace:
@@ -162,8 +145,6 @@ func (set MechanismSet) enabled(name MechanismName) bool {
 		return set.MemoryCOW
 	case MechanismSemanticAnalysis:
 		return set.SemanticAnalysis
-	case MechanismSemanticPreDispatch:
-		return set.SemanticPreDispatch
 	case MechanismSemanticReuse:
 		return set.SemanticReuse
 	case MechanismSplitPhaseCalls:
@@ -181,8 +162,6 @@ func (set *MechanismSet) set(name MechanismName, enabled bool) {
 		set.ApprovalSuspension = enabled
 	case MechanismColdIOContinuation:
 		set.ColdIOContinuation = enabled
-	case MechanismStreaming:
-		set.Streaming = enabled
 	case MechanismStagedObservation:
 		set.StagedObservation = enabled
 	case MechanismPrivateWorkspace:
@@ -205,8 +184,6 @@ func (set *MechanismSet) set(name MechanismName, enabled bool) {
 		set.MemoryCOW = enabled
 	case MechanismSemanticAnalysis:
 		set.SemanticAnalysis = enabled
-	case MechanismSemanticPreDispatch:
-		set.SemanticPreDispatch = enabled
 	case MechanismSemanticReuse:
 		set.SemanticReuse = enabled
 	case MechanismSplitPhaseCalls:

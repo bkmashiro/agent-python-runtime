@@ -22,6 +22,15 @@ import (
 // The treatment deliberately uses the ordinary Guest Run path: source chunks
 // are retained by the Host and admitted as one final request only after the
 // frozen schedule has released them.
+type ProviderObservation struct {
+	Attempts            uint32
+	ResultBytes         uint64
+	CostUnits           uint64
+	ElapsedNanos        uint64
+	Dispositions        PhysicalDispositions
+	ReadyBeforeFinalize uint32
+}
+
 type SerialGuestTreatmentConfig struct {
 	Artifact            []byte
 	RunConfig           runtimeconfig.RunConfig

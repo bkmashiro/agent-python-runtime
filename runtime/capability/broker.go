@@ -63,12 +63,11 @@ type CallJournal interface {
 }
 
 type Config struct {
-	RunIdentity         string
-	Plan                *Plan
-	Playback            *PlaybackConfig
-	Branch              *BranchConfig
-	StagedClaimer       StagedObservationClaimer
-	SemanticPreDispatch bool
+	RunIdentity   string
+	Plan          *Plan
+	Playback      *PlaybackConfig
+	Branch        *BranchConfig
+	StagedClaimer StagedObservationClaimer
 	// ProgrammaticParentCallID binds every admitted call to one program
 	// execution. Empty selects the ordinary direct-call path.
 	ProgrammaticParentCallID string
@@ -154,12 +153,11 @@ type callError struct {
 func NewBroker(config Config) (*Broker, error) {
 	if !validIdentity(config.RunIdentity) || config.Plan == nil || config.Plan.Identity() == "" || config.Plan.MaxCalls() == 0 ||
 		(config.Playback != nil && config.Branch != nil) || (config.StagedClaimer != nil && (config.Playback != nil || config.Branch != nil)) ||
-		(config.StagedClaimer != nil) != config.SemanticPreDispatch ||
 		(config.ProgrammaticParentCallID != "" && !validProgrammaticParentCallID(config.ProgrammaticParentCallID)) ||
 		(config.AllowDirectCalls && config.ProgrammaticParentCallID == "") ||
 		(config.SourceResolver != nil && config.ProgrammaticParentCallID == "") ||
 		(config.ApprovalController != nil) != config.ApprovalSuspension || (config.Plan.RequiresApproval() && !config.ApprovalSuspension) ||
-		(config.CallJournal != nil && (config.ProgrammaticParentCallID != "" || config.SourceResolver != nil || config.Playback != nil || config.Branch != nil || config.StagedClaimer != nil || config.SemanticPreDispatch)) {
+		(config.CallJournal != nil && (config.ProgrammaticParentCallID != "" || config.SourceResolver != nil || config.Playback != nil || config.Branch != nil || config.StagedClaimer != nil)) {
 		return nil, ErrInvalidBroker
 	}
 	broker := &Broker{config: config, seen: make(map[string]struct{})}
@@ -221,7 +219,7 @@ func (broker *Broker) AttachStagedClaimer(claimer StagedObservationClaimer) erro
 	}
 	broker.mu.Lock()
 	defer broker.mu.Unlock()
-	if broker.calls != 0 || broker.splitPhase != nil || broker.config.StagedClaimer != nil || broker.config.Playback != nil || broker.config.Branch != nil || broker.config.SemanticPreDispatch || broker.config.CallJournal != nil {
+	if broker.calls != 0 || broker.splitPhase != nil || broker.config.StagedClaimer != nil || broker.config.Playback != nil || broker.config.Branch != nil || broker.config.CallJournal != nil {
 		return ErrInvalidBroker
 	}
 	broker.config.StagedClaimer = claimer
@@ -245,7 +243,7 @@ func (broker *Broker) attachSplitPhaseTable(table *SplitPhaseTable) error {
 	}
 	broker.mu.Lock()
 	defer broker.mu.Unlock()
-	if broker.calls != 0 || broker.splitPhase != nil || broker.config.StagedClaimer != nil || broker.config.Playback != nil || broker.config.Branch != nil || broker.config.SemanticPreDispatch || broker.config.CallJournal != nil {
+	if broker.calls != 0 || broker.splitPhase != nil || broker.config.StagedClaimer != nil || broker.config.Playback != nil || broker.config.Branch != nil || broker.config.CallJournal != nil {
 		return ErrInvalidBroker
 	}
 	broker.splitPhase = table
@@ -371,10 +369,6 @@ func (broker *Broker) callAdmitted(ctx context.Context, call request, operation 
 	if broker.config.StagedClaimer != nil {
 		qualifiedStaged := registered.spec.Playback == PlaybackLiveOnly &&
 			(registered.spec.EffectClass == EffectPure || registered.spec.EffectClass == EffectWorkspaceRead || registered.spec.EffectClass == EffectExternalRead)
-		if broker.config.SemanticPreDispatch {
-			qualification, qualified := broker.config.Plan.PreDispatch(call.Capability)
-			qualifiedStaged = qualifiedStaged && qualified && qualification.Eligible()
-		}
 		if !qualifiedStaged {
 			broker.record(call, operation, "denied", nil)
 			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "staged_observation_unqualified", Message: "capability is not eligible for staged observation"}})
@@ -767,10 +761,6 @@ func (broker *Broker) RunIdentity() string {
 		return ""
 	}
 	return broker.config.RunIdentity
-}
-
-func (broker *Broker) SemanticPreDispatchEnabled() bool {
-	return broker != nil && broker.config.SemanticPreDispatch
 }
 
 func (broker *Broker) ApprovalSuspensionEnabled() bool {

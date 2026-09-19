@@ -75,8 +75,8 @@ set +e
   "$GOROOT/bin/go" version
   case "$suite" in
     baseline)
-      "$GOROOT/bin/go" test ./runtime/prepareddataset ./runtime/preparedregion ./runtime/workspace ./runtime/subagent -count=1
-      "$GOROOT/bin/go" vet ./runtime/prepareddataset ./runtime/preparedregion ./runtime/workspace ./runtime/subagent
+      "$GOROOT/bin/go" test ./runtime/preparedregion ./runtime/workspace ./runtime/subagent -count=1
+      "$GOROOT/bin/go" vet ./runtime/preparedregion ./runtime/workspace ./runtime/subagent
       ;;
     prepared-family)
       AGENT_RUNTIME_BUILD_CACHE_ROOT="$build_cache_root" \

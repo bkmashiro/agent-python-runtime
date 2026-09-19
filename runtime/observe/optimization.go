@@ -152,9 +152,7 @@ type OptimizationReport struct {
 	SealSHA256             string                 `json:"seal_sha256"`
 }
 
-type verifiedOptimizationState struct{ report OptimizationReport }
-
-type VerifiedOptimizationReport struct{ state *verifiedOptimizationState }
+type VerifiedOptimizationReport struct{ report OptimizationReport }
 
 func BuildOptimizationReport(report OptimizationReport) (VerifiedOptimizationReport, error) {
 	if report.SealSHA256 != "" || validateOptimizationReport(report, false) != nil {
@@ -169,29 +167,27 @@ func BuildOptimizationReport(report OptimizationReport) (VerifiedOptimizationRep
 		return VerifiedOptimizationReport{}, err
 	}
 	cloned.SealSHA256 = seal
-	if validateOptimizationReport(cloned, true) != nil {
-		return VerifiedOptimizationReport{}, ErrInvalidOptimizationReport
-	}
 	encoded, err := json.Marshal(cloned)
+	// The generated JSON cannot contain duplicate keys, but the scan also
+	// enforces maxJSONNodes so builders and decoders share the same bound.
 	if err != nil || len(encoded) > maxOptimizationReportBytes || rejectDuplicateJSON(encoded) != nil {
 		return VerifiedOptimizationReport{}, ErrInvalidOptimizationReport
 	}
-	return VerifiedOptimizationReport{state: &verifiedOptimizationState{report: cloned}}, nil
+	return VerifiedOptimizationReport{report: cloned}, nil
 }
 
 func (verified VerifiedOptimizationReport) Report() (OptimizationReport, error) {
-	if verified.state == nil || validateOptimizationReport(verified.state.report, true) != nil {
+	if verified.report.SchemaVersion != OptimizationSchemaVersion || verified.report.SealSHA256 == "" {
 		return OptimizationReport{}, ErrInvalidOptimizationReport
 	}
-	return cloneOptimizationReport(verified.state.report)
+	return cloneOptimizationReport(verified.report)
 }
 
 func EncodeOptimizationReport(verified VerifiedOptimizationReport) ([]byte, error) {
-	report, err := verified.Report()
-	if err != nil {
-		return nil, err
+	if verified.report.SchemaVersion != OptimizationSchemaVersion || verified.report.SealSHA256 == "" {
+		return nil, ErrInvalidOptimizationReport
 	}
-	encoded, err := json.Marshal(report)
+	encoded, err := json.Marshal(verified.report)
 	if err != nil || len(encoded) > maxOptimizationReportBytes {
 		return nil, ErrInvalidOptimizationReport
 	}
@@ -215,11 +211,7 @@ func DecodeOptimizationReport(raw []byte) (VerifiedOptimizationReport, error) {
 	if err != nil || !bytes.Equal(canonical, raw) {
 		return VerifiedOptimizationReport{}, ErrInvalidOptimizationReport
 	}
-	cloned, err := cloneOptimizationReport(report)
-	if err != nil {
-		return VerifiedOptimizationReport{}, err
-	}
-	return VerifiedOptimizationReport{state: &verifiedOptimizationState{report: cloned}}, nil
+	return VerifiedOptimizationReport{report: report}, nil
 }
 
 func validateOptimizationReport(report OptimizationReport, sealed bool) error {

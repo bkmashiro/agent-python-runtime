@@ -47,7 +47,6 @@ type plmPrefixEagerCell struct {
 	expectedCalls       uint32
 	expectedPrefixCalls uint32
 	expectedResult      json.RawMessage
-	includeImmediate    bool
 }
 
 var plmPrefixEagerCells = map[string]plmPrefixEagerCell{
@@ -59,7 +58,7 @@ var plmPrefixEagerCells = map[string]plmPrefixEagerCell{
 			{1400 * time.Millisecond, "result = [label, 12]\nprint(result)\n"},
 		},
 		providerResponses: map[string]string{"alpha": "alpha"},
-		expectedCalls:     1, expectedPrefixCalls: 1, expectedResult: json.RawMessage(`["ALPHA",12]`), includeImmediate: true,
+		expectedCalls:     1, expectedPrefixCalls: 1, expectedResult: json.RawMessage(`["ALPHA",12]`),
 	},
 	"one-read-gate-rejected-long-tail": {
 		id: "one-read-gate-rejected-long-tail",
@@ -69,7 +68,7 @@ var plmPrefixEagerCells = map[string]plmPrefixEagerCell{
 			{1400 * time.Millisecond, "result = [label, 12]\nprint(result)\n"},
 		},
 		providerResponses: map[string]string{"alpha": "alpha"},
-		expectedCalls:     1, expectedPrefixCalls: 1, expectedResult: json.RawMessage(`["ALPHA",12]`), includeImmediate: true,
+		expectedCalls:     1, expectedPrefixCalls: 1, expectedResult: json.RawMessage(`["ALPHA",12]`),
 	},
 	"two-read-gate-rejected-long-tail": {
 		id: "two-read-gate-rejected-long-tail",
@@ -99,7 +98,7 @@ var plmPrefixEagerCells = map[string]plmPrefixEagerCell{
 			{1400 * time.Millisecond, "result = [label, 12]\nprint(result)\n"},
 		},
 		providerResponses: map[string]string{"alpha": "alpha"}, providerDelay: 25 * time.Millisecond,
-		expectedCalls: 1, expectedPrefixCalls: 1, expectedResult: json.RawMessage(`["ALPHA",12]`), includeImmediate: true,
+		expectedCalls: 1, expectedPrefixCalls: 1, expectedResult: json.RawMessage(`["ALPHA",12]`),
 	},
 	"one-read-gate-eligible-short-tail": {
 		id: "one-read-gate-eligible-short-tail",
@@ -109,7 +108,7 @@ var plmPrefixEagerCells = map[string]plmPrefixEagerCell{
 			{50 * time.Millisecond, "result = [label, 12]\nprint(result)\n"},
 		},
 		providerResponses: map[string]string{"alpha": "alpha"}, providerDelay: 1500 * time.Millisecond,
-		expectedCalls: 1, expectedPrefixCalls: 1, expectedResult: json.RawMessage(`["ALPHA",12]`), includeImmediate: true,
+		expectedCalls: 1, expectedPrefixCalls: 1, expectedResult: json.RawMessage(`["ALPHA",12]`),
 	},
 	"compute-heavy-eager-favourable": {
 		id: "compute-heavy-eager-favourable",
@@ -138,7 +137,7 @@ func TestPLMPrefixEagerCellsDefineComputeHeavyCase(t *testing.T) {
 	if !ok {
 		t.Fatal("compute-heavy cell is missing")
 	}
-	if cell.expectedCalls != 0 || cell.expectedPrefixCalls != 0 || cell.includeImmediate || cell.providerDelayDuration() != 0 {
+	if cell.expectedCalls != 0 || cell.expectedPrefixCalls != 0 || cell.providerDelayDuration() != 0 {
 		t.Fatalf("unexpected compute-heavy cell: %+v", cell)
 	}
 	if len(cell.chunks) != 2 || cell.chunks[0].offset != 0 || cell.chunks[1].offset != 1400*time.Millisecond {
@@ -280,7 +279,6 @@ type plmPrefixEagerEvidence struct {
 	ProviderDelayMS              int                                            `json:"provider_delay_ms"`
 	ChunkOffsetsMS               []int                                          `json:"chunk_offsets_ms"`
 	SourceSHA256                 string                                         `json:"source_sha256"`
-	EagerEstimateScope           string                                         `json:"eager_estimate_scope"`
 	AnalyzerCapacitySetupNanos   uint64                                         `json:"analyzer_capacity_setup_nanos"`
 	AnalyzerCapacitySessionCount uint32                                         `json:"analyzer_capacity_session_count"`
 	AnalyzerCapacityLifecycle    wazeroengine.SemanticAnalysisLifecycleEvidence `json:"analyzer_capacity_lifecycle"`
@@ -327,7 +325,7 @@ func newPLMPrefixPreparedCapacityForProfile(ctx context.Context, artifact []byte
 		return nil, err
 	}
 	plugins := unifiedPassCatalogForExperiment()
-	plugins, err = plugins.Enable(passregistration.SemanticPreDispatch, sourcepatch.PLMCapabilityCallsName)
+	plugins, err = plugins.Enable(sourcepatch.PLMCapabilityCallsName)
 	if err != nil {
 		return nil, err
 	}
@@ -742,9 +740,6 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 		}
 	}
 	treatments := []string{"serial_whole_file", "pysolate_pooled_prefix"}
-	if cell.includeImmediate {
-		treatments = append(treatments, "immediate_dispatch_reference")
-	}
 	offset := 0
 	if raw := os.Getenv("PYSOLATE_PLM_PREFIX_EAGER_ORDER_OFFSET"); raw != "" {
 		offset, err = strconv.Atoi(raw)
@@ -768,7 +763,6 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 		SchemaVersion: plmPrefixEagerSchema, CellID: cell.id, SourceCommit: os.Getenv("PYSOLATE_EXPERIMENT_SOURCE_COMMIT"), SourceTree: os.Getenv("PYSOLATE_EXPERIMENT_SOURCE_TREE"),
 		HostID: os.Getenv("EVALUATION_HOST_ID"), ArtifactSHA256: fmt.Sprintf("sha256:%x", artifactDigest[:]), Runs: runs, ProviderDelayMS: int(cell.providerDelayDuration() / time.Millisecond),
 		ChunkOffsetsMS: cell.chunkOffsetsMS(), SourceSHA256: testDigest(cell.sourceText()),
-		EagerEstimateScope: "Immediate dispatch is a scheduling reference; supplied EAGER and the local published-gate route are measured separately",
 	}
 	expectedResultSHA, err := playback.CanonicalSHA256(cell.expectedResult)
 	if err != nil {
@@ -795,8 +789,6 @@ func TestPLMPrefixEagerEconomicsFixture(t *testing.T) {
 				runConfig := config
 				runConfig.Mechanisms = runtimeconfig.MechanismSet{PrivateWorkspace: true}
 				treatment, err = semanticspeculation.NewSerialGuestTreatment(semanticspeculation.SerialGuestTreatmentConfig{Artifact: artifact, RunConfig: runConfig, Plan: plan, BrokerFactory: brokerFactory, ProviderObservation: tracker.observation, RunID: runID, WorkspaceRoot: workspaceRoot, WorkspaceOwner: runID})
-			case "immediate_dispatch_reference":
-				treatment, err = semanticspeculation.NewEagerGuestTreatment(semanticspeculation.EagerGuestTreatmentConfig{Artifact: artifact, RunConfig: config, Plan: plan, BrokerFactory: brokerFactory, ProviderObservation: tracker.observation, RunID: runID, WorkspaceRoot: workspaceRoot, WorkspaceOwner: runID})
 			case "pysolate_pooled_prefix":
 				treatment = newPLMPrefixTreatment(capacity, plan, adapter, tracker, cell.expectedCalls, cell.expectedPrefixCalls, runID, workspaceRoot)
 			}

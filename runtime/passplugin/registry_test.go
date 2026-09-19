@@ -78,23 +78,20 @@ func digestFor(character byte) string {
 
 func TestUnifiedCatalogRegistersEveryOptimizationDefaultOff(t *testing.T) {
 	registry, err := NewUnifiedCatalog(UnifiedCatalogConfig{
-		SemanticPreDispatchConfigSHA256: digestFor('a'),
-		PreparedNumpyLoadConfigSHA256:   digestFor('b'),
-		PreparedPureRegionConfigSHA256:  digestFor('c'),
+		PreparedNumpyLoadConfigSHA256:  digestFor('b'),
+		PreparedPureRegionConfigSHA256: digestFor('c'),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	expected := map[passregistration.Name]passregistration.Stage{
-		passregistration.SemanticPreDispatch:          passregistration.StagePrefixOverlay,
 		passregistration.PreparedPureRegion:           passregistration.StageWholeProgramPatch,
 		passregistration.PreparedNumpyLoad:            passregistration.StageHybridPreparePatch,
 		passregistration.PreparedValueBinding:         passregistration.StageRunBinding,
 		sourcepatch.PureScalarCSEName:                 passregistration.StageWholeProgramPatch,
 		sourcepatch.PureScalarFoldName:                passregistration.StageWholeProgramPatch,
 		sourcepatch.PLMCapabilityCallsName:            passregistration.StageWholeProgramPatch,
-		passregistration.SourceStreamingExecution:     passregistration.StageRuntimeLowering,
-		passregistration.StreamedChildFanout:          passregistration.StageRuntimeLowering,
+		passregistration.ChildFanoutExecution:         passregistration.StageRuntimeLowering,
 		passregistration.AgentFunctionRetention:       passregistration.StageRuntimeLowering,
 		passregistration.AgentFunctionSingleFlight:    passregistration.StageRuntimeLowering,
 		passregistration.FreshWorkflowReevaluation:    passregistration.StageRuntimeLowering,
@@ -128,16 +125,14 @@ func TestUnifiedCatalogRegistersEveryOptimizationDefaultOff(t *testing.T) {
 
 func TestUnifiedCatalogLowersRuntimeOptimizationsToExistingMechanisms(t *testing.T) {
 	registry, err := NewUnifiedCatalog(UnifiedCatalogConfig{
-		SemanticPreDispatchConfigSHA256: digestFor('a'),
-		PreparedNumpyLoadConfigSHA256:   digestFor('b'),
-		PreparedPureRegionConfigSHA256:  digestFor('c'),
+		PreparedNumpyLoadConfigSHA256:  digestFor('b'),
+		PreparedPureRegionConfigSHA256: digestFor('c'),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	registry, err = registry.Enable(
-		passregistration.SourceStreamingExecution,
-		passregistration.StreamedChildFanout,
+		passregistration.ChildFanoutExecution,
 		passregistration.AgentFunctionRetention,
 		passregistration.AgentFunctionSingleFlight,
 		passregistration.FreshWorkflowReevaluation,
@@ -154,13 +149,13 @@ func TestUnifiedCatalogLowersRuntimeOptimizationsToExistingMechanisms(t *testing
 		t.Fatal(err)
 	}
 	mechanisms := selection.Mechanisms
-	if !mechanisms.Streaming || !mechanisms.PrivateWorkspace || !mechanisms.ImmutableBranches || !mechanisms.ChildFanout ||
+	if !mechanisms.PrivateWorkspace || !mechanisms.ImmutableBranches || !mechanisms.ChildFanout ||
 		!mechanisms.FunctionCache || !mechanisms.SingleFlight || !mechanisms.FreshReevaluation ||
 		!mechanisms.PreparedRuntime || !mechanisms.MemoryCOW || !mechanisms.ColdIOContinuation ||
 		!mechanisms.SemanticAnalysis || !mechanisms.SemanticReuse {
 		t.Fatalf("lowered mechanisms=%+v", mechanisms)
 	}
-	if len(selection.Passes) != 9 {
+	if len(selection.Passes) != 8 {
 		t.Fatalf("lowered passes=%v", selection.Passes)
 	}
 }
@@ -220,29 +215,6 @@ func TestUnifiedCatalogResolvesPassLoweringsAgainstHostAvailability(t *testing.T
 	}
 }
 
-func TestUnifiedCatalogCombinesSemanticPrefixAnalysisWithPLMOwner(t *testing.T) {
-	registry, err := NewUnifiedCatalog(UnifiedCatalogConfig{
-		SemanticPreDispatchConfigSHA256: digestFor('a'),
-		PreparedNumpyLoadConfigSHA256:   digestFor('b'),
-		PreparedPureRegionConfigSHA256:  digestFor('c'),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	registry, err = registry.Enable(passregistration.SemanticPreDispatch, sourcepatch.PLMCapabilityCallsName)
-	if err != nil {
-		t.Fatal(err)
-	}
-	selection, err := registry.LowerMechanisms(runtimeconfig.MechanismSet{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !selection.Mechanisms.SemanticAnalysis || !selection.Mechanisms.SplitPhaseCalls ||
-		selection.Mechanisms.SemanticPreDispatch || selection.Mechanisms.StagedObservation {
-		t.Fatalf("combined mechanisms=%+v", selection.Mechanisms)
-	}
-}
-
 func TestUnifiedCatalogRejectsUnorderedSourceMutationPasses(t *testing.T) {
 	registry, err := NewDefaultUnifiedCatalog()
 	if err != nil {
@@ -269,5 +241,17 @@ func TestEnablePreservesPriorPassSelection(t *testing.T) {
 	selection, err := registry.LowerMechanisms(runtimeconfig.MechanismSet{})
 	if err != nil || !selection.Mechanisms.FunctionCache || !selection.Mechanisms.SingleFlight || len(selection.Passes) != 2 {
 		t.Fatalf("selection=%+v err=%v", selection, err)
+	}
+}
+
+func TestUnifiedCatalogRejectsRetiredExecutionSelectors(t *testing.T) {
+	registry, err := NewDefaultUnifiedCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []passregistration.Name{"source_streaming_execution", "semantic_pre_dispatch"} {
+		if _, err := registry.Enable(name); !errors.Is(err, ErrInvalidPlugin) {
+			t.Fatalf("retired selector %q: %v", name, err)
+		}
 	}
 }

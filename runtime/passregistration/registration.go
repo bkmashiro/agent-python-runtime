@@ -20,8 +20,7 @@ const (
 	PreparedPureRegion           Name = "prepared_pure_region"
 	PreparedNumpyLoad            Name = "prepared_numpy_load"
 	PreparedValueBinding         Name = "prepared_value_binding"
-	SourceStreamingExecution     Name = "source_streaming_execution"
-	StreamedChildFanout          Name = "streamed_child_fanout"
+	ChildFanoutExecution         Name = "child_fanout_execution"
 	AgentFunctionRetention       Name = "agent_function_retention"
 	AgentFunctionSingleFlight    Name = "agent_function_singleflight"
 	FreshWorkflowReevaluation    Name = "fresh_workflow_reevaluation"
@@ -34,8 +33,7 @@ const (
 	PreparedPureRegionVersion           = "pysolate.prepared-pure-region-pass.v1"
 	PreparedNumpyLoadVersion            = "pysolate.prepared-numpy-load-pass.v1"
 	PreparedValueBindingVersion         = "pysolate.prepared-value-binding-pass.v1"
-	SourceStreamingExecutionVersion     = "pysolate.source-streaming-execution-pass.v1"
-	StreamedChildFanoutVersion          = "pysolate.streamed-child-fanout-pass.v1"
+	ChildFanoutExecutionVersion         = "pysolate.child-fanout-pass.v1"
 	AgentFunctionRetentionVersion       = "pysolate.agent-function-retention-pass.v1"
 	AgentFunctionSingleFlightVersion    = "pysolate.agent-function-singleflight-pass.v1"
 	FreshWorkflowReevaluationVersion    = "pysolate.fresh-workflow-reevaluation-pass.v1"
@@ -108,8 +106,7 @@ func RuntimeOptimizationDefinitions() []Definition {
 		name    Name
 		version string
 	}{
-		{SourceStreamingExecution, SourceStreamingExecutionVersion},
-		{StreamedChildFanout, StreamedChildFanoutVersion},
+		{ChildFanoutExecution, ChildFanoutExecutionVersion},
 		{AgentFunctionRetention, AgentFunctionRetentionVersion},
 		{AgentFunctionSingleFlight, AgentFunctionSingleFlightVersion},
 		{FreshWorkflowReevaluation, FreshWorkflowReevaluationVersion},

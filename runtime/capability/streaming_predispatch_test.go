@@ -42,7 +42,7 @@ func TestBrokerFallsBackToOneLiveCallWhenDynamicStageDidNotTargetOccurrence(t *t
 		t.Fatal(err)
 	}
 	claimer := &notTargetedClaimer{}
-	broker, err := capability.NewBroker(capability.Config{RunIdentity: "host-run", Plan: plan, StagedClaimer: claimer, SemanticPreDispatch: true})
+	broker, err := capability.NewBroker(capability.Config{RunIdentity: "host-run", Plan: plan, StagedClaimer: claimer})
 	if err != nil {
 		t.Fatal(err)
 	}

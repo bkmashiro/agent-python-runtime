@@ -56,7 +56,7 @@ func TestAnalyzerFreeStageDefinitionsRegisterWithoutAnalyzer(t *testing.T) {
 
 func TestRuntimeLoweringDefinitionsRegisterWithoutAnalyzer(t *testing.T) {
 	definitions := passregistration.RuntimeOptimizationDefinitions()
-	if len(definitions) != 9 {
+	if len(definitions) != 8 {
 		t.Fatalf("runtime optimization definitions=%d", len(definitions))
 	}
 	for _, definition := range definitions {

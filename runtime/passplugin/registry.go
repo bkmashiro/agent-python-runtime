@@ -98,16 +98,14 @@ type Registry struct {
 }
 
 type UnifiedCatalogConfig struct {
-	SemanticPreDispatchConfigSHA256 string
-	PreparedNumpyLoadConfigSHA256   string
-	PreparedPureRegionConfigSHA256  string
+	PreparedNumpyLoadConfigSHA256  string
+	PreparedPureRegionConfigSHA256 string
 }
 
 func NewDefaultUnifiedCatalog() (*Registry, error) {
 	return NewUnifiedCatalog(UnifiedCatalogConfig{
-		SemanticPreDispatchConfigSHA256: catalogConfigSHA256(passregistration.SemanticPreDispatch, passregistration.SemanticPreDispatchVersion),
-		PreparedNumpyLoadConfigSHA256:   catalogConfigSHA256(passregistration.PreparedNumpyLoad, passregistration.PreparedNumpyLoadVersion),
-		PreparedPureRegionConfigSHA256:  catalogConfigSHA256(passregistration.PreparedPureRegion, passregistration.PreparedPureRegionVersion),
+		PreparedNumpyLoadConfigSHA256:  catalogConfigSHA256(passregistration.PreparedNumpyLoad, passregistration.PreparedNumpyLoadVersion),
+		PreparedPureRegionConfigSHA256: catalogConfigSHA256(passregistration.PreparedPureRegion, passregistration.PreparedPureRegionVersion),
 	})
 }
 
@@ -131,12 +129,6 @@ func LowerDefaultRunConfig(config runtimeconfig.RunConfig, names ...passregistra
 // optimizer in one default-off static pass catalog. Runtime owners remain the
 // lowering targets and keep all lifecycle state.
 func NewUnifiedCatalog(config UnifiedCatalogConfig) (*Registry, error) {
-	semantic, err := passregistration.SemanticPreDispatchDefinition().Register(
-		passregistration.SemanticAnalyzerSHA256, config.SemanticPreDispatchConfigSHA256,
-	)
-	if err != nil {
-		return nil, err
-	}
 	preparedPure, err := passregistration.PreparedPureRegionDefinition().Register(
 		passregistration.SemanticAnalyzerSHA256, config.PreparedPureRegionConfigSHA256,
 	)
@@ -146,10 +138,6 @@ func NewUnifiedCatalog(config UnifiedCatalogConfig) (*Registry, error) {
 	preparedNumpy, err := passregistration.PreparedNumpyLoadDefinition().Register(
 		passregistration.SemanticAnalyzerSHA256, config.PreparedNumpyLoadConfigSHA256,
 	)
-	if err != nil {
-		return nil, err
-	}
-	semanticAdapter, err := AdaptExisting(semantic)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +166,7 @@ func NewUnifiedCatalog(config UnifiedCatalogConfig) (*Registry, error) {
 		return nil, err
 	}
 	plugins := []Plugin{
-		semanticAdapter, preparedPureAdapter, preparedNumpyAdapter, preparedValue,
+		preparedPureAdapter, preparedNumpyAdapter, preparedValue,
 		cse, fold, plmCapabilities,
 	}
 	for _, definition := range passregistration.RuntimeOptimizationDefinitions() {
@@ -277,9 +265,9 @@ func (registry *Registry) ApplyRunConfig(config runtimeconfig.RunConfig) (runtim
 }
 
 func directOptimizationSelected(mechanisms runtimeconfig.MechanismSet) bool {
-	return mechanisms.Streaming || mechanisms.ChildFanout || mechanisms.FunctionCache || mechanisms.SingleFlight ||
+	return mechanisms.ChildFanout || mechanisms.FunctionCache || mechanisms.SingleFlight ||
 		mechanisms.FreshReevaluation || mechanisms.PreparedRuntime || mechanisms.MemoryCOW || mechanisms.ColdIOContinuation ||
-		mechanisms.SemanticPreDispatch || mechanisms.SemanticReuse || mechanisms.SplitPhaseCalls || mechanisms.ValueSlots
+		mechanisms.SemanticReuse || mechanisms.SplitPhaseCalls || mechanisms.ValueSlots
 }
 
 func PLMCapabilityProjections(plan *capability.Plan) []sourcepatch.CapabilityProjection {
@@ -316,15 +304,13 @@ func catalogConfigSHA256(name passregistration.Name, version string) string {
 
 func unifiedRequirements() map[passregistration.Name]runtimeconfig.MechanismSet {
 	return map[passregistration.Name]runtimeconfig.MechanismSet{
-		passregistration.SemanticPreDispatch:          {SemanticAnalysis: true, StagedObservation: true, SemanticPreDispatch: true},
 		passregistration.PreparedPureRegion:           {SemanticAnalysis: true},
 		passregistration.PreparedNumpyLoad:            {SemanticAnalysis: true, PreparedRuntime: true},
 		passregistration.PreparedValueBinding:         {ValueSlots: true},
 		sourcepatch.PureScalarCSEName:                 {SemanticAnalysis: true},
 		sourcepatch.PureScalarFoldName:                {SemanticAnalysis: true},
 		sourcepatch.PLMCapabilityCallsName:            {SplitPhaseCalls: true},
-		passregistration.SourceStreamingExecution:     {Streaming: true, PrivateWorkspace: true},
-		passregistration.StreamedChildFanout:          {Streaming: true, PrivateWorkspace: true, ImmutableBranches: true, ChildFanout: true},
+		passregistration.ChildFanoutExecution:         {PrivateWorkspace: true, ImmutableBranches: true, ChildFanout: true},
 		passregistration.AgentFunctionRetention:       {ImmutableBranches: true, FunctionCache: true},
 		passregistration.AgentFunctionSingleFlight:    {SingleFlight: true},
 		passregistration.FreshWorkflowReevaluation:    {ImmutableBranches: true, FunctionCache: true, FreshReevaluation: true},
@@ -338,7 +324,6 @@ func unifiedRequirements() map[passregistration.Name]runtimeconfig.MechanismSet 
 func mergeMechanisms(left, right runtimeconfig.MechanismSet) runtimeconfig.MechanismSet {
 	return runtimeconfig.MechanismSet{
 		ApprovalSuspension:      left.ApprovalSuspension || right.ApprovalSuspension,
-		Streaming:               left.Streaming || right.Streaming,
 		StagedObservation:       left.StagedObservation || right.StagedObservation,
 		PrivateWorkspace:        left.PrivateWorkspace || right.PrivateWorkspace,
 		ProgrammaticToolCalling: left.ProgrammaticToolCalling || right.ProgrammaticToolCalling,
@@ -351,7 +336,6 @@ func mergeMechanisms(left, right runtimeconfig.MechanismSet) runtimeconfig.Mecha
 		MemoryCOW:               left.MemoryCOW || right.MemoryCOW,
 		ColdIOContinuation:      left.ColdIOContinuation || right.ColdIOContinuation,
 		SemanticAnalysis:        left.SemanticAnalysis || right.SemanticAnalysis,
-		SemanticPreDispatch:     left.SemanticPreDispatch || right.SemanticPreDispatch,
 		SemanticReuse:           left.SemanticReuse || right.SemanticReuse,
 		SplitPhaseCalls:         left.SplitPhaseCalls || right.SplitPhaseCalls,
 		ValueSlots:              left.ValueSlots || right.ValueSlots,
@@ -433,11 +417,6 @@ func (registry *Registry) validateEnabledSelection() error {
 
 func (registry *Registry) requirementForSelection(name passregistration.Name) runtimeconfig.MechanismSet {
 	requirement := registry.requirements[name]
-	if name == passregistration.SemanticPreDispatch && registry.enabled[sourcepatch.PLMCapabilityCallsName] {
-		// Prefix analysis prepares directly into the PLM SplitPhaseTable. Do not
-		// select the legacy staged-observation owner for the same Run.
-		return runtimeconfig.MechanismSet{SemanticAnalysis: true}
-	}
 	return requirement
 }
 

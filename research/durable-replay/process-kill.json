@@ -1,0 +1,128 @@
+{
+  "process_kills": 2,
+  "waiting": {
+    "event": "waiting",
+    "run_id": "crash-run",
+    "wait_id": "crash-run/wait/1"
+  },
+  "provider_committed": {
+    "event": "provider-committed",
+    "kind": "write",
+    "operation_key": "crash-run/2"
+  },
+  "after_wait": [
+    [
+      0,
+      "completed",
+      "crash-run/0"
+    ],
+    [
+      1,
+      "waiting",
+      "crash-run/1"
+    ]
+  ],
+  "after_write": [
+    [
+      0,
+      "completed",
+      "crash-run/0"
+    ],
+    [
+      1,
+      "completed",
+      "crash-run/1"
+    ],
+    [
+      2,
+      "pending",
+      "crash-run/2"
+    ]
+  ],
+  "result": {
+    "capability_plan_sha256": "sha256:38b97b92f62ea1c6c86ee409260cf8ee438d9bd8ca470e4e56755d2b6eb03df1",
+    "error": null,
+    "logs": [],
+    "metrics": {
+      "capability_calls": 3,
+      "guest_time_ms": 0.0009999999999177334,
+      "result_bytes": 100
+    },
+    "receipts": [
+      {
+        "receipt_id": "rcpt_9de4ca6165756ce7eeb0ab78cf395ec319f3f499aaf8543a16504277f9e9196c",
+        "run_id": "crash-run",
+        "capability_plan_sha256": "sha256:38b97b92f62ea1c6c86ee409260cf8ee438d9bd8ca470e4e56755d2b6eb03df1",
+        "call_id": "capability-1",
+        "capability": "demo.read",
+        "operation_index": 0,
+        "request_sha256": "8149f5de146d4b977d2b31ab668d357133276880afda87d14b3465105d3917e3",
+        "response_sha256": "fd706e7f528e780342ee327f3c21fd40d1632d1688de1da3fb82fa63f197d894",
+        "outcome": "ok"
+      },
+      {
+        "receipt_id": "rcpt_b12c2896c9d4949faa0d048032d39b83099ff912b91103e77e5ab59772e33a9c",
+        "run_id": "crash-run",
+        "capability_plan_sha256": "sha256:38b97b92f62ea1c6c86ee409260cf8ee438d9bd8ca470e4e56755d2b6eb03df1",
+        "call_id": "capability-2",
+        "capability": "demo.approve",
+        "operation_index": 1,
+        "request_sha256": "cf6c8503f7c578d12578db227fd6a23e9506a51699619a9ebba384df33982d08",
+        "response_sha256": "20ec2f38fc96bc7d416a9af537493ae0bae26c5ad4c5a0f2d94f56f9c3e04958",
+        "outcome": "ok"
+      },
+      {
+        "receipt_id": "rcpt_0692d90e5b5fdd6613192d7d647adca1368ad049d9977f2c361af97973194ace",
+        "run_id": "crash-run",
+        "capability_plan_sha256": "sha256:38b97b92f62ea1c6c86ee409260cf8ee438d9bd8ca470e4e56755d2b6eb03df1",
+        "call_id": "capability-3",
+        "capability": "demo.write",
+        "operation_index": 2,
+        "request_sha256": "ceed4a9120644808e079a385d983ecb1048ded2628e85c0baccbbdce516643f5",
+        "response_sha256": "ca9f4239c4d5775e75cb187544729fc06456574a2003036eaff32cbe13d28d02",
+        "outcome": "ok"
+      }
+    ],
+    "result": {
+      "read_value": 7,
+      "random_value": 976266,
+      "computed": 976273,
+      "approval": {
+        "approved": true
+      },
+      "written": true
+    },
+    "result_present": true,
+    "result_source": "legacy_result",
+    "source_contract": {
+      "schema_version": "pysolate.guest-source-contract.v1",
+      "authority": "guest_reported_execution_fact",
+      "model_source_sha256": "sha256:d2c5783a69dbdab15a89a57c48013748c551b98249d9a8e615577156c434912a",
+      "effective_ast_sha256": "sha256:6af6adda8644caf60ee48e933b2965f0adf2702e700c34970fe1ef2ad8ac618f",
+      "wrapper_contract_sha256": "sha256:c183299cadc74d551b1f5c8b16b555fc4391bad583f0c2b2dac979a3639f3969"
+    },
+    "status": "ok"
+  },
+  "provider": {
+    "read_dispatches": 1,
+    "write_requests": 2,
+    "effect_count": 1,
+    "effects": [
+      {
+        "operation_key": "crash-run/2",
+        "kind": "write",
+        "parameters": {
+          "computed": 976273,
+          "random_value": 976266,
+          "read_value": 7
+        },
+        "result": {
+          "computed": 976273,
+          "operation_key": "crash-run/2",
+          "written": true
+        }
+      }
+    ]
+  },
+  "resume_seconds": 5.184627375099808
+}

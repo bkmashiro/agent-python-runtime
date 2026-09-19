@@ -46,6 +46,22 @@ type CallLifecycleObserver interface {
 	ObserveCallLifecycle(context.Context, CallLifecycleObservation)
 }
 
+// LoggedCall is the Host-owned identity and normalized argument document for
+// one admitted logical call. Sequence is the Broker operation index.
+type LoggedCall struct {
+	Sequence   uint32
+	CallID     string
+	Capability string
+	Arguments  json.RawMessage
+}
+
+// CallJournal owns the optional record/replay boundary for complete admitted
+// Broker responses. The callback is not a raw Handler: it includes admission,
+// denials, validation, dispatch, receipts, and the exact encoded response.
+type CallJournal interface {
+	Call(context.Context, LoggedCall, func(context.Context) ([]byte, error)) ([]byte, error)
+}
+
 type Config struct {
 	RunIdentity         string
 	Plan                *Plan
@@ -62,6 +78,7 @@ type Config struct {
 	ApprovalSuspension bool
 	ApprovalController *approval.Controller
 	SourceResolver     *SourceBindingResolver
+	CallJournal        CallJournal
 }
 
 type StagedObservationClaimer interface {
@@ -107,6 +124,7 @@ type Broker struct {
 	playbackEntries   map[uint32]TranscriptEntry
 	playbackConsumed  map[uint32]bool
 	playbackFailed    bool
+	controlErr        error
 	branch            *branchState
 	lifecycleObserver CallLifecycleObserver
 	splitPhase        *SplitPhaseTable
@@ -140,7 +158,8 @@ func NewBroker(config Config) (*Broker, error) {
 		(config.ProgrammaticParentCallID != "" && !validProgrammaticParentCallID(config.ProgrammaticParentCallID)) ||
 		(config.AllowDirectCalls && config.ProgrammaticParentCallID == "") ||
 		(config.SourceResolver != nil && config.ProgrammaticParentCallID == "") ||
-		(config.ApprovalController != nil) != config.ApprovalSuspension || (config.Plan.RequiresApproval() && !config.ApprovalSuspension) {
+		(config.ApprovalController != nil) != config.ApprovalSuspension || (config.Plan.RequiresApproval() && !config.ApprovalSuspension) ||
+		(config.CallJournal != nil && (config.ProgrammaticParentCallID != "" || config.SourceResolver != nil || config.Playback != nil || config.Branch != nil || config.StagedClaimer != nil || config.SemanticPreDispatch)) {
 		return nil, ErrInvalidBroker
 	}
 	broker := &Broker{config: config, seen: make(map[string]struct{})}
@@ -202,7 +221,7 @@ func (broker *Broker) AttachStagedClaimer(claimer StagedObservationClaimer) erro
 	}
 	broker.mu.Lock()
 	defer broker.mu.Unlock()
-	if broker.calls != 0 || broker.splitPhase != nil || broker.config.StagedClaimer != nil || broker.config.Playback != nil || broker.config.Branch != nil || broker.config.SemanticPreDispatch {
+	if broker.calls != 0 || broker.splitPhase != nil || broker.config.StagedClaimer != nil || broker.config.Playback != nil || broker.config.Branch != nil || broker.config.SemanticPreDispatch || broker.config.CallJournal != nil {
 		return ErrInvalidBroker
 	}
 	broker.config.StagedClaimer = claimer
@@ -226,7 +245,7 @@ func (broker *Broker) attachSplitPhaseTable(table *SplitPhaseTable) error {
 	}
 	broker.mu.Lock()
 	defer broker.mu.Unlock()
-	if broker.calls != 0 || broker.splitPhase != nil || broker.config.StagedClaimer != nil || broker.config.Playback != nil || broker.config.Branch != nil || broker.config.SemanticPreDispatch {
+	if broker.calls != 0 || broker.splitPhase != nil || broker.config.StagedClaimer != nil || broker.config.Playback != nil || broker.config.Branch != nil || broker.config.SemanticPreDispatch || broker.config.CallJournal != nil {
 		return ErrInvalidBroker
 	}
 	broker.splitPhase = table
@@ -261,6 +280,9 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 	if broker == nil {
 		return nil, ErrInvalidBroker
 	}
+	if controlErr := broker.ControlError(); controlErr != nil {
+		return nil, controlErr
+	}
 	if len(raw) == 0 || len(raw) > maxCallBytes {
 		broker.failPlayback()
 		return nil, ErrInvalidBroker
@@ -281,6 +303,37 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 	if rejected != nil {
 		return encodeResponse(*rejected)
 	}
+	if broker.config.CallJournal == nil {
+		return broker.callAdmitted(ctx, call, operation, streaming, nil, nil, false)
+	}
+	normalizedArguments := append(json.RawMessage(nil), call.Arguments...)
+	var normalizedDocument any
+	normalized := false
+	if document, canonical, normalizeErr := canonicalJSON(call.Arguments); normalizeErr == nil {
+		normalizedDocument, normalizedArguments, normalized = document, canonical, true
+	}
+	logged := LoggedCall{
+		Sequence: operation, CallID: call.CallID, Capability: call.Capability,
+		Arguments: normalizedArguments,
+	}
+	journalCall := call
+	journalCall.Arguments = append(json.RawMessage(nil), normalizedArguments...)
+	dispatched := false
+	response, callErr := broker.config.CallJournal.Call(ctx, logged, func(callContext context.Context) ([]byte, error) {
+		dispatched = true
+		return broker.callAdmitted(callContext, call, operation, streaming, normalizedDocument, normalizedArguments, normalized)
+	})
+	if callErr != nil {
+		broker.recordControlError(callErr)
+		return nil, callErr
+	}
+	if !dispatched {
+		broker.recordJournalOutcome(journalCall, operation, response)
+	}
+	return response, nil
+}
+
+func (broker *Broker) callAdmitted(ctx context.Context, call request, operation uint32, streaming bool, normalizedDocument any, normalizedArguments json.RawMessage, normalized bool) ([]byte, error) {
 
 	registered, ok := broker.config.Plan.lookup(call.Capability)
 	if !ok {
@@ -288,16 +341,27 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 		broker.record(call, operation, "denied", nil)
 		return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "capability_denied", Message: "Host tool is not granted"}})
 	}
-	if streaming && registered.spec.EffectClass == EffectWorkspaceWrite {
+	if streaming && (registered.spec.EffectClass == EffectWorkspaceWrite || registered.spec.EffectClass == EffectExternalWrite) {
 		broker.failPlayback()
 		broker.record(call, operation, "denied", nil)
 		return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "streaming_write_denied", Message: "write authority is unavailable before final seal"}})
 	}
-	arguments, err := canonicalForSchema(registered.inputSchema, call.Arguments)
-	if err != nil {
-		broker.failPlayback()
-		broker.record(call, operation, "denied", nil)
-		return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "invalid_arguments", Message: "Host tool arguments do not match the capability schema"}})
+	var arguments json.RawMessage
+	if normalized {
+		if err := registered.inputSchema.Validate(normalizedDocument); err != nil {
+			broker.failPlayback()
+			broker.record(call, operation, "denied", nil)
+			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "invalid_arguments", Message: "Host tool arguments do not match the capability schema"}})
+		}
+		arguments = append(json.RawMessage(nil), normalizedArguments...)
+	} else {
+		var err error
+		arguments, err = canonicalForSchema(registered.inputSchema, call.Arguments)
+		if err != nil {
+			broker.failPlayback()
+			broker.record(call, operation, "denied", nil)
+			return encodeResponse(response{CallID: call.CallID, Status: "denied", Error: &callError{Code: "invalid_arguments", Message: "Host tool arguments do not match the capability schema"}})
+		}
 	}
 	call.Arguments = arguments
 	if rejected := broker.bindCallSource(&call, operation); rejected != nil {
@@ -305,11 +369,11 @@ func (broker *Broker) call(ctx context.Context, raw []byte, streaming bool) ([]b
 	}
 	broker.observeCallLifecycle(ctx, call, operation, CallLifecycleIntent)
 	if broker.config.StagedClaimer != nil {
-		qualifiedStaged := registered.spec.Playback == PlaybackLiveOnly
+		qualifiedStaged := registered.spec.Playback == PlaybackLiveOnly &&
+			(registered.spec.EffectClass == EffectPure || registered.spec.EffectClass == EffectWorkspaceRead || registered.spec.EffectClass == EffectExternalRead)
 		if broker.config.SemanticPreDispatch {
 			qualification, qualified := broker.config.Plan.PreDispatch(call.Capability)
-			qualifiedStaged = qualifiedStaged && qualified && qualification.Eligible() &&
-				(registered.spec.EffectClass == EffectPure || registered.spec.EffectClass == EffectWorkspaceRead || registered.spec.EffectClass == EffectExternalRead)
+			qualifiedStaged = qualifiedStaged && qualified && qualification.Eligible()
 		}
 		if !qualifiedStaged {
 			broker.record(call, operation, "denied", nil)
@@ -611,6 +675,24 @@ func (broker *Broker) record(call request, operation uint32, outcome string, res
 	broker.mu.Unlock()
 }
 
+func (broker *Broker) recordJournalOutcome(call request, operation uint32, encoded []byte) {
+	var outcome struct {
+		Status string          `json:"status"`
+		Result json.RawMessage `json:"result"`
+	}
+	if json.Unmarshal(encoded, &outcome) != nil {
+		return
+	}
+	if outcome.Status != "ok" && outcome.Status != "error" && outcome.Status != "denied" {
+		return
+	}
+	result := []byte(nil)
+	if outcome.Status == "ok" {
+		result = outcome.Result
+	}
+	broker.record(call, operation, outcome.Status, result)
+}
+
 func (broker *Broker) recordTranscript(operation uint32, capability string, arguments, result json.RawMessage, evidence TransportEvidence) {
 	argumentsDigest := sha256.Sum256(arguments)
 	resultDigest := sha256.Sum256(result)
@@ -656,6 +738,28 @@ func (broker *Broker) Calls() uint32 {
 	broker.mu.Lock()
 	defer broker.mu.Unlock()
 	return broker.calls
+}
+
+// ControlError returns the first journal/control failure for this attempt.
+// It is separate from business responses returned to the Guest.
+func (broker *Broker) ControlError() error {
+	if broker == nil {
+		return ErrInvalidBroker
+	}
+	broker.mu.Lock()
+	defer broker.mu.Unlock()
+	return broker.controlErr
+}
+
+func (broker *Broker) recordControlError(err error) {
+	if broker == nil || err == nil {
+		return
+	}
+	broker.mu.Lock()
+	if broker.controlErr == nil {
+		broker.controlErr = err
+	}
+	broker.mu.Unlock()
 }
 
 func (broker *Broker) RunIdentity() string {

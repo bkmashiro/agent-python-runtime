@@ -50,6 +50,9 @@ type Factory struct {
 	// retained-prefix Guest and independent semantic pre-dispatch comparators.
 	// Product execution and the PLM path leave it false.
 	LegacyResearchExecution bool
+	// CompilationCache is caller-owned. The caller controls its lifetime; each
+	// durable Runner supplies one cache for all of its fresh attempts.
+	CompilationCache wazerort.CompilationCache
 }
 
 func (Factory) Name() string { return "wazero" }
@@ -72,7 +75,7 @@ func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfi
 		}
 		return nil, err
 	}
-	runner, err := newEngine(ctx, wasm, config, factory.BrokerFactory, binding, factory.PreparedRegions, factory.ValueSlots, nil)
+	runner, err := newEngine(ctx, wasm, config, factory.BrokerFactory, binding, factory.PreparedRegions, factory.ValueSlots, factory.CompilationCache)
 	if err != nil && factory.ValueSlots != nil {
 		err = errors.Join(err, factory.ValueSlots.Close())
 	}
@@ -1534,6 +1537,14 @@ prepareComplete:
 		plmLifecycle.ExecuteNanos = uint64(time.Since(executeStarted))
 	}
 	if err != nil {
+		if broker != nil {
+			if controlErr := broker.ControlError(); controlErr != nil {
+				var exitErr *wazerosys.ExitError
+				if errors.As(err, &exitErr) && exitErr.ExitCode() == brokerControlExitCode {
+					return nil, controlErr
+				}
+			}
+		}
 		return nil, withGuestDiagnostic(err, stderr.String())
 	}
 	if stdout != nil && stdout.Used() {
@@ -1615,6 +1626,7 @@ type plmSourceSealContextKey struct{}
 type valueSlotContextKey struct{}
 
 const hostCallPayloadMax = 1024 * 1024
+const brokerControlExitCode uint32 = 125
 
 func instantiateCapabilityHost(ctx context.Context, runtime wazerort.Runtime) error {
 	_, err := runtime.NewHostModuleBuilder("agent_runtime_v2").
@@ -1778,7 +1790,13 @@ func hostCall(
 	var response []byte
 	var err error
 	response, err = awaitColdIO(ctx, coldIOContinuationFromContext(ctx), call)
-	if err != nil || len(response) > int(responseCapacity) {
+	if err != nil {
+		if controlErr := broker.ControlError(); controlErr != nil {
+			_ = module.CloseWithExitCode(ctx, brokerControlExitCode)
+		}
+		return -1
+	}
+	if len(response) > int(responseCapacity) {
 		return -1
 	}
 	if !module.Memory().Write(responsePointer, response) {

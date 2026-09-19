@@ -87,6 +87,13 @@ Run identity, capability Plan, Broker, workspace and request data are created or
 - [Prepared Family contract](docs/prepared-family-v1.md)
 - [COW evidence](docs/evidence/copy-on-write-economics.json)
 
+### Durable replay
+
+An opt-in SQLite-backed runner can reconstruct a logical Run after interruption. It replays saved tool outcomes in a fresh deterministic Guest, persists approval waits, and recovers unresolved operations according to Host declarations. The first mode disables PLM/COW and does not store interpreter memory or stacks.
+
+- [API, recovery declarations and example](docs/durable-execution.md)
+- [Process-kill and VM hard-stop verification](research/durable-replay/README.md)
+
 Other experimental and historical mechanisms remain documented under [`docs/`](docs/) but are not part of the default runtime path.
 
 ## Requirements

@@ -34,6 +34,7 @@ const (
 	EffectWorkspaceRead  = "workspace_read"
 	EffectWorkspaceWrite = "workspace_write"
 	EffectExternalRead   = "external_read"
+	EffectExternalWrite  = "external_write"
 
 	PlaybackLiveOnly = "live_only"
 	PlaybackCaptured = "captured"
@@ -958,7 +959,7 @@ func sortGrants(values []GrantBinding) {
 }
 
 func validEffectClass(value string) bool {
-	return value == EffectPure || value == EffectWorkspaceRead || value == EffectWorkspaceWrite || value == EffectExternalRead
+	return value == EffectPure || value == EffectWorkspaceRead || value == EffectWorkspaceWrite || value == EffectExternalRead || value == EffectExternalWrite
 }
 
 func validPlaybackTreatment(value string) bool {

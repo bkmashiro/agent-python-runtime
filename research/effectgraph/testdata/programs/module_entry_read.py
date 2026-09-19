@@ -1,1 +1,0 @@
-result = sources.read("profile")

@@ -1,9 +1,0 @@
-{
-  "run_id": "dotted-import-declaration",
-  "code": "import json.decoder\nresult = 1",
-  "inputs": {},
-  "compatibility": {
-    "profile": "base",
-    "imports": ["json.decoder"]
-  }
-}

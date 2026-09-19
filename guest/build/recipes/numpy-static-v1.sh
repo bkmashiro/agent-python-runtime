@@ -32,6 +32,7 @@ export TMPDIR="${WORK_DIR}/tmp"
 mkdir -p "${NUMPY_SOURCE_DIR}" "${CYTHON_SOURCE_DIR}" "${BUILD_ROOT}" "${PACKAGE_PARENT}" "${ARCHIVE_ROOT}" "${GENERATED_DIR}" "${HOME}" "${PIP_CACHE_DIR}" "${TMPDIR}"
 tar -xzf "${DOWNLOAD_DIR}/numpy-source.tar.gz" -C "${NUMPY_SOURCE_DIR}" --strip-components=1
 tar -xzf "${DOWNLOAD_DIR}/cython-source.tar.gz" -C "${CYTHON_SOURCE_DIR}" --strip-components=1
+python3 "${ROOT_DIR}/tools/namespace_numpy_legacy.py" "${NUMPY_SOURCE_DIR}"
 
 "${HOST_PYTHON}" -m venv "${BUILD_VENV}"
 "${BUILD_VENV}/bin/python" -m pip install --disable-pip-version-check --no-cache-dir --no-index --no-deps \

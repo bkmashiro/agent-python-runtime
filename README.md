@@ -1,191 +1,125 @@
 # Pysolate
 
-Pysolate runs Agent-authored Python in a fresh, bounded CPython/WASI Guest.
+A small Go runtime for agent-authored Python in isolated CPython/WASI Guests.
 
-The Host chooses the Guest artifact, import profile, workspace, capabilities, budgets and external providers. Guest code receives only the authority granted for that run. It has no ambient network, shell, subprocess, package-manager, credential or Host-filesystem access.
+The execution core is a direct evolution of Pysolate Spine (`1abc99a`, MIT), not a wrapper around the former runtime. The old APIs, experiments and evidence remain in Git at `2be7488b`.
 
-## Why Pysolate
-
-A fresh Guest gives every run private Python state, but isolated execution can still waste time in two places:
-
-- repeated runtime and module setup across runs;
-- synchronous Host calls that wait one after another inside a run.
-
-Pysolate keeps the logical run private while allowing two narrower physical optimisations:
-
-- **Prepare–Linearize–Materialize (PLM)** may start an eligible Host request early. Python still receives its value or error at the original call.
-- **Image-backed copy-on-write (COW)** shares clean, request-independent linear-memory pages while each Guest receives private pages when it writes.
-
-Both mechanisms are explicit opt-in research paths. The default CLI and HTTP paths create a fresh Guest and do not enable them automatically.
-
-## Architecture
-
-For a source-reading map and retired execution paths, see [Execution core](docs/execution-core.md).
+## Execution model
 
 ```text
-Agent or harness
-      |
-      | Python source + JSON input
-      v
-Go Host
-  - verifies the Guest artifact
-  - derives and checks imports
-  - binds the workspace and capability Plan
-  - owns credentials, providers and budgets
-      |
-      v
-fresh CPython/WASI Guest
-  - runs normal Python control flow
-  - sees only mounted files and Host-granted tools
-  - returns a bounded result and Host receipts
+Runner owns compiled code and an optional clean image
+  -> create a private Guest for one Run
+  -> execute Python, calling explicitly granted Host tools
+  -> return the value or Python error
+  -> close the Guest and finish its tool workers
 ```
 
-The Host does not become a second Python scheduler. Branches, loops, exceptions and ordinary computation remain inside CPython.
+There are four responsibilities:
 
-## Current runtime
+- **Runner:** ordinary execution, PLM and append-only source input share one lifecycle.
+- **Tools:** a name maps to a Go function and an explicit early-read declaration.
+- **Image:** optional full-copy or Linux private COW memory, captured before user execution.
+- **Store:** optional SQLite history for deterministic replay and durable waits.
 
-The maintained execution path provides:
+No Broker/Plan hierarchy, plugin catalog, receipts, source certificates, workspace transaction framework, generic workflow engine, native backend or cross-run result cache is required.
 
-- a fresh CPython/WASI Guest for every run;
-- verified Guest artifacts and Host-derived import admission;
-- wall-clock, memory, input, output and Host-call bounds;
-- a private `/workspace` and `/tmp`;
-- ordinary Python file APIs over the mounted workspace;
-- typed Host capabilities with strict input and output schemas;
-- per-run capability Plans, budgets and receipts;
-- optional workspace export, storage and restoration;
-- two bounded, credential-free external JSON sources;
-- capture and offline playback for those curated reads;
-- optional Host-side lifecycle and workspace observations.
+## Run
 
-See [Product direction](docs/product-direction.md) for the boundary between maintained, experimental and proposed work.
+Requires Go 1.25+ and a built `dist/pysolate.wasm`. On Linux x86_64 with a C compiler, make, Python 3.11+, curl, tar and unzip:
 
-## Research mechanisms
+```sh
+python3 tools/setup-build-inputs.py  # one-time pinned CPython/WASI build
+python3 tools/setup-numpy.py         # pinned static NumPy build
+bash build-guest.sh                  # relink this project's Guest
+```
 
-### Prepare–Linearize–Materialize
+`PYSOLATE_BUILD_INPUTS` selects an existing CPython/WASI cache. The link script also accepts `PYSOLATE_NUMPY_NATIVE_ROOT` and `PYSOLATE_NUMPY_PACKAGE_ROOT` to reuse NumPy inputs. Changing user Python does not require rebuilding the Guest. The build separates legacy RandomState symbols from Generator symbols because their integer ABIs differ in a static WASI link.
 
-PLM separates the start of a Host request from its original Python call:
+```sh
+printf 'result = inputs["value"] + 1\n' | go run ./cmd/pysolate -inputs '{"value":41}'
+go run ./cmd/pysolate -source examples/numpy.py
+```
+
+The CLI grants only a pure `echo` demonstration tool. Applications supply their own tools through the Go API. Python stdout is forwarded to stderr; the final JSON value is printed to stdout.
+
+```go
+tools := pysolate.Manifest{
+    "price": {
+        Call: func(ctx context.Context, args json.RawMessage) (any, error) {
+            return 21, nil // Application-owned authorization and argument validation go here.
+        },
+        AllowEarlyRead: true,
+    },
+}
+runner, err := pysolate.New(ctx, wasm, tools)
+if err != nil { return err }
+defer runner.Close(context.Background())
+out, err := runner.Run(ctx, `result = price(item="book") * inputs["quantity"]`, map[string]int{"quantity": 2})
+```
+
+A Runner compiles once and may serve independent Runs. Each Run owns its Python state and tool workers. Tools must be concurrency-safe and honor their context. Call `Close` after all Runs have returned.
+
+## Optional execution modes
+
+- `RunPLM` prepares only explicitly allowed stable, read-only snapshots. Values and errors are delivered at their original Python calls. Failed tools are not automatically retried.
+- `RunPrefix` accepts append-only source chunks, prepares eligible reads and executes the completed source in the same Guest. It shares the Run's existing future table.
+- `NewPrepared` copies a clean initialized image into each Guest.
+- `NewPreparedCOW` uses sealed Linux memfd/private mappings. It does not fall back to a different backend or restore an active stack.
+
+```sh
+go run ./cmd/pysolate -source examples/echo.py -mode plm
+go run ./cmd/pysolate -source examples/echo.py -mode prefix -prepared copy
+# Linux:
+go run ./cmd/pysolate -source examples/echo.py -mode prefix -prepared cow
+```
+
+The CLI's prefix mode replays file lines. An embedding application can feed a real source stream.
+
+## Durable runs
+
+`durable/` records source, inputs, seed, artifact identity, declared tool versions, call outcomes and waits. A restart creates a fresh Guest, replays saved outcomes and executes the unfinished suffix. Intent is committed before external dispatch; the outcome is committed before delivery to Python.
+
+Unresolved external operations follow the Host's declared safe-retry, idempotent, lookup, manual or wait policy. Nothing infers those semantics from a tool name or source code. The optional journal can stop an attempt in a way Python cannot catch.
+
+`RunRecorded` uses fresh Guests with per-attempt seeded WASI randomness and logical clocks. It does not combine recovery with PLM or prepared images. `PythonError` is a completed Python failure; timeout, storage and other infrastructure errors remain distinct Go errors.
+
+The new SQLite format does not migrate old runtime databases. Cancellation stops future progress and signals the local attempt; it cannot roll back an external operation already started elsewhere.
+
+## Boundaries
+
+No Host directories, environment, network sockets or subprocess authority are mounted into the Guest. Guest imports are the libraries packaged in the artifact, including NumPy. Tools are the external-I/O boundary; the Host is responsible for their authorization and argument validation.
+
+Current engineering defaults are 512 MiB maximum linear memory, 1 MiB per request/result and per stdout/stderr buffer, 1024 tool issues per attempt, and 64 outstanding early reads. Use context deadlines for elapsed-time bounds. The durable Store retains at most 64 MiB of logical payload per Run; SQLite/WAL physical overhead is separate.
+
+## Read the code
 
 ```text
-Prepare      start eligible Host work early
-Linearize    validate it when Python reaches the original call
-Materialize  wait if needed, then return the value or raise the error there
+runner.go, bridge.go       Guest lifecycle and Host calls
+future.go, prefix.go       Run-owned early reads and source streaming
+prepared.go, cow*.go       clean images and private memory
+recording.go               deterministic attempts and journal stops
+durable/                   SQLite Store and recovery driver
+guest/                     CPython bridge, execution and small AST passes
+cmd/pysolate/              CLI
 ```
 
-Prefix analysis can find a complete call while later source is still arriving. A whole-program pass can place `Prepare` after data dependencies and inside the controlling Python block. The Host, not source analysis, decides whether an operation may be observed earlier.
+## Check
 
-PLM is implemented, exact-Guest tested and default-off. Unsupported calls keep their normal synchronous behaviour.
-
-- [PLM contract](docs/research/logical-time-plm-v1-contract.md)
-- [Source-pass integration](docs/source-pass-plugins.md)
-- [PLM evidence](docs/evidence/plm-v1-multiread-economics.json)
-
-### Image-backed copy-on-write
-
-The Linux COW path captures trusted, request-independent WebAssembly linear memory and maps it privately into fresh single-use Guests. Clean pages share the sealed image. Pages changed by a run become private.
-
-Run identity, capability Plan, Broker, workspace and request data are created or bound separately for each Guest. The portable fallback copies the prepared state instead of using Linux private mappings.
-
-- [Prepared Family contract](docs/prepared-family-v1.md)
-- [COW evidence](docs/evidence/copy-on-write-economics.json)
-
-### Durable replay
-
-An opt-in SQLite-backed runner can reconstruct a logical Run after interruption. It replays saved tool outcomes in a fresh deterministic Guest, persists approval waits, and recovers unresolved operations according to Host declarations. The first mode disables PLM/COW and does not store interpreter memory or stacks.
-
-- [API, recovery declarations and example](docs/durable-execution.md)
-- [Process-kill and VM hard-stop verification](research/durable-replay/README.md)
-
-Other experimental and historical mechanisms remain documented under [`docs/`](docs/) but are not part of the default runtime path.
-
-## Requirements
-
-- Go 1.25 or newer
-- a verified Pysolate Guest distribution containing:
-  - `agent-python-runtime.wasm`
-  - `manifest.json`
-  - `import-inventory.json`
-  - `import-qualification.json`
-
-Build the Guest with:
-
-```bash
-guest/build/build-guest.sh
+```sh
+make check
+# Or run explicitly after building the artifact:
+PYSOLATE_GUEST="$PWD/dist/pysolate.wasm" go test ./... -count=1
+PYSOLATE_GUEST="$PWD/dist/pysolate.wasm" go test -race ./... -count=1
+PYTHONPATH=guest python3 -m unittest discover -s guest
+go vet ./...
 ```
 
-See [Development](docs/development.md) for the pinned CPython/WASI build and verification workflow.
+Real-Guest tests fail when the artifact is missing. Linux COW tests require Linux. This implementation intentionally does not preserve the old HTTP/CLI protocols or their experimental execution paths.
 
-## Build and run
+## Verified scope
 
-Build the CLI:
+The new Guest was built and run, including matrix operations and separate NumPy Generator/RandomState integer-ABI regressions. `make check` passes with the real artifact. Targeted PLM/prefix and Store/journal race tests pass; a whole durable race run exceeded its initial 150-second execution budget and was not counted as a pass.
 
-```bash
-go build ./cmd/apyrun
-```
+Linux tests exercise actual private COW mappings and Guest isolation. Recovery was verified after closing/reopening SQLite, after killing the process following an external fixture commit, and after hard-stopping/restarting a 2-vCPU/2-GiB Linux VM at that same window. The recovered fixture recorded one read, two write requests and one idempotent effect. This is not a physical-host power-loss guarantee.
 
-Run a small program:
-
-```bash
-printf '%s' '{"run_id":"demo","code":"result = inputs[\"value\"] + 1","inputs":{"value":41}}' |
-  go run ./cmd/apyrun -artifact /path/to/agent-python-runtime.wasm
-```
-
-The response is bounded JSON containing the status, result, metrics, Host receipts and an optional Python error.
-
-## Workspace example
-
-The Host can mount a private workspace and allow a small import set. Agent code then uses ordinary Python APIs:
-
-```python
-from pathlib import Path
-
-values = [int(line) for line in Path("/workspace/values.txt").read_text().splitlines()]
-Path("/workspace/total.txt").write_text(str(sum(values)))
-result = {"total": sum(values)}
-```
-
-External systems remain behind typed Host capabilities. Guest code cannot choose arbitrary URLs, credentials, mounts or resource budgets.
-
-- [Mounted workspaces and capsules](docs/workspace-capsules.md)
-- [Bounded developer tools](docs/developer-tools.md)
-- [Playback Bundles](docs/playback-bundles.md)
-
-## Security boundary
-
-A request may provide Python source, JSON input, an optional output schema and compatibility requirements. It cannot provide:
-
-- capabilities or credentials;
-- environment variables or process arguments;
-- network targets;
-- Host paths or mounts;
-- resource budgets;
-- package-installation authority.
-
-Pysolate is a research prototype, not a mature multi-tenant service or a completed adversarial-security evaluation. See [Threat model](docs/threat-model.md) and [Source compatibility](docs/source-compatibility.md).
-
-## Repository map
-
-```text
-cmd/apyrun/                 JSON stdin/stdout CLI
-runtime/                    request, execution and lifecycle contracts
-runtime/engine/wazero/      CPython/WASI execution and prepared images
-runtime/capability/         typed Host capabilities, Plans, Broker and PLM
-runtime/workspace/          bounded workspace mounts and capsules
-runtime/playback/           curated-read capture and playback
-guest/                      CPython/WASI Guest source and build
-integration/e2e/            real-Guest integration tests
-scripts/                    verification and experiment runners
-docs/                       design, evidence and research records
-```
-
-## Verification
-
-```bash
-go test ./runtime/... ./cmd/apyrun ./cmd/pysolate-httpd
-go vet ./runtime/... ./cmd/apyrun ./cmd/pysolate-httpd
-
-AGENT_RUNTIME_GUEST=/path/to/agent-python-runtime.wasm \
-  go test ./integration/e2e -count=1
-```
-
-The exact-Guest suite requires a built and verified Guest distribution. Research packages have separate evidence-pinned gates documented in [Development](docs/development.md). Repository scripts never silently substitute a missing artifact.
+Old APIs and databases are intentionally incompatible. The core and Guest contain 2,883 physical source lines (including comments/blank lines, excluding tests, CLI, build tooling and dependencies). Build tooling is separate from the execution core.

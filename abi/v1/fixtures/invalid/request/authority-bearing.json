@@ -1,6 +1,0 @@
-{
-  "run_id": "run-001",
-  "code": "result = 1",
-  "inputs": {},
-  "capabilities": ["fetch_many"]
-}

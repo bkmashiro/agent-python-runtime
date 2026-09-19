@@ -101,7 +101,15 @@ type toolDeclaration struct {
 
 // Runner owns the durable store, compiled artifact, and tool declarations.
 // Guest instances are always created afresh by RunRecorded.
+// Preparation is an optional immutable image for one recorded seed.
+// COW requires Linux; no per-seed cache or silent fallback is created.
+type Preparation struct {
+	Seed string
+	COW  bool
+}
+
 type Runner struct {
+	preparedSeed       string
 	store              *Store
 	core               *pysolate.Runner
 	artifactSHA256     string
@@ -116,11 +124,14 @@ type Runner struct {
 
 // NewRunner validates the durable declarations and compiles the artifact once.
 // The compiled core is reused for fresh Guest instances on every attempt.
-func NewRunner(ctx context.Context, store *Store, artifact []byte, environmentVersion string, tools []Tool) (*Runner, error) {
+func NewRunner(ctx context.Context, store *Store, artifact []byte, environmentVersion string, tools []Tool, preparation ...Preparation) (*Runner, error) {
 	if store == nil || len(artifact) == 0 || environmentVersion == "" {
 		return nil, ErrInvalidRunner
 	}
 
+	if len(preparation) > 1 || (len(preparation) == 1 && preparation[0].Seed == "") {
+		return nil, ErrInvalidRunner
+	}
 	toolMap := make(map[string]Tool, len(tools))
 	for _, tool := range tools {
 		if tool.Name == "" || tool.Version == "" {
@@ -165,12 +176,24 @@ func NewRunner(ctx context.Context, store *Store, artifact []byte, environmentVe
 	if err != nil {
 		return nil, fmt.Errorf("%w: encode tool declarations: %v", ErrInvalidRunner, err)
 	}
-	core, err := pysolate.New(ctx, artifact, manifest)
+	var core *pysolate.Runner
+	preparedSeed := ""
+	if len(preparation) == 0 {
+		core, err = pysolate.New(ctx, artifact, manifest)
+	} else {
+		preparedSeed = preparation[0].Seed
+		if preparation[0].COW {
+			core, err = pysolate.NewPreparedRecordedCOW(ctx, artifact, manifest, preparedSeed)
+		} else {
+			core, err = pysolate.NewPreparedRecorded(ctx, artifact, manifest, preparedSeed)
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
 
 	return &Runner{
+		preparedSeed:       preparedSeed,
 		store:              store,
 		core:               core,
 		artifactSHA256:     core.ArtifactID(),
@@ -273,6 +296,10 @@ func (runner *Runner) Resume(ctx context.Context, runID string) (pysolate.Output
 			return output, &pysolate.PythonError{Message: run.Reason}
 		}
 		return output, nil
+	}
+
+	if runner.preparedSeed != "" && run.Definition.Seed != runner.preparedSeed {
+		return pysolate.Output{}, fmt.Errorf("%w: preparation seed does not match run", ErrInvalidRunner)
 	}
 
 	attemptCtx, cancel := context.WithCancel(ctx)

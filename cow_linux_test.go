@@ -180,3 +180,23 @@ func smapsKB(value string) int {
 	kb, _ := strconv.Atoi(fields[0])
 	return kb
 }
+
+func TestLinuxCOWFreeWaitsForCallOwner(t *testing.T) {
+	memory, err := newLinuxCOWMemory(2 * wasmPageSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deferred := deferredCOWFree{memory}
+	linear := deferred.Allocate(wasmPageSize, 2*wasmPageSize)
+	data := linear.Reallocate(wasmPageSize)
+	linear.Free() // A Host import can logically close the module before Wasm unwinds.
+	if memory.mapping == nil {
+		t.Fatal("module close released an active mapping")
+	}
+	data[0] = 42
+	memory.Free() // The outer Call owner releases it after return.
+	if memory.mapping != nil {
+		t.Fatal("call owner leaked mapping")
+	}
+	memory.Free()
+}

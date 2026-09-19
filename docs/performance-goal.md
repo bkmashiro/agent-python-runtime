@@ -1,6 +1,6 @@
 # Megagoal: strengthen fast, deterministic and resource-aware execution
 
-Status: approved; not started. This roadmap is the single execution pointer for the overnight goal. Preparation is complete; launch is manual via /goal.
+Status: active. This roadmap is the single execution pointer for the approved goal.
 
 ## Desired state
 
@@ -103,6 +103,6 @@ Deliver: implemented changes, exact versions/artifacts, concise before/after res
 
 ## Execution pointer
 
-Current: lane 1 — recover the live baseline and identify dominant costs.
-Next: implement the highest-value supported optimization or bounded main-line capability, then validate semantics and compare end to end.
-Blocked: none established; the approved overnight execution has not been launched.
+Current: finish validation of seeded deterministic preparation, then optimize remaining replay/bridge overhead and implement a bounded Run executor.
+Next: use measured replay residuals and the executor contract; preserve the main-line seeded-image isolation and COW park regression.
+Blocked: none. Baseline and Guest are preserved. Dominant fresh cost was CPython initialization; matched seeded-COW replay is measured in docs/performance-results.md. The mapping-lifetime defect exposed by park has been fixed and reproduced successfully.

@@ -81,7 +81,7 @@ The CLI's prefix mode replays file lines. An embedding application can feed a re
 
 Unresolved external operations follow the Host's declared safe-retry, idempotent, lookup, manual or wait policy. Nothing infers those semantics from a tool name or source code. The optional journal can stop an attempt in a way Python cannot catch.
 
-`RunRecorded` uses fresh Guests with per-attempt seeded WASI randomness and logical clocks. It does not combine recovery with PLM or prepared images. `PythonError` is a completed Python failure; timeout, storage and other infrastructure errors remain distinct Go errors.
+`RunRecorded` uses fresh Guests with per-attempt seeded WASI randomness and logical clocks. PLM is excluded. An explicitly seeded prepared image can restore the matching deterministic initialization state; ordinary unseeded images are rejected. `PythonError` is a completed Python failure; timeout, storage and other infrastructure errors remain distinct Go errors.
 
 The new SQLite format does not migrate old runtime databases. Cancellation stops future progress and signals the local attempt; it cannot roll back an external operation already started elsewhere.
 
@@ -123,3 +123,18 @@ The new Guest was built and run, including matrix operations and separate NumPy 
 Linux tests exercise actual private COW mappings and Guest isolation. Recovery was verified after closing/reopening SQLite, after killing the process following an external fixture commit, and after hard-stopping/restarting a 2-vCPU/2-GiB Linux VM at that same window. The recovered fixture recorded one read, two write requests and one idempotent effect. This is not a physical-host power-loss guarantee.
 
 Old APIs and databases are intentionally incompatible. The core and Guest contain 2,883 physical source lines (including comments/blank lines, excluding tests, CLI, build tooling and dependencies). Build tooling is separate from the execution core.
+
+## Prepared deterministic attempts
+
+`NewPreparedRecorded(ctx, wasm, tools, seed)` and its Linux COW variant
+`NewPreparedRecordedCOW` capture clean Python memory **and** the entropy stream
+position and logical clocks consumed during initialization. `RunRecorded` requires
+that exact seed. Different Runs can share the image when they explicitly use the
+same seed; there is no per-seed cache. A mismatched seed is rejected, never silently
+replayed with different randomness. PLM remains excluded from recorded execution.
+
+For durable use, pass `durable.Preparation{Seed: "seed", COW: true}` as the optional
+last argument to `durable.NewRunner`. The default is still fresh. This changes no
+stored schema and can resume history made by a fresh Runner with the same seed.
+The image has startup and retained-memory costs; account for them, not just warm
+resume time. See `docs/performance-results.md` for measurements.

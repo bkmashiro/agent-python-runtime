@@ -1,0 +1,12 @@
+{"arch":"arm64","calls":128,"concurrency":1,"go":"go1.26.0","history_seed_ns":47939598,"kind":"environment","mode":"durable-replay","os":"linux","payload":0,"prepare":"cow","profiled":false,"rounds":5,"setup_ns":3501413177,"synthetic_delay_ns":0,"work":"tools"}
+{"kind":"run","mode":"durable-replay","work":"tools","round":0,"worker":0,"ns":19700527,"physical_calls":0}
+{"kind":"batch","mode":"durable-replay","work":"tools","round":0,"worker":0,"ns":19715694,"physical_calls":0,"rss_kib":409356,"pss_kib":409352}
+{"kind":"run","mode":"durable-replay","work":"tools","round":1,"worker":0,"ns":19639359,"physical_calls":0}
+{"kind":"batch","mode":"durable-replay","work":"tools","round":1,"worker":0,"ns":19650192,"physical_calls":0,"rss_kib":411428,"pss_kib":411424}
+{"kind":"run","mode":"durable-replay","work":"tools","round":2,"worker":0,"ns":19477522,"physical_calls":0}
+{"kind":"batch","mode":"durable-replay","work":"tools","round":2,"worker":0,"ns":19487064,"physical_calls":0,"rss_kib":413500,"pss_kib":413496}
+{"kind":"run","mode":"durable-replay","work":"tools","round":3,"worker":0,"ns":19372685,"physical_calls":0}
+{"kind":"batch","mode":"durable-replay","work":"tools","round":3,"worker":0,"ns":19382519,"physical_calls":0,"rss_kib":415568,"pss_kib":415564}
+{"kind":"run","mode":"durable-replay","work":"tools","round":4,"worker":0,"ns":19722403,"physical_calls":0}
+{"kind":"batch","mode":"durable-replay","work":"tools","round":4,"worker":0,"ns":19732861,"physical_calls":0,"rss_kib":417656,"pss_kib":417652}
+{"kind":"close","mode":"durable-replay","work":"tools","round":0,"worker":0,"ns":2962740,"physical_calls":0,"rss_kib":417656,"pss_kib":417652}

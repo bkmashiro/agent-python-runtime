@@ -25,6 +25,7 @@ type Runner struct {
 	code          wazero.CompiledModule
 	manifest      Manifest
 	guestManifest []guestToolSpec
+	preparedState *preparedRecording
 	image         []byte // Immutable full-copy baseline; COW owns its image separately.
 	cow           cowRuntime
 }

@@ -3,7 +3,6 @@ package passregistration_test
 import (
 	"testing"
 
-	"github.com/bkmashiro/agent-python-runtime/runtime/passpipeline"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 )
 
@@ -18,7 +17,6 @@ func TestCustomDefinitionRegistersWithoutCentralSwitch(t *testing.T) {
 		"pysolate.pure-scalar-cse-pass.v1",
 		passregistration.StageWholeProgramPatch,
 		passregistration.ExecutionPatch,
-		passregistration.PatchBindings(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -34,10 +32,6 @@ func TestCustomDefinitionRegistersWithoutCentralSwitch(t *testing.T) {
 	stored, ok := registry.Lookup("pure_scalar_cse")
 	if !ok || stored.IdentitySHA256() != registration.IdentitySHA256() || stored.Stage() != passregistration.StageWholeProgramPatch {
 		t.Fatalf("stored=%+v ok=%v", stored, ok)
-	}
-	entry, err := passpipeline.CurrentEntry(stored, true)
-	if err != nil || entry.Stage != passpipeline.StageWholeProgramPatch {
-		t.Fatalf("entry=%+v err=%v", entry, err)
 	}
 }
 
@@ -57,10 +51,6 @@ func TestAnalyzerFreeStageDefinitionsRegisterWithoutAnalyzer(t *testing.T) {
 		if registration.Stage() != test.stage || registration.Consumer() != test.consumer || registration.AnalyzerSHA256() != "" {
 			t.Fatalf("registration=%+v", registration)
 		}
-		entry, err := passpipeline.CurrentEntry(registration, true)
-		if err != nil || entry.Stage != test.stage {
-			t.Fatalf("entry=%+v err=%v", entry, err)
-		}
 	}
 }
 
@@ -76,10 +66,6 @@ func TestRuntimeLoweringDefinitionsRegisterWithoutAnalyzer(t *testing.T) {
 		}
 		if registration.Stage() != passregistration.StageRuntimeLowering || registration.Consumer() != passregistration.MechanismLowering || registration.AnalyzerSHA256() != "" {
 			t.Fatalf("registration=%+v", registration)
-		}
-		entry, err := passpipeline.CurrentEntry(registration, true)
-		if err != nil || entry.Stage != passpipeline.StageRuntimeLowering {
-			t.Fatalf("entry=%+v err=%v", entry, err)
 		}
 	}
 }

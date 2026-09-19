@@ -16,7 +16,6 @@ func TestRegistryDispatchesSourcePatchAndKeepsExistingAdapters(t *testing.T) {
 	semantic, err := passregistration.New(
 		passregistration.SemanticPreDispatch, passregistration.SemanticPreDispatchVersion,
 		passregistration.SemanticAnalyzerSHA256, digestFor('a'), passregistration.OverlayOnly,
-		passregistration.OverlayBindings(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -28,7 +27,6 @@ func TestRegistryDispatchesSourcePatchAndKeepsExistingAdapters(t *testing.T) {
 	prepared, err := passregistration.New(
 		passregistration.PreparedPureRegion, passregistration.PreparedPureRegionVersion,
 		passregistration.SemanticAnalyzerSHA256, digestFor('b'), passregistration.ExecutionPatch,
-		passregistration.PatchBindings(),
 	)
 	if err != nil {
 		t.Fatal(err)

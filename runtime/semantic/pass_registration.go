@@ -11,7 +11,6 @@ const (
 )
 
 type PassConsumer = passregistration.Consumer
-type PassBinding = passregistration.Binding
 type PassRegistration = passregistration.Registration
 
 var (
@@ -19,11 +18,8 @@ var (
 	ErrDuplicatePassRegistration = passregistration.ErrDuplicate
 )
 
-func SemanticPreDispatchBindings() []PassBinding { return passregistration.OverlayBindings() }
-func PreparedPureRegionBindings() []PassBinding  { return passregistration.PatchBindings() }
-
-func NewPassRegistration(name PassName, version, analyzerSHA256, configSHA256 string, consumer PassConsumer, bindings []PassBinding) (PassRegistration, error) {
-	return passregistration.New(passregistration.Name(name), version, analyzerSHA256, configSHA256, consumer, bindings)
+func NewPassRegistration(name PassName, version, analyzerSHA256, configSHA256 string, consumer PassConsumer) (PassRegistration, error) {
+	return passregistration.New(passregistration.Name(name), version, analyzerSHA256, configSHA256, consumer)
 }
 
 type PassRegistry struct {

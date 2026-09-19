@@ -140,7 +140,7 @@ func BuildSourceBoundPlan(verified VerifiedAnalysis, capabilityPlan *capability.
 	for _, pass := range passes {
 		registration, registrationErr := NewPassRegistration(
 			pass.Name, pass.Version, analysis.AnalyzerSHA256, pass.ConfigSHA256,
-			PassConsumerOverlayOnly, SemanticPreDispatchBindings(),
+			PassConsumerOverlayOnly,
 		)
 		if registrationErr != nil {
 			return SourceBoundPlan{}, ErrInvalidPlannerConfig

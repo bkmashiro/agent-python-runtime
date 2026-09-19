@@ -20,9 +20,9 @@ The catalog distinguishes when a transformation owns enough information to act:
 | `run_binding` | sealed prepared object and fresh Run identity | one private Guest binding |
 | `runtime_lowering` | explicit optimization selection | typed `MechanismSet` requirements for an existing Runtime owner |
 
-`runtime/passpipeline` records these stages with
-`pysolate.stage-aware-pass-outcome.v2`. Plan and Run stages do not invent source or AST
-identities, and Run-binding outcome keys include the fresh Run identity.
+Stages route execution to the appropriate implementation. There is no separate
+outcome-record pipeline or declarative list of required hash bindings. Source,
+plan and Run checks remain at the execution boundaries that consume them.
 
 ## Stage-specific API
 
@@ -54,9 +54,7 @@ The prepared-value binding is analyzer-free. PLM asks the final exact Guest to t
 
 ## Unified optimization catalog
 
-`passplugin.NewDefaultUnifiedCatalog` exposes 16 default-off entries. It is a lookup
-catalog, not one `passpipeline.Pipeline`; any concrete pipeline instance selects at most
-the pipeline's bounded 16 entries:
+`passplugin.NewDefaultUnifiedCatalog` exposes 16 default-off entries:
 
 - the retained stage adapters for semantic analysis, prepared regions and Run bindings;
 - `prepared_pure_region`, `pure_scalar_cse`, `pure_scalar_fold` and

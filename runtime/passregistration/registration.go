@@ -5,13 +5,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"reflect"
 	"regexp"
 )
 
 type Name string
 type Consumer string
-type Binding string
 type Stage string
 
 const (
@@ -60,20 +58,6 @@ const (
 	StageMultiProgramPatch  Stage = "multi_program_patch"
 	StageRunBinding         Stage = "run_binding"
 	StageRuntimeLowering    Stage = "runtime_lowering"
-
-	SourceSHA256           Binding = "source_sha256"
-	ASTSHA256              Binding = "ast_sha256"
-	AnalysisSHA256         Binding = "analysis_sha256"
-	AnalyzerSHA256         Binding = "analyzer_sha256"
-	ExecutionProfileSHA256 Binding = "execution_profile_sha256"
-	ImportClosureSHA256    Binding = "import_closure_sha256"
-	CapabilityPlanSHA256   Binding = "capability_plan_sha256"
-	PassConfigSHA256       Binding = "pass_config_sha256"
-	OccurrenceID           Binding = "occurrence_id"
-	RegionID               Binding = "region_id"
-	RunIdentitySHA256      Binding = "run_identity_sha256"
-	FinalSourceSHA256      Binding = "final_source_sha256"
-	RuntimeConfigSHA256    Binding = "runtime_config_sha256"
 )
 
 var (
@@ -83,66 +67,39 @@ var (
 	namePattern   = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 )
 
-var overlayBindings = []Binding{
-	SourceSHA256, ASTSHA256, AnalysisSHA256, AnalyzerSHA256,
-	ExecutionProfileSHA256, ImportClosureSHA256, CapabilityPlanSHA256,
-	PassConfigSHA256, OccurrenceID,
-}
-
-var patchBindings = []Binding{
-	SourceSHA256, ASTSHA256, AnalysisSHA256, AnalyzerSHA256,
-	ExecutionProfileSHA256, ImportClosureSHA256, CapabilityPlanSHA256,
-	PassConfigSHA256, RegionID, FinalSourceSHA256,
-}
-
-var projectionBindings = []Binding{CapabilityPlanSHA256, PassConfigSHA256}
-var runBindings = []Binding{RegionID, RunIdentitySHA256, PassConfigSHA256}
-var mechanismBindings = []Binding{RuntimeConfigSHA256, PassConfigSHA256}
-
-func OverlayBindings() []Binding    { return append([]Binding(nil), overlayBindings...) }
-func PatchBindings() []Binding      { return append([]Binding(nil), patchBindings...) }
-func ProjectionBindings() []Binding { return append([]Binding(nil), projectionBindings...) }
-func RunBindings() []Binding        { return append([]Binding(nil), runBindings...) }
-func MechanismBindings() []Binding  { return append([]Binding(nil), mechanismBindings...) }
-
 type Definition struct {
-	name             Name
-	version          string
-	stage            Stage
-	consumer         Consumer
-	requiredBindings []Binding
+	name     Name
+	version  string
+	stage    Stage
+	consumer Consumer
 }
 
-func Define(name Name, version string, stage Stage, consumer Consumer, bindings []Binding) (Definition, error) {
+func Define(name Name, version string, stage Stage, consumer Consumer) (Definition, error) {
 	if !namePattern.MatchString(string(name)) || version == "" || len(version) > 128 || !validStageForConsumer(stage, consumer) {
-		return Definition{}, ErrInvalid
-	}
-	if !reflect.DeepEqual(bindings, bindingsForConsumer(consumer)) {
 		return Definition{}, ErrInvalid
 	}
 	return Definition{
 		name: name, version: version, stage: stage, consumer: consumer,
-		requiredBindings: append([]Binding(nil), bindings...),
 	}, nil
 }
 
 func SemanticPreDispatchDefinition() Definition {
-	value, _ := Define(SemanticPreDispatch, SemanticPreDispatchVersion, StagePrefixOverlay, OverlayOnly, OverlayBindings())
+	value, _ := Define(SemanticPreDispatch, SemanticPreDispatchVersion, StagePrefixOverlay, OverlayOnly)
 	return value
 }
 
 func PreparedPureRegionDefinition() Definition {
-	value, _ := Define(PreparedPureRegion, PreparedPureRegionVersion, StageWholeProgramPatch, ExecutionPatch, PatchBindings())
+	value, _ := Define(PreparedPureRegion, PreparedPureRegionVersion, StageWholeProgramPatch, ExecutionPatch)
 	return value
 }
 
 func PreparedNumpyLoadDefinition() Definition {
-	value, _ := Define(PreparedNumpyLoad, PreparedNumpyLoadVersion, StageHybridPreparePatch, ExecutionPatch, PatchBindings())
+	value, _ := Define(PreparedNumpyLoad, PreparedNumpyLoadVersion, StageHybridPreparePatch, ExecutionPatch)
 	return value
 }
 
 func PreparedValueBindingDefinition() Definition {
-	value, _ := Define(PreparedValueBinding, PreparedValueBindingVersion, StageRunBinding, RunBinding, RunBindings())
+	value, _ := Define(PreparedValueBinding, PreparedValueBindingVersion, StageRunBinding, RunBinding)
 	return value
 }
 
@@ -163,7 +120,7 @@ func RuntimeOptimizationDefinitions() []Definition {
 	}
 	definitions := make([]Definition, 0, len(specs))
 	for _, spec := range specs {
-		definition, _ := Define(spec.name, spec.version, StageRuntimeLowering, MechanismLowering, MechanismBindings())
+		definition, _ := Define(spec.name, spec.version, StageRuntimeLowering, MechanismLowering)
 		definitions = append(definitions, definition)
 	}
 	return definitions
@@ -173,16 +130,12 @@ func (definition Definition) Name() Name         { return definition.name }
 func (definition Definition) Version() string    { return definition.version }
 func (definition Definition) Stage() Stage       { return definition.stage }
 func (definition Definition) Consumer() Consumer { return definition.consumer }
-func (definition Definition) RequiredBindings() []Binding {
-	return append([]Binding(nil), definition.requiredBindings...)
-}
 
 func (definition Definition) Register(analyzerSHA256, configSHA256 string) (Registration, error) {
 	if !validAnalyzerIdentity(definition.consumer, analyzerSHA256) || !digestPattern.MatchString(configSHA256) ||
 		!validStageForConsumer(definition.stage, definition.consumer) || definition.name == "" {
 		return Registration{}, ErrInvalid
 	}
-	bindings := append([]Binding(nil), definition.requiredBindings...)
 	schemaVersion := SourceRegistrationSchemaVersion
 	if definition.consumer == PlanProjection || definition.consumer == RunBinding || definition.consumer == MechanismLowering {
 		schemaVersion = AnalyzerFreeRegistrationSchemaVersion
@@ -190,7 +143,7 @@ func (definition Definition) Register(analyzerSHA256, configSHA256 string) (Regi
 	value := identity{
 		SchemaVersion: schemaVersion, Name: definition.name, Version: definition.version,
 		Stage: definition.stage, AnalyzerSHA256: analyzerSHA256, ConfigSHA256: configSHA256,
-		Consumer: definition.consumer, RequiredBindings: bindings,
+		Consumer: definition.consumer,
 	}
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -200,7 +153,7 @@ func (definition Definition) Register(analyzerSHA256, configSHA256 string) (Regi
 	return Registration{
 		name: definition.name, version: definition.version, stage: definition.stage,
 		analyzerSHA256: analyzerSHA256, configSHA256: configSHA256,
-		consumer: definition.consumer, requiredBindings: bindings,
+		consumer:       definition.consumer,
 		identitySHA256: "sha256:" + hex.EncodeToString(digest[:]),
 	}, nil
 }
@@ -222,23 +175,6 @@ func validStageForConsumer(stage Stage, consumer Consumer) bool {
 	}
 }
 
-func bindingsForConsumer(consumer Consumer) []Binding {
-	switch consumer {
-	case OverlayOnly:
-		return overlayBindings
-	case ExecutionPatch:
-		return patchBindings
-	case PlanProjection:
-		return projectionBindings
-	case RunBinding:
-		return runBindings
-	case MechanismLowering:
-		return mechanismBindings
-	default:
-		return nil
-	}
-}
-
 func validAnalyzerIdentity(consumer Consumer, analyzerSHA256 string) bool {
 	if consumer == PlanProjection || consumer == RunBinding || consumer == MechanismLowering {
 		return analyzerSHA256 == ""
@@ -247,30 +183,28 @@ func validAnalyzerIdentity(consumer Consumer, analyzerSHA256 string) bool {
 }
 
 type Registration struct {
-	name             Name
-	version          string
-	stage            Stage
-	analyzerSHA256   string
-	configSHA256     string
-	consumer         Consumer
-	requiredBindings []Binding
-	identitySHA256   string
+	name           Name
+	version        string
+	stage          Stage
+	analyzerSHA256 string
+	configSHA256   string
+	consumer       Consumer
+	identitySHA256 string
 }
 
 type identity struct {
-	SchemaVersion    string    `json:"schema_version"`
-	Name             Name      `json:"name"`
-	Version          string    `json:"version"`
-	Stage            Stage     `json:"stage"`
-	AnalyzerSHA256   string    `json:"analyzer_sha256"`
-	ConfigSHA256     string    `json:"config_sha256"`
-	Consumer         Consumer  `json:"consumer"`
-	RequiredBindings []Binding `json:"required_bindings"`
+	SchemaVersion  string   `json:"schema_version"`
+	Name           Name     `json:"name"`
+	Version        string   `json:"version"`
+	Stage          Stage    `json:"stage"`
+	AnalyzerSHA256 string   `json:"analyzer_sha256"`
+	ConfigSHA256   string   `json:"config_sha256"`
+	Consumer       Consumer `json:"consumer"`
 }
 
 // New preserves the original built-in constructor. New pass implementations use
 // Define(...).Register(...) and do not require edits to this switch.
-func New(name Name, version, analyzerSHA256, configSHA256 string, consumer Consumer, bindings []Binding) (Registration, error) {
+func New(name Name, version, analyzerSHA256, configSHA256 string, consumer Consumer) (Registration, error) {
 	var definition Definition
 	switch {
 	case name == SemanticPreDispatch && version == SemanticPreDispatchVersion:
@@ -284,7 +218,7 @@ func New(name Name, version, analyzerSHA256, configSHA256 string, consumer Consu
 	default:
 		return Registration{}, ErrInvalid
 	}
-	if definition.consumer != consumer || !reflect.DeepEqual(definition.requiredBindings, bindings) {
+	if definition.consumer != consumer {
 		return Registration{}, ErrInvalid
 	}
 	return definition.Register(analyzerSHA256, configSHA256)
@@ -297,9 +231,6 @@ func (registration Registration) AnalyzerSHA256() string { return registration.a
 func (registration Registration) ConfigSHA256() string   { return registration.configSHA256 }
 func (registration Registration) Consumer() Consumer     { return registration.consumer }
 func (registration Registration) IdentitySHA256() string { return registration.identitySHA256 }
-func (registration Registration) RequiredBindings() []Binding {
-	return append([]Binding(nil), registration.requiredBindings...)
-}
 
 type Registry struct {
 	registrations map[Name]Registration

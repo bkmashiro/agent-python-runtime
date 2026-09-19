@@ -133,7 +133,6 @@ func preparedRegionPassRegistration(configSHA256 string) (passregistration.Regis
 	return passregistration.New(
 		passregistration.PreparedPureRegion, passregistration.PreparedPureRegionVersion,
 		passregistration.SemanticAnalyzerSHA256, configSHA256, passregistration.ExecutionPatch,
-		passregistration.PatchBindings(),
 	)
 }
 

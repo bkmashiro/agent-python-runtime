@@ -79,7 +79,7 @@ type PLMCapabilityCalls struct {
 func NewPureScalarCSE(analyzerSHA256 string) (PureScalarCSE, error) {
 	definition, err := passregistration.Define(
 		PureScalarCSEName, PureScalarCSEVersion, passregistration.StageWholeProgramPatch,
-		passregistration.ExecutionPatch, passregistration.PatchBindings(),
+		passregistration.ExecutionPatch,
 	)
 	if err != nil {
 		return PureScalarCSE{}, err
@@ -98,7 +98,7 @@ func (pass PureScalarCSE) Registration() passregistration.Registration {
 func NewPureScalarFold(analyzerSHA256 string) (PureScalarFold, error) {
 	definition, err := passregistration.Define(
 		PureScalarFoldName, PureScalarFoldVersion, passregistration.StageWholeProgramPatch,
-		passregistration.ExecutionPatch, passregistration.PatchBindings(),
+		passregistration.ExecutionPatch,
 	)
 	if err != nil {
 		return PureScalarFold{}, err
@@ -117,7 +117,7 @@ func (pass PureScalarFold) Registration() passregistration.Registration {
 func NewPLMCapabilityCalls(analyzerSHA256 string) (PLMCapabilityCalls, error) {
 	definition, err := passregistration.Define(
 		PLMCapabilityCallsName, PLMCapabilityCallsVersion, passregistration.StageWholeProgramPatch,
-		passregistration.ExecutionPatch, passregistration.PatchBindings(),
+		passregistration.ExecutionPatch,
 	)
 	if err != nil {
 		return PLMCapabilityCalls{}, err

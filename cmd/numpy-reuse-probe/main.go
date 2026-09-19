@@ -386,7 +386,7 @@ func loadBundle(root string) (bundle, error) {
 func probeBindings(profile runtimeconfig.ExecutionProfile) (numpycodec.Bindings, error) {
 	configDigest := digest("numpy_ndarray_c_v1.materialization")
 	registration, err := passregistration.New(passregistration.PreparedPureRegion, passregistration.PreparedPureRegionVersion,
-		passregistration.SemanticAnalyzerSHA256, configDigest, passregistration.ExecutionPatch, passregistration.PatchBindings())
+		passregistration.SemanticAnalyzerSHA256, configDigest, passregistration.ExecutionPatch)
 	if err != nil {
 		return numpycodec.Bindings{}, err
 	}

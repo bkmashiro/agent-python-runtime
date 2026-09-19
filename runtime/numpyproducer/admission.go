@@ -296,7 +296,7 @@ func admitAnalysis(declarationRaw []byte, source string, analysis semantic.Analy
 	registration, err := passregistration.New(
 		passregistration.PreparedPureRegion, passregistration.PreparedPureRegionVersion,
 		passregistration.SemanticAnalyzerSHA256, passConfigSHA256,
-		passregistration.ExecutionPatch, passregistration.PatchBindings(),
+		passregistration.ExecutionPatch,
 	)
 	if err != nil {
 		return Admission{}, ErrBinding

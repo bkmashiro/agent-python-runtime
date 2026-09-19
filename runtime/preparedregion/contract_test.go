@@ -51,8 +51,7 @@ func TestPreparedRegionDecisionSealDecodeAndExactBinding(t *testing.T) {
 	if err != nil || registration.Name() != passregistration.PreparedPureRegion ||
 		registration.Consumer() != passregistration.ExecutionPatch ||
 		registration.AnalyzerSHA256() != passregistration.SemanticAnalyzerSHA256 ||
-		registration.ConfigSHA256() != binding.PassConfigSHA256 ||
-		!reflect.DeepEqual(registration.RequiredBindings(), passregistration.PatchBindings()) {
+		registration.ConfigSHA256() != binding.PassConfigSHA256 {
 		t.Fatalf("registration=%+v err=%v", registration, err)
 	}
 	mutations := map[string]func(*PreparedRegionBinding){

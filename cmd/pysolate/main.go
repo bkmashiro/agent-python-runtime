@@ -11,6 +11,7 @@ import (
 	"time"
 
 	pysolate "github.com/bkmashiro/agent-python-runtime"
+	"github.com/tetratelabs/wazero"
 )
 
 func main() {
@@ -21,6 +22,7 @@ func main() {
 }
 
 func run() error {
+	cacheDir := flag.String("cache", "", "optional private wazero compilation cache directory")
 	artifact := flag.String("wasm", "dist/pysolate.wasm", "CPython/WASI artifact")
 	source := flag.String("source", "-", "Python file, or - for stdin")
 	input := flag.String("inputs", "{}", "JSON input")
@@ -54,6 +56,15 @@ func run() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
+	if *cacheDir != "" {
+		cache, e := wazero.NewCompilationCacheWithDir(*cacheDir)
+		if e != nil {
+			return e
+		}
+		defer cache.Close(context.Background())
+		ctx = pysolate.WithCompilationCache(ctx, cache)
+	}
+
 	// The CLI grants only a pure demonstration tool. Applications supply their own manifest.
 	tools := pysolate.Manifest{"echo": {AllowEarlyRead: true, Call: func(_ context.Context, args json.RawMessage) (any, error) { return args, nil }}}
 	var runner *pysolate.Runner

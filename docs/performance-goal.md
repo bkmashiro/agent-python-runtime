@@ -103,6 +103,7 @@ Deliver: implemented changes, exact versions/artifacts, concise before/after res
 
 ## Execution pointer
 
-Current: finish validation of seeded deterministic preparation, then optimize remaining replay/bridge overhead and implement a bounded Run executor.
-Next: use measured replay residuals and the executor contract; preserve the main-line seeded-image isolation and COW park regression.
-Blocked: none. Baseline and Guest are preserved. Dominant fresh cost was CPython initialization; matched seeded-COW replay is measured in docs/performance-results.md. The mapping-lifetime defect exposed by park has been fixed and reproduced successfully.
+Current: baseline and Go-path improvements verified; integrate the isolated bounded Executor and evaluate the separate Guest-bytecode candidate.
+Next: prove Executor admission/park/cancel/drain behavior, compare fixed-budget workloads, then run final combined regression and report supported modes and trade-offs.
+Blocked: none. Baseline/core source remains archived at ae071608. Measurements run only on the single controlled Linux VM.
+Delivered slices: seeded deterministic preparation plus safe COW park ownership; bounded immutable-history read-ahead; explicit caller-owned/native on-disk compilation cache. Measured results and raw rows are in docs/performance-results.md and docs/performance-data/.

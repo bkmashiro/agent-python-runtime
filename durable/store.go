@@ -351,7 +351,7 @@ func (s *Store) BeginCall(ctx context.Context, runID string, call LoggedCall) (C
 		return Call{}, false, ErrConflict
 	}
 	var count uint64
-	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM calls WHERE run_id=?", runID).Scan(&count); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(sequence)+1,0) FROM calls WHERE run_id=?", runID).Scan(&count); err != nil {
 		return Call{}, false, err
 	}
 	if count != uint64(call.Sequence) {
@@ -769,4 +769,42 @@ func payloadSizeTx(ctx context.Context, tx *sql.Tx, runID string) (uint64, error
 
 func isConstraint(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "constraint") || strings.Contains(strings.ToLower(err.Error()), "unique")
+}
+
+// Every public append is contiguous; the next primary-key entry detects an
+// unconsumed tail without counting all historical rows.
+func (s *Store) hasCall(ctx context.Context, runID string, sequence uint32) (bool, error) {
+	var exists bool
+	err := s.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM calls WHERE run_id=? AND sequence=?)", runID, sequence).Scan(&exists)
+	return exists, err
+}
+
+// readCompleted reads a small immutable prefix window, not a mutable Store cache.
+// A pending row stops read-ahead so its state is observed by BeginCall normally.
+func (s *Store) readCompleted(ctx context.Context, runID string, from uint32) ([]Call, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT sequence,call_id,tool,state,arguments,outcome FROM calls
+ WHERE run_id=? AND sequence>=? ORDER BY sequence LIMIT 64`, runID, from)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var calls []Call
+	size := 0
+	for rows.Next() {
+		var call Call
+		var args, outcome []byte
+		if err := rows.Scan(&call.Sequence, &call.CallID, &call.Tool, &call.State, &args, &outcome); err != nil {
+			return nil, err
+		}
+		if call.Sequence != from+uint32(len(calls)) || call.State != CallCompleted {
+			break
+		}
+		call.Arguments, call.Outcome = args, outcome
+		calls = append(calls, call)
+		size += len(args) + len(outcome)
+		if size >= 1<<20 {
+			break
+		} // Bound read-ahead; a single large row still must be read.
+	}
+	return calls, rows.Err()
 }

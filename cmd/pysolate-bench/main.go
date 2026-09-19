@@ -19,6 +19,7 @@ import (
 
 	pysolate "github.com/bkmashiro/agent-python-runtime"
 	"github.com/bkmashiro/agent-python-runtime/durable"
+	"github.com/tetratelabs/wazero"
 )
 
 type callKey struct{}
@@ -51,6 +52,7 @@ func run() error {
 	calls := flag.Int("calls", 8, "tool calls per request")
 	payload := flag.Int("payload", 0, "synthetic response body bytes")
 	delay := flag.Duration("delay", 0, "synthetic Host delay per call")
+	cacheDir := flag.String("cache", "", "optional private native compilation cache")
 	profile := flag.String("cpuprofile", "", "diagnostic CPU profile, includes construction")
 	flag.Parse()
 	if *n < 1 || *concurrency < 1 || *calls < 0 || *calls > 512 || *payload < 0 || *payload > 900000 {
@@ -100,6 +102,15 @@ func run() error {
 	manifest := pysolate.Manifest{"read": {Call: tool, AllowEarlyRead: true}}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
+	if *cacheDir != "" {
+		cache, e := wazero.NewCompilationCacheWithDir(*cacheDir)
+		if e != nil {
+			return e
+		}
+		defer cache.Close(context.Background())
+		ctx = pysolate.WithCompilationCache(ctx, cache)
+	}
+
 	var invoke func(context.Context, int, int) (pysolate.Output, error)
 	var closeRunner func() error
 	historySeedNS := int64(0)
@@ -312,14 +323,11 @@ func program(work string, calls int) (string, string, error) {
 		for i := 0; i < calls; i++ {
 			fmt.Fprintf(&b, "x%d = read(value=%d)\n", i, i)
 		}
-		b.WriteString("result = sum([")
+		b.WriteString("result = 0")
 		for i := 0; i < calls; i++ {
-			if i > 0 {
-				b.WriteString(",")
-			}
-			fmt.Fprintf(&b, "x%d['value']", i)
+			fmt.Fprintf(&b, " + x%d['value']", i)
 		}
-		b.WriteString("])\n")
+		b.WriteString("\n")
 		return b.String(), strconv.Itoa(calls * (calls - 1) / 2), nil
 	}
 	return "", "", errors.New("unknown workload")

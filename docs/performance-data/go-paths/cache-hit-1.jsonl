@@ -1,0 +1,4 @@
+{"arch":"arm64","calls":8,"concurrency":1,"go":"go1.26.0","history_seed_ns":0,"kind":"environment","mode":"fresh","os":"linux","payload":0,"prepare":"fresh","profiled":false,"rounds":1,"setup_ns":89833051,"synthetic_delay_ns":0,"work":"python"}
+{"kind":"run","mode":"fresh","work":"python","round":0,"worker":0,"ns":477237433,"physical_calls":0}
+{"kind":"batch","mode":"fresh","work":"python","round":0,"worker":0,"ns":477250892,"physical_calls":0,"rss_kib":200212,"pss_kib":200208}
+{"kind":"close","mode":"fresh","work":"python","round":0,"worker":0,"ns":2834,"physical_calls":0,"rss_kib":200212,"pss_kib":200208}

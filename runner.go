@@ -53,10 +53,23 @@ var pythonKeywords = map[string]bool{
 }
 
 // New compiles the actual artifact once; every Run instantiates private memory.
+// WithCompilationCache supplies a caller-owned wazero cache to constructors.
+// Close the cache only after all Runners using it have closed.
+func WithCompilationCache(ctx context.Context, cache wazero.CompilationCache) context.Context {
+	return context.WithValue(ctx, compilationCacheKey{}, cache)
+}
+
+type compilationCacheKey struct{}
+
 func New(ctx context.Context, wasm []byte, manifest Manifest) (*Runner, error) {
+	config := wazero.NewRuntimeConfig().WithCloseOnContextDone(true).WithMemoryLimitPages(8192)
+	if cache, ok := ctx.Value(compilationCacheKey{}).(wazero.CompilationCache); ok {
+		config = config.WithCompilationCache(cache)
+	}
+
 	r := &Runner{
 		artifactID:    fmt.Sprintf("sha256:%x", sha256.Sum256(wasm)),
-		runtime:       wazero.NewRuntimeWithConfig(ctx, wazero.NewRuntimeConfig().WithCloseOnContextDone(true).WithMemoryLimitPages(8192)),
+		runtime:       wazero.NewRuntimeWithConfig(ctx, config),
 		manifest:      make(Manifest, len(manifest)),
 		guestManifest: make([]guestToolSpec, 0, len(manifest)),
 	}

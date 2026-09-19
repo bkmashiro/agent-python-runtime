@@ -343,11 +343,11 @@ func (runner *Runner) Resume(ctx context.Context, runID string) (pysolate.Output
 	var pythonErr *pysolate.PythonError
 	completed := runErr == nil || errors.As(runErr, &pythonErr)
 	if completed {
-		callCount, countErr := runner.store.CallCount(context.Background(), runID)
+		remaining, countErr := runner.store.hasCall(context.Background(), runID, journal.count())
 		if countErr != nil {
 			return output, countErr
 		}
-		if callCount != journal.count() {
+		if remaining {
 			return output, runner.blockAttempt(runID, "recorded call history was not fully consumed")
 		}
 	}
@@ -450,6 +450,8 @@ type journal struct {
 	runner   *Runner
 	runID    string
 	sequence uint32
+	history  []Call
+	live     bool
 }
 
 func (journal *journal) count() uint32 {
@@ -472,6 +474,25 @@ func (journal *journal) Call(ctx context.Context, tool string, args json.RawMess
 		CallID:     fmt.Sprintf("call-%d", sequence),
 		Capability: tool,
 		Arguments:  append(json.RawMessage(nil), args...),
+	}
+	if !journal.live {
+		if len(journal.history) == 0 {
+			var err error
+			journal.history, err = journal.runner.store.readCompleted(ctx, journal.runID, sequence)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if len(journal.history) > 0 {
+			record := journal.history[0]
+			journal.history[0] = Call{}
+			journal.history = journal.history[1:]
+			if record.CallID != logged.CallID || record.Tool != tool || !bytes.Equal(record.Arguments, args) {
+				return nil, ErrHistoryMismatch
+			}
+			return record.Outcome, nil
+		}
+		journal.live = true
 	}
 	record, created, err := journal.runner.store.BeginCall(ctx, journal.runID, logged)
 	if err != nil {

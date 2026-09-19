@@ -138,3 +138,9 @@ last argument to `durable.NewRunner`. The default is still fresh. This changes n
 stored schema and can resume history made by a fresh Runner with the same seed.
 The image has startup and retained-memory costs; account for them, not just warm
 resume time. See `docs/performance-results.md` for measurements.
+
+## Optional compilation cache
+
+The CLI accepts `-cache DIRECTORY` to reuse wazero native compilation across process restarts. It is off by default. Use a private, trusted directory; do not accept a cache path or files controlled by submitted Python. Compilation-cache hits do not share Python state or Host tool authority.
+
+Embedders can create a `wazero.CompilationCache` (in memory or with a directory) and pass `pysolate.WithCompilationCache(ctx, cache)` to any constructor, including the durable constructor. The caller closes the cache after all using Runners. No files are created when this option is absent.

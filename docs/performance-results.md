@@ -23,3 +23,21 @@ Work: replay 128 persisted read outcomes, check their computed result inside Pyt
 Preparation adds startup and retained-image cost. The default remains fresh, and different seeds are not placed into an unbounded image cache. Final integrated resource-limit tests and other cost lanes remain in progress.
 
 Reproduce with `go run ./cmd/pysolate-bench -mode durable-replay -work tools -calls 128 -n 5`, then the candidate with `-prepare cow` on Linux. `-prepare copy` is available without Linux mapping support. Raw non-sensitive rows are in `docs/performance-data/seeded-replay/`.
+
+## Bounded history read-ahead
+
+The completed-call path now reads at most 64 records or approximately 1 MiB per window (a single larger record must still fit). Consumed entries are released. Only single-assignment completed outcomes are buffered within one attempt; pending/live operations retain transactional admission and commit order. There is no cross-attempt cache, data-version protocol, schema change or reduced durability.
+
+With the seeded-COW path held fixed, 128-call replay process medians changed from 19.40/19.64/20.01 ms to 14.82/15.74/14.95 ms (three processes per arm, five requests each). A small 32-call live-write check was 14.00 vs 14.15 ms: no live-write improvement is claimed. A trial using a per-call read-only fast lookup only improved replay around 7% and added an extra lookup to every live call; that trial was replaced by bounded read-ahead.
+
+## Explicit native compilation cache
+
+The existing wazero cache can be supplied to constructors with `WithCompilationCache`. CLI `-cache DIRECTORY` is explicit and disabled by default. The caller owns its lifetime and must protect the directory as executable native code; it contains compiled Guest code, not user Run state or tool outcomes.
+
+On the same Linux VM, independently launched constructors took about 2.54 s without cache and 89 ms with a populated cache. First population still cost 2.58 s. Full CLI wall times for one ordinary `result = 42` invocation were 3.03/3.11/3.05 s without cache and 0.58/0.57/0.58 s with a hit (about 5.3x by medians, including process startup/input read/cleanup). Native cached files occupied 50,244 KiB, roughly 49 MiB. This is a cache-hit result, not a faster first-ever cold compile.
+
+Raw data: `performance-data/go-paths/`. Cache constructor rows exclude warm-up; the separate `cli-*.time` records measure the complete CLI process.
+
+## PLM fixture correction
+
+An initial diagnostic ended with `sum(...)`, which deliberately makes this small PLM pass fall back. Those rows are not used as evidence for admitted PLM. The harness now uses supported arithmetic and rejects an expected PLM trial unless it actually reports a transformed program. Zero-delay and controlled-delay studies remain separate; fixtures are not claims about real network services.

@@ -13,8 +13,6 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/subagent"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workflow"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
@@ -103,17 +101,11 @@ func NewRuntimeCampaignAdapter(config RuntimeCampaignAdapterConfig) (*RuntimeCam
 	if err != nil {
 		return nil, err
 	}
-	passes, err := passplugin.NewDefaultEnabledCatalog(
-		passregistration.AgentFunctionRetention,
-		passregistration.AgentFunctionSingleFlight,
-		passregistration.FreshWorkflowReevaluation,
-	)
-	if err != nil {
-		return nil, err
-	}
-	selection, err := passes.LowerMechanisms(runtimeconfig.MechanismSet{})
-	if err != nil {
-		return nil, err
+	optimizations := runtimeconfig.MechanismSet{
+		ImmutableBranches: true,
+		FunctionCache:     true,
+		SingleFlight:      true,
+		FreshReevaluation: true,
 	}
 	now := config.Now
 	if now == nil {
@@ -124,9 +116,9 @@ func NewRuntimeCampaignAdapter(config RuntimeCampaignAdapterConfig) (*RuntimeCam
 		baseSHA256: base.WorkspaceSHA256, baseLineageSHA256: lineage,
 		artifactSHA256: config.ArtifactSHA256, executionProfileSHA256: config.ExecutionProfileSHA256, now: now,
 		functions: agentfunction.Engine{
-			Store: store, CacheEnabled: selection.Mechanisms.FunctionCache, Flights: agentfunction.NewFlightGroup(),
+			Store: store, CacheEnabled: optimizations.FunctionCache, Flights: agentfunction.NewFlightGroup(),
 		},
-		optimizations: selection.Mechanisms,
+		optimizations: optimizations,
 		workflows:     make(map[string]campaignWorkflowState), delegations: make(map[string]*campaignDelegationState), stagedChildren: make(map[string]*campaignStagedChild),
 	}, nil
 }

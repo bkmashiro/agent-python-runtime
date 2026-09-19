@@ -17,7 +17,7 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
 )
 
@@ -188,20 +188,23 @@ func runPLMEconomicsSampleWithCalls(t *testing.T, artifact []byte, source, mode,
 	if err != nil {
 		t.Fatal(err)
 	}
-	plugins := unifiedPassCatalog(t)
+	var plm sourcepatch.PLMCapabilityCalls
 	if mode == "plm" {
-		plugins, err = plugins.Enable(sourcepatch.PLMCapabilityCallsName)
+		plm, err = sourcepatch.NewPLMCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 	var broker *capability.Broker
 	config := runtimeconfig.DefaultRunConfig()
+	if mode == "plm" {
+		config.Mechanisms.SplitPhaseCalls = true
+	}
 	config.Timeout = 90 * time.Second
 	var beforeSetup goruntime.MemStats
 	goruntime.ReadMemStats(&beforeSetup)
 	setupStarted := time.Now()
-	runner, err := (wazeroengine.Factory{Passes: plugins, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		created, createErr := capability.NewBroker(capability.Config{RunIdentity: runID, Plan: plan})
 		broker = created
 		return created, createErr
@@ -219,8 +222,8 @@ func runPLMEconomicsSampleWithCalls(t *testing.T, artifact []byte, source, mode,
 	}
 	var result []byte
 	if mode == "plm" {
-		execution, runErr := plugins.ExecuteCapabilityHostScheduled(context.Background(), sourcepatch.PLMCapabilityCallsName, engine, request,
-			plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan))
+		execution, runErr := plm.Execute(context.Background(), engine, request,
+			plan.PythonPrelude(), sourcepatch.PLMCapabilityProjections(plan))
 		if runErr != nil || !execution.Applied {
 			t.Fatalf("mode=%s execution=%+v err=%v", mode, execution, runErr)
 		}

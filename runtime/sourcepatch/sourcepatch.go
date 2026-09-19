@@ -133,8 +133,6 @@ func (pass PLMCapabilityCalls) Registration() passregistration.Registration {
 	return pass.registration
 }
 
-func (pass PLMCapabilityCalls) HostScheduled() bool { return true }
-
 func (pass PureScalarFold) Transform(ctx context.Context, transformer Transformer, source string) (Patch, error) {
 	return transform(ctx, transformer, source, pass.registration, PureScalarFoldName, nil)
 }

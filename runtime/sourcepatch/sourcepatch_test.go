@@ -69,7 +69,7 @@ func TestPLMCapabilityCallsIsHostScheduledWholeProgramPlugin(t *testing.T) {
 	}
 	registration := pass.Registration()
 	if registration.Name() != PLMCapabilityCallsName || registration.Version() != PLMCapabilityCallsVersion ||
-		registration.Stage() != passregistration.StageWholeProgramPatch || registration.Consumer() != passregistration.ExecutionPatch || !pass.HostScheduled() {
+		registration.Stage() != passregistration.StageWholeProgramPatch || registration.Consumer() != passregistration.ExecutionPatch {
 		t.Fatalf("registration=%+v", registration)
 	}
 }

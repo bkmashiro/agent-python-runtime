@@ -1,5 +1,7 @@
 # Stage-aware optimization pass catalog v1
 
+> Historical catalog: the runtime pass catalog was removed during execution-core consolidation. Use [direct runtime configuration and typed source transforms](../source-pass-plugins.md) for the current API. The catalog-era implementation is available at `a1805843`.
+
 > Historical four-pass tranche. The current complete catalog is
 > [stage-aware optimization pass catalog v2](stage-aware-pass-catalog-v2.md).
 

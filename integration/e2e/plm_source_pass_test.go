@@ -17,7 +17,6 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 
@@ -55,14 +54,14 @@ func TestRealGuestPLMSourceTimeCandidateReusesAndLinearizesAtOriginalCall(t *tes
 		t.Fatal(err)
 	}
 
-	plugins := unifiedPassCatalog(t)
-	plugins, err = plugins.Enable(sourcepatch.PLMCapabilityCallsName)
+	plm, err := sourcepatch.NewPLMCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
 	if err != nil {
 		t.Fatal(err)
 	}
 	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.SplitPhaseCalls = true
 	config.Timeout = 90 * time.Second
-	runner, err := (wazeroengine.Factory{Passes: plugins, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		return broker, nil
 	}}).New(context.Background(), artifact, config)
 	if err != nil {
@@ -70,9 +69,9 @@ func TestRealGuestPLMSourceTimeCandidateReusesAndLinearizesAtOriginalCall(t *tes
 	}
 	defer runner.Close(context.Background())
 	engine := trustedSemanticRunner(t, runner)
-	execution, err := plugins.ExecuteCapabilityHostScheduled(
-		context.Background(), sourcepatch.PLMCapabilityCallsName, engine, request,
-		plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan),
+	execution, err := plm.Execute(
+		context.Background(), engine, request,
+		plan.PythonPrelude(), sourcepatch.PLMCapabilityProjections(plan),
 	)
 	if err != nil || !execution.Applied || execution.Patch.ReplacementCount != 1 || execution.Patch.DerivedSource != "" {
 		t.Fatalf("execution=%+v err=%v", execution, err)
@@ -167,21 +166,14 @@ func TestRealGuestStreamingPrefixAndPLMShareOneSplitPhaseOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	plugins := unifiedPassCatalog(t)
-	plugins, err = plugins.Enable(sourcepatch.PLMCapabilityCallsName)
+	plm, err := sourcepatch.NewPLMCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
 	if err != nil {
 		t.Fatal(err)
-	}
-	selection, err := plugins.LowerMechanisms(runtimeconfig.MechanismSet{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if selection.Mechanisms.SemanticAnalysis || !selection.Mechanisms.SplitPhaseCalls {
-		t.Fatalf("selection=%+v", selection)
 	}
 	executionConfig := runtimeconfig.DefaultRunConfig()
+	executionConfig.Mechanisms.SplitPhaseCalls = true
 	executionConfig.Timeout = 90 * time.Second
-	runner, err := (wazeroengine.Factory{Passes: plugins, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		return broker, nil
 	}}).New(context.Background(), artifact, executionConfig)
 	if err != nil {
@@ -195,9 +187,9 @@ func TestRealGuestStreamingPrefixAndPLMShareOneSplitPhaseOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 	engine := trustedSemanticRunner(t, runner)
-	execution, err := plugins.ExecuteCapabilityHostScheduled(
-		context.Background(), sourcepatch.PLMCapabilityCallsName, engine, request,
-		plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan),
+	execution, err := plm.Execute(
+		context.Background(), engine, request,
+		plan.PythonPrelude(), sourcepatch.PLMCapabilityProjections(plan),
 	)
 	if err != nil || !execution.Applied || execution.Patch.ReplacementCount != 2 {
 		t.Fatalf("execution=%+v err=%v", execution, err)
@@ -224,11 +216,10 @@ func TestRealGuestPLMPassDisabledExecutesUnchangedSource(t *testing.T) {
 		return json.RawMessage(`{"body":"baseline"}`), nil
 	})}
 	plan := plmE2EPlan(t, 1, adapter)
-	plugins := unifiedPassCatalog(t)
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 60 * time.Second
 	var broker *capability.Broker
-	runner, err := (wazeroengine.Factory{Passes: plugins, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		broker, err = capability.NewBroker(capability.Config{RunIdentity: "plm-disabled", Plan: plan})
 		return broker, err
 	}}).New(context.Background(), artifact, config)
@@ -242,14 +233,11 @@ func TestRealGuestPLMPassDisabledExecutesUnchangedSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	engine := trustedSemanticRunner(t, runner)
-	execution, err := plugins.ExecuteCapabilityHostScheduled(
-		context.Background(), sourcepatch.PLMCapabilityCallsName, engine, request,
-		plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan),
-	)
-	if err != nil || execution.Applied || execution.Patch.DerivedSource != "" {
-		t.Fatalf("execution=%+v err=%v", execution, err)
+	payload, err := runner.Run(context.Background(), request, plan.PythonPrelude())
+	if err != nil {
+		t.Fatal(err)
 	}
-	result, err := decodeSuccessfulGuestResult(execution.Payload)
+	result, err := decodeSuccessfulGuestResult(payload)
 	if err != nil || string(result) != `["baseline",9]` || physical.Load() != 1 || broker.CallCount() != 1 {
 		t.Fatalf("result=%s physical=%d calls=%d err=%v", result, physical.Load(), broker.CallCount(), err)
 	}
@@ -282,15 +270,15 @@ func TestRealGuestPLMRuntimeDerivedCallsPreserveCodeAndReceipts(t *testing.T) {
 	plan := plmTwoE2EPlan(t, getAdapter, priceAdapter)
 	source := "a = tools.get(\"alpha\")\nx = a + 1\nindependent = 3 * 4\nb = tools.price(x)\nresult = [a, b, independent]\n"
 	request, _ := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: "plm-runtime-derived", Code: source, Inputs: json.RawMessage(`{}`)})
-	plugins := unifiedPassCatalog(t)
-	plugins, err = plugins.Enable(sourcepatch.PLMCapabilityCallsName)
+	plm, err := sourcepatch.NewPLMCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var broker *capability.Broker
 	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.SplitPhaseCalls = true
 	config.Timeout = 90 * time.Second
-	runner, err := (wazeroengine.Factory{Passes: plugins, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		created, createErr := capability.NewBroker(capability.Config{RunIdentity: "plm-runtime-derived", Plan: plan})
 		broker = created
 		return created, createErr
@@ -299,9 +287,9 @@ func TestRealGuestPLMRuntimeDerivedCallsPreserveCodeAndReceipts(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer runner.Close(context.Background())
-	execution, err := plugins.ExecuteCapabilityHostScheduled(
-		context.Background(), sourcepatch.PLMCapabilityCallsName, trustedSemanticRunner(t, runner), request,
-		plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan),
+	execution, err := plm.Execute(
+		context.Background(), trustedSemanticRunner(t, runner), request,
+		plan.PythonPrelude(), sourcepatch.PLMCapabilityProjections(plan),
 	)
 	if err != nil || !execution.Applied || execution.Patch.ReplacementCount != 2 || execution.Patch.DerivedSource != "" {
 		t.Fatalf("execution=%+v err=%v", execution, err)
@@ -399,15 +387,15 @@ func runPLMExact(t *testing.T, artifact []byte, plan *capability.Plan, _ *e2ePLM
 	if err != nil {
 		t.Fatal(err)
 	}
-	plugins := unifiedPassCatalog(t)
-	plugins, err = plugins.Enable(sourcepatch.PLMCapabilityCallsName)
+	plm, err := sourcepatch.NewPLMCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var broker *capability.Broker
 	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.SplitPhaseCalls = true
 	config.Timeout = 90 * time.Second
-	runner, err := (wazeroengine.Factory{Passes: plugins, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		created, createErr := capability.NewBroker(capability.Config{RunIdentity: runID, Plan: plan})
 		broker = created
 		return created, createErr
@@ -416,9 +404,9 @@ func runPLMExact(t *testing.T, artifact []byte, plan *capability.Plan, _ *e2ePLM
 		t.Fatal(err)
 	}
 	defer runner.Close(context.Background())
-	execution, err := plugins.ExecuteCapabilityHostScheduled(
-		context.Background(), sourcepatch.PLMCapabilityCallsName, trustedSemanticRunner(t, runner), request,
-		plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan),
+	execution, err := plm.Execute(
+		context.Background(), trustedSemanticRunner(t, runner), request,
+		plan.PythonPrelude(), sourcepatch.PLMCapabilityProjections(plan),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -522,21 +510,21 @@ func TestRealGuestPLMPrepareFailureRetriesOnlyAtLinearization(t *testing.T) {
 	}
 }
 
-func runPLMRaw(t *testing.T, artifact []byte, plan *capability.Plan, runID, source string) (passplugin.Execution, *capability.Broker, capability.SplitPhaseSnapshot) {
+func runPLMRaw(t *testing.T, artifact []byte, plan *capability.Plan, runID, source string) (sourcepatch.Execution, *capability.Broker, capability.SplitPhaseSnapshot) {
 	t.Helper()
 	request, err := runtimeconfig.EncodeRunRequest(runtimeconfig.RunRequest{RunID: runID, Code: source, Inputs: json.RawMessage(`{}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	plugins := unifiedPassCatalog(t)
-	plugins, err = plugins.Enable(sourcepatch.PLMCapabilityCallsName)
+	plm, err := sourcepatch.NewPLMCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var broker *capability.Broker
 	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.SplitPhaseCalls = true
 	config.Timeout = 90 * time.Second
-	runner, err := (wazeroengine.Factory{Passes: plugins, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		created, createErr := capability.NewBroker(capability.Config{RunIdentity: runID, Plan: plan})
 		broker = created
 		return created, createErr
@@ -546,8 +534,8 @@ func runPLMRaw(t *testing.T, artifact []byte, plan *capability.Plan, runID, sour
 	}
 	defer runner.Close(context.Background())
 	engine := trustedSemanticRunner(t, runner)
-	execution, err := plugins.ExecuteCapabilityHostScheduled(context.Background(), sourcepatch.PLMCapabilityCallsName, engine, request,
-		plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan))
+	execution, err := plm.Execute(context.Background(), engine, request,
+		plan.PythonPrelude(), sourcepatch.PLMCapabilityProjections(plan))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -616,15 +604,6 @@ func plmE2EPlan(t *testing.T, maxCalls uint32, adapter *e2ePLMAdapter) *capabili
 	return plan
 }
 
-func unifiedPassCatalog(t *testing.T) *passplugin.Registry {
-	t.Helper()
-	registry, err := passplugin.NewDefaultUnifiedCatalog()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return registry
-}
-
 func osReadGuestArtifact(t *testing.T) ([]byte, error) {
 	t.Helper()
 	return os.ReadFile(guestArtifact(t))
@@ -651,17 +630,18 @@ func TestRealGuestPLMWaitUsesColdResidency(t *testing.T) {
 		}
 	})}
 	plan := plmE2EPlan(t, 1, adapter)
-	passes := unifiedPassCatalog(t)
-	for _, name := range []passregistration.Name{sourcepatch.PLMCapabilityCallsName, passregistration.ColdIOResidency} {
-		passes, err = passes.Enable(name)
-		if err != nil {
-			t.Fatal(err)
-		}
+	plm, err := sourcepatch.NewPLMCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
+	if err != nil {
+		t.Fatal(err)
 	}
 	cfg := runtimeconfig.DefaultRunConfig()
+	cfg.Mechanisms.SplitPhaseCalls = true
+	cfg.Mechanisms.PreparedRuntime = true
+	cfg.Mechanisms.MemoryCOW = true
+	cfg.Mechanisms.ColdIOContinuation = true
 	cfg.Timeout = 90 * time.Second
 	cfg.ColdIO = &runtimeconfig.ColdIOPolicy{Strategy: runtimeconfig.ColdIOFixed, ColdAfter: 10 * time.Millisecond, PageOutAfter: 20 * time.Millisecond}
-	runner, err := (wazeroengine.Factory{Passes: passes, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	runner, err := (wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		return capability.NewBroker(capability.Config{RunIdentity: "plm-cold", Plan: plan})
 	}}).New(context.Background(), artifact, cfg)
 	if err != nil {
@@ -673,7 +653,7 @@ func TestRealGuestPLMWaitUsesColdResidency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	execution, err := passes.ExecuteCapabilityHostScheduled(context.Background(), sourcepatch.PLMCapabilityCallsName, engine, request, plan.PythonPrelude(), passplugin.PLMCapabilityProjections(plan))
+	execution, err := plm.Execute(context.Background(), engine, request, plan.PythonPrelude(), sourcepatch.PLMCapabilityProjections(plan))
 	if err != nil || !execution.Applied {
 		t.Fatalf("execution=%+v err=%v", execution, err)
 	}

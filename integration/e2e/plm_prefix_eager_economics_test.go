@@ -21,7 +21,6 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/playback"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
@@ -296,7 +295,7 @@ type plmPrefixPreparedCapacity struct {
 	config                runtimeconfig.RunConfig
 	profile               runtimeconfig.ExecutionProfile
 	allowedImports        []string
-	plugins               *passplugin.Registry
+	plm                   sourcepatch.PLMCapabilityCalls
 	analyzer              *wazeroengine.Engine
 	executionFamilies     []*wazeroengine.PreparedFamily
 	executionFamilyLimits []uint32
@@ -324,21 +323,16 @@ func newPLMPrefixPreparedCapacityForProfile(ctx context.Context, artifact []byte
 	if err != nil {
 		return nil, err
 	}
-	plugins := unifiedPassCatalogForExperiment()
-	plugins, err = plugins.Enable(sourcepatch.PLMCapabilityCallsName)
+	plm, err := sourcepatch.NewPLMCapabilityCalls(passregistration.SemanticAnalyzerSHA256)
 	if err != nil {
 		return nil, err
 	}
 	analysisConfig := config
 	analysisConfig.ExecutionProfile = &profile
-	analysisConfig.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
-	preparedPass := passregistration.PreparedRuntimeInstantiation
+	analysisConfig.Mechanisms.SemanticAnalysis = true
+	analysisConfig.Mechanisms.PreparedRuntime = true
 	if goruntime.GOOS == "linux" {
-		preparedPass = passregistration.PrivateMemoryCOW
-	}
-	analysisConfig, _, err = passplugin.LowerDefaultRunConfig(analysisConfig, preparedPass)
-	if err != nil {
-		return nil, err
+		analysisConfig.Mechanisms.MemoryCOW = true
 	}
 	analyzer, err := wazeroengine.New(ctx, artifact, analysisConfig)
 	if err != nil {
@@ -349,7 +343,7 @@ func newPLMPrefixPreparedCapacityForProfile(ctx context.Context, artifact []byte
 		return nil, err
 	}
 	return &plmPrefixPreparedCapacity{
-		artifact: artifact, config: config, profile: profile, allowedImports: append([]string(nil), allowedImports...), plugins: plugins, analyzer: analyzer,
+		artifact: artifact, config: config, profile: profile, allowedImports: append([]string(nil), allowedImports...), plm: plm, analyzer: analyzer,
 		setupNanos: uint64(time.Since(started)),
 	}, nil
 }
@@ -405,7 +399,7 @@ func (capacity *plmPrefixPreparedCapacity) newExecutionRunner(ctx context.Contex
 }
 
 type plmFinalRunner interface {
-	passplugin.CapabilitySourcePatchRunner
+	sourcepatch.CapabilitySourcePatchRunner
 	Close(context.Context) error
 	SplitPhaseEvidence() capability.SplitPhaseSnapshot
 	PLMRunLifecycleEvidence() wazeroengine.PLMRunLifecycleEvidence
@@ -429,7 +423,7 @@ type plmPrefixTreatment struct {
 	table                       *capability.SplitPhaseTable
 	admission                   *semantic.StreamingPrefixAdmission
 	bindings                    semantic.Bindings
-	plugins                     *passplugin.Registry
+	plm                         sourcepatch.PLMCapabilityCalls
 	manager                     *workspace.Manager
 	attempt                     *workspace.Attempt
 	prefixAnalysisNanos         uint64
@@ -469,7 +463,7 @@ func (treatment *plmPrefixTreatment) Begin(ctx context.Context, _ json.RawMessag
 	artifactDigest := sha256.Sum256(treatment.artifact)
 	artifactSHA := fmt.Sprintf("sha256:%x", artifactDigest[:])
 	allowedImports := treatment.capacity.allowedImports
-	treatment.plugins = treatment.capacity.plugins
+	treatment.plm = treatment.capacity.plm
 	callBudget := treatment.expectedCalls
 	if callBudget == 0 {
 		callBudget = 1
@@ -507,11 +501,8 @@ func (treatment *plmPrefixTreatment) Begin(ctx context.Context, _ json.RawMessag
 
 	finalConfig := treatment.config
 	finalConfig.ExecutionProfile = &treatment.capacity.profile
+	finalConfig.Mechanisms.SplitPhaseCalls = true
 	if len(treatment.capacity.executionFamilies) != 0 {
-		finalConfig, _, err = treatment.plugins.ApplyRunConfig(finalConfig)
-		if err != nil {
-			return fmt.Errorf("lower final PLM runner config: %w", err)
-		}
 		finalRunner, runnerErr := treatment.capacity.newExecutionRunner(ctx, wazeroengine.PreparedRunnerConfig{
 			RunConfig: finalConfig, BrokerFactory: func(context.Context) (*capability.Broker, error) { return treatment.broker, nil }, Plan: treatment.plan,
 			WorkspaceManager: treatment.manager, WorkspaceRef: treatment.attempt.Ref(), WorkspaceOwner: treatment.runID,
@@ -527,7 +518,7 @@ func (treatment *plmPrefixTreatment) Begin(ctx context.Context, _ json.RawMessag
 			return fmt.Errorf("prepared PLM runner lacks source-patch evidence surface")
 		}
 	} else {
-		finalRunner, runnerErr := (wazeroengine.Factory{Passes: treatment.plugins, WorkspaceManager: treatment.manager, WorkspaceRef: treatment.attempt.Ref(), WorkspaceOwner: treatment.runID, BrokerFactory: func(context.Context) (*capability.Broker, error) { return treatment.broker, nil }}).New(ctx, treatment.artifact, finalConfig)
+		finalRunner, runnerErr := (wazeroengine.Factory{WorkspaceManager: treatment.manager, WorkspaceRef: treatment.attempt.Ref(), WorkspaceOwner: treatment.runID, BrokerFactory: func(context.Context) (*capability.Broker, error) { return treatment.broker, nil }}).New(ctx, treatment.artifact, finalConfig)
 		if runnerErr != nil {
 			return fmt.Errorf("create final PLM runner: %w", runnerErr)
 		}
@@ -609,7 +600,7 @@ func (treatment *plmPrefixTreatment) Finalize(ctx context.Context) (semanticspec
 		return semanticspeculation.TreatmentOutcome{}, fmt.Errorf("PLM experiment final runner was not initialized")
 	}
 	executionStarted := time.Now()
-	execution, err := treatment.plugins.ExecuteCapabilityHostScheduled(ctx, sourcepatch.PLMCapabilityCallsName, engine, request, treatment.plan.PythonPrelude(), passplugin.PLMCapabilityProjections(treatment.plan))
+	execution, err := treatment.plm.Execute(ctx, engine, request, treatment.plan.PythonPrelude(), sourcepatch.PLMCapabilityProjections(treatment.plan))
 	treatment.finalExecutionNanos = uint64(time.Since(executionStarted))
 	closeErr := engine.Close(ctx)
 	sessionCloseErr := treatment.analyzerSession.Close(ctx)
@@ -668,14 +659,6 @@ func (treatment *plmPrefixTreatment) Cancel(ctx context.Context) error {
 func trustedSemanticRunnerNoTest(runner interface{ Close(context.Context) error }) *wazeroengine.Engine {
 	engine, _ := runner.(*wazeroengine.Engine)
 	return engine
-}
-
-func unifiedPassCatalogForExperiment() *passplugin.Registry {
-	registry, err := passplugin.NewDefaultUnifiedCatalog()
-	if err != nil {
-		panic(err)
-	}
-	return registry
 }
 
 func TestPLMPrefixPreparedCapacityUsesFreshSessions(t *testing.T) {

@@ -14,23 +14,9 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
-	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
 	"github.com/bkmashiro/agent-python-runtime/runtime/valueslot"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
-
-func unifiedCatalog(t *testing.T) *passplugin.Registry {
-	t.Helper()
-	catalog, err := passplugin.NewUnifiedCatalog(passplugin.UnifiedCatalogConfig{
-		PreparedNumpyLoadConfigSHA256:  "sha256:" + strings.Repeat("b", 64),
-		PreparedPureRegionConfigSHA256: "sha256:" + strings.Repeat("c", 64),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return catalog
-}
 
 func TestFactoryRequiresBrokerForProgrammaticToolsAndApproval(t *testing.T) {
 	for _, configure := range []func(*runtimeconfig.RunConfig){
@@ -55,27 +41,6 @@ func TestFactoryRequiresBrokerForSplitPhaseCalls(t *testing.T) {
 	_, err := (wazeroengine.Factory{}).New(context.Background(), []byte("not wasm"), config)
 	if err == nil || !strings.Contains(err.Error(), "requires a capability Broker factory") {
 		t.Fatalf("factory error = %v", err)
-	}
-}
-
-func TestFactoryLowersEnabledPassesBeforeArtifactParsing(t *testing.T) {
-	catalog := unifiedCatalog(t)
-	enabled, err := catalog.Enable(sourcepatch.PLMCapabilityCallsName)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = (wazeroengine.Factory{Passes: enabled}).New(context.Background(), []byte("not wasm"), runtimeconfig.DefaultRunConfig())
-	if err == nil || !strings.Contains(err.Error(), "requires a capability Broker factory") {
-		t.Fatalf("pass lowering did not select the PLM runtime: %v", err)
-	}
-}
-
-func TestFactoryRejectsDirectOptimizationSelectionWhenPassCatalogIsBound(t *testing.T) {
-	config := runtimeconfig.DefaultRunConfig()
-	config.Mechanisms.SplitPhaseCalls = true
-	_, err := (wazeroengine.Factory{Passes: unifiedCatalog(t)}).New(context.Background(), []byte("not wasm"), config)
-	if !errors.Is(err, passplugin.ErrDirectOptimizationSelection) {
-		t.Fatalf("direct optimization bypass error=%v", err)
 	}
 }
 
@@ -343,4 +308,17 @@ func splitPhaseCleanupPlan(t *testing.T, handler *splitPhaseCleanupAdapter) *cap
 		t.Fatal(err)
 	}
 	return plan
+}
+
+func TestFactoryAcceptsDirectPreparedRuntimeConfiguration(t *testing.T) {
+	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.PreparedRuntime = true
+	runner, err := (wazeroengine.Factory{}).New(context.Background(), []byte{0, 97, 115, 109, 1, 0, 0, 0}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	if !runner.(*wazeroengine.Engine).PreparedState().Selected {
+		t.Fatal("direct prepared configuration was ignored")
+	}
 }

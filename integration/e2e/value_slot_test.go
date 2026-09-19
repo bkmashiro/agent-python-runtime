@@ -15,8 +15,6 @@ import (
 	preparedfixture "github.com/bkmashiro/agent-python-runtime/research/prepareddataset"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/valueslot"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
@@ -41,10 +39,9 @@ func TestValueSlotExactGuestMaterializesPrivateBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	preparedValue := preparedValuePassSelection(t, "slot-bytes")
 	config := runtimeconfig.DefaultRunConfig()
-	config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
-	runner, err := (wazeroengine.Factory{Passes: preparedValue.registry, ValueSlots: table}).New(context.Background(), artifact, config)
+	config.Mechanisms = runtimeconfig.MechanismSet{ValueSlots: true}
+	runner, err := (wazeroengine.Factory{ValueSlots: table}).New(context.Background(), artifact, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,9 +94,10 @@ func TestSharedImmutableObjectFeedsFreshIsolatedGuestConsumers(t *testing.T) {
 			t.Fatal(createErr)
 		}
 		identities = append(identities, table.BackingIdentity("slot-bytes"))
-		preparedValue := preparedValuePassSelection(t, "slot-bytes")
+		preparedValue := preparedValuePrelude(t, "slot-bytes")
 		config := runtimeconfig.DefaultRunConfig()
-		runner, createErr := (wazeroengine.Factory{Passes: preparedValue.registry, ValueSlots: table}).New(context.Background(), artifact, config)
+		config.Mechanisms.ValueSlots = true
+		runner, createErr := (wazeroengine.Factory{ValueSlots: table}).New(context.Background(), artifact, config)
 		if createErr != nil {
 			t.Fatal(createErr)
 		}
@@ -109,7 +107,7 @@ func TestSharedImmutableObjectFeedsFreshIsolatedGuestConsumers(t *testing.T) {
 		}
 		request := runtimeconfig.RunRequest{RunID: fmt.Sprintf("shared-consumer-%d", index), Code: code, Inputs: json.RawMessage(`{}`)}
 		raw, _ := runtimeconfig.EncodeRunRequest(request)
-		response, runErr := runner.Run(context.Background(), raw, preparedValue.prelude)
+		response, runErr := runner.Run(context.Background(), raw, preparedValue)
 		closeErr := runner.Close(context.Background())
 		if runErr != nil || closeErr != nil {
 			t.Fatalf("run=%v close=%v", runErr, closeErr)
@@ -152,7 +150,7 @@ func TestDirectPreparedNumpySumMatchedEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	producerDuration := time.Since(producerStarted)
-	preparedValue := preparedValuePassSelection(t, "slot-numpy-sum-v1")
+	preparedValue := preparedValuePrelude(t, "slot-numpy-sum-v1")
 
 	baselineConfig := runtimeconfig.DefaultRunConfig()
 	baselineConfig.Timeout = 90 * time.Second
@@ -169,7 +167,8 @@ func TestDirectPreparedNumpySumMatchedEndToEnd(t *testing.T) {
 	treatmentConfig := runtimeconfig.DefaultRunConfig()
 	treatmentConfig.Timeout = 90 * time.Second
 	treatmentConfig.ExecutionProfile = profile
-	treatmentRunner, err := (wazeroengine.Factory{Passes: preparedValue.registry, ValueSlots: table}).New(context.Background(), artifact, treatmentConfig)
+	treatmentConfig.Mechanisms.ValueSlots = true
+	treatmentRunner, err := (wazeroengine.Factory{ValueSlots: table}).New(context.Background(), artifact, treatmentConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +196,7 @@ func TestDirectPreparedNumpySumMatchedEndToEnd(t *testing.T) {
 		}
 		runTreatment := func() {
 			started := time.Now()
-			response, runErr := treatmentRunner.Run(context.Background(), treatmentRaw, preparedValue.prelude)
+			response, runErr := treatmentRunner.Run(context.Background(), treatmentRaw, preparedValue)
 			treatmentDurations = append(treatmentDurations, time.Since(started))
 			assertNumpySumResult(t, treatmentRequest, response, runErr)
 			if evidence := treatmentEngine.ValueSlotEvidence(); evidence.Claims != 1 || evidence.CopiedBytes != 12 || evidence.Discarded != 0 || !evidence.Closed {
@@ -265,24 +264,13 @@ func numpySumRunRequest(t *testing.T, runID string) runtimeconfig.RunRequest {
 	}
 }
 
-type preparedValuePassExecution struct {
-	registry *passplugin.Registry
-	prelude  string
-}
-
-func preparedValuePassSelection(t *testing.T, slotID string) preparedValuePassExecution {
+func preparedValuePrelude(t *testing.T, slotID string) string {
 	t.Helper()
-	registry := unifiedPassCatalog(t)
-	var err error
-	registry, err = registry.Enable(passregistration.PreparedValueBinding)
+	prelude, err := valueslot.PythonPrelude(slotID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	prelude, err := registry.BindRunValue(passregistration.PreparedValueBinding, slotID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return preparedValuePassExecution{registry: registry, prelude: prelude}
+	return prelude
 }
 
 func directPreparedValueRunRequest(runID string) runtimeconfig.RunRequest {

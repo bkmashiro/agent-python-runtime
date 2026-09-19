@@ -17,8 +17,6 @@ import (
 	fanout "github.com/bkmashiro/agent-python-runtime/research/prepareddatasetfanout"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 )
 
 const expectedSum = fanout.ExpectedSum
@@ -137,10 +135,8 @@ func newPackageEngine(wasm []byte, profile runtimeconfig.ExecutionProfile) (*waz
 	config.MaxRequestBytes = 16 << 20
 	config.MaxResponseBytes = 16 << 20
 	config.ExecutionProfile = &profile
-	config, _, err := passplugin.LowerDefaultRunConfig(config, passregistration.PrivateMemoryCOW)
-	if err != nil {
-		fail(err)
-	}
+	config.Mechanisms.PreparedRuntime = true
+	config.Mechanisms.MemoryCOW = true
 	engine, err := wazeroengine.New(context.Background(), wasm, config)
 	if err != nil {
 		fail(err)

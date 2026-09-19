@@ -15,8 +15,6 @@ import (
 	researchdata "github.com/bkmashiro/agent-python-runtime/research/prepareddataset"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/preparedregion"
 )
 
@@ -105,10 +103,8 @@ func runCase(wasm []byte, profile runtimeconfig.ExecutionProfile, id, code strin
 	config.MaxResponseBytes = 16 << 20
 	config.ExecutionProfile = &profile
 	config.Mechanisms.SemanticAnalysis = true
-	config, _, err = passplugin.LowerDefaultRunConfig(config, passregistration.PrivateMemoryCOW)
-	if err != nil {
-		return probeCase{}, err
-	}
+	config.Mechanisms.PreparedRuntime = true
+	config.Mechanisms.MemoryCOW = true
 	runner, err := (wazeroengine.Factory{PreparedRegions: table}).New(context.Background(), wasm, config)
 	if err != nil {
 		return probeCase{}, err

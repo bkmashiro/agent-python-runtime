@@ -20,7 +20,6 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	"github.com/bkmashiro/agent-python-runtime/runtime/observe"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/playback"
 	"github.com/bkmashiro/agent-python-runtime/runtime/preparedregion"
@@ -45,7 +44,6 @@ type Factory struct {
 	WorkspaceOwner   string
 	PreparedRegions  *preparedregion.PreparedRegionTable
 	ValueSlots       *valueslot.Table
-	Passes           *passplugin.Registry
 	// CompilationCache is caller-owned. The caller controls its lifetime; each
 	// durable Runner supplies one cache for all of its fresh attempts.
 	CompilationCache wazerort.CompilationCache
@@ -54,16 +52,6 @@ type Factory struct {
 func (Factory) Name() string { return "wazero" }
 
 func (factory Factory) New(ctx context.Context, wasm []byte, config runtimeconfig.RunConfig) (enginecontract.Runner, error) {
-	if factory.Passes != nil {
-		lowered, _, err := factory.Passes.ApplyRunConfig(config)
-		if err != nil {
-			if factory.ValueSlots != nil {
-				err = errors.Join(err, factory.ValueSlots.Close())
-			}
-			return nil, err
-		}
-		config = lowered
-	}
 	binding, err := factory.validatedBinding(config)
 	if err != nil {
 		if factory.ValueSlots != nil {
@@ -1110,18 +1098,18 @@ func (engine *Engine) RunSourcePatchDerived(ctx context.Context, request []byte,
 // RunCapabilitySourcePatchInline asks the final exact Guest to lower the sealed
 // source before that same module executes it. The Host validates the returned
 // patch and installs it; rejection falls back to the unchanged source.
-func (engine *Engine) RunCapabilitySourcePatchInline(ctx context.Context, request []byte, registration passregistration.Registration, trustedPrepare string, projections []sourcepatch.CapabilityProjection) (passplugin.CapabilitySourcePatchRun, error) {
+func (engine *Engine) RunCapabilitySourcePatchInline(ctx context.Context, request []byte, registration passregistration.Registration, trustedPrepare string, projections []sourcepatch.CapabilityProjection) (sourcepatch.Execution, error) {
 	if !engine.config.Mechanisms.SplitPhaseCalls || engine.brokerFactory == nil || engine.config.ProgramSurface != runtimeconfig.ProgramSurfaceDirect ||
 		registration.Name() != sourcepatch.PLMCapabilityCallsName || registration.Stage() != passregistration.StageWholeProgramPatch ||
 		sourcepatch.ValidateCapabilityProjectionBinding(sourcepatch.Patch{CapabilityProjections: projections}, projections) != nil {
-		return passplugin.CapabilitySourcePatchRun{}, runtimeconfig.ErrMechanismDisabled
+		return sourcepatch.Execution{}, runtimeconfig.ErrMechanismDisabled
 	}
 	transformRequest, err := json.Marshal(sourcepatch.Request{
 		PassName: registration.Name(), PassVersion: registration.Version(), RegistrationSHA256: registration.IdentitySHA256(),
 		CapabilityProjections: projections,
 	})
 	if err != nil {
-		return passplugin.CapabilitySourcePatchRun{}, err
+		return sourcepatch.Execution{}, err
 	}
 	inline := &inlineCapabilitySelection{request: transformRequest, registration: registration, projections: projections}
 	prepares := make(chan string, 1)
@@ -1133,7 +1121,7 @@ func (engine *Engine) RunCapabilitySourcePatchInline(ctx context.Context, reques
 		sourceValidationExport: "runtime_validate_source_for_patch",
 		inlineCapability:       inline,
 	})
-	return passplugin.CapabilitySourcePatchRun{Payload: payload, Patch: inline.patch, Applied: inline.applied && runErr == nil, PassError: inline.passErr}, runErr
+	return sourcepatch.Execution{Payload: payload, Patch: inline.patch, Applied: inline.applied && runErr == nil, PassError: inline.passErr}, runErr
 }
 
 type inlineCapabilitySelection struct {

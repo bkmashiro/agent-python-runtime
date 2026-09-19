@@ -16,8 +16,6 @@ import (
 	campaign "github.com/bkmashiro/agent-python-runtime/research/prepareddatasetcampaign"
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 )
 
 func main() {
@@ -58,10 +56,8 @@ func main() {
 	config.MaxRequestBytes = 16 << 20
 	config.MaxResponseBytes = 16 << 20
 	config.ExecutionProfile = &profile
-	config, _, err = passplugin.LowerDefaultRunConfig(config, passregistration.PrivateMemoryCOW)
-	if err != nil {
-		fail(err)
-	}
+	config.Mechanisms.PreparedRuntime = true
+	config.Mechanisms.MemoryCOW = true
 	engine, err := wazeroengine.New(context.Background(), wasm, config)
 	if err != nil {
 		fail(err)

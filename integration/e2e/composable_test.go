@@ -18,7 +18,6 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/subagent"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workflow"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
@@ -44,14 +43,9 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	passes := unifiedPassCatalog(t)
-	passes, err = passes.Enable(passregistration.PreparedRuntimeInstantiation)
-	if err != nil {
-		t.Fatal(err)
-	}
 	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.PreparedRuntime = true
 	preparedFactory := baselineFactory
-	preparedFactory.Passes = passes
 	preparedRunner, err := preparedFactory.New(context.Background(), artifact, config)
 	if err != nil {
 		t.Fatal(err)
@@ -130,14 +124,10 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 	if err := nextEngine.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	cowPasses := unifiedPassCatalog(t)
-	cowPasses, err = cowPasses.Enable(passregistration.PrivateMemoryCOW)
-	if err != nil {
-		t.Fatal(err)
-	}
+	cowConfig := config
+	cowConfig.Mechanisms.MemoryCOW = true
 	cowFactory := baselineFactory
-	cowFactory.Passes = cowPasses
-	cowRunner, cowErr := cowFactory.New(context.Background(), artifact, config)
+	cowRunner, cowErr := cowFactory.New(context.Background(), artifact, cowConfig)
 	if cowErr != nil {
 		if !errors.Is(cowErr, runtimeconfig.ErrMechanismDisabled) {
 			t.Fatalf("memory COW error=%v", cowErr)
@@ -163,29 +153,6 @@ func TestRealGuestPreparedRuntimeSingleUseParity(t *testing.T) {
 }
 
 func TestComposableFeatureMatrixAndOffStateFallback(t *testing.T) {
-	passes := unifiedPassCatalog(t)
-	passes, err := passes.Enable(
-		passregistration.AgentFunctionRetention,
-		passregistration.AgentFunctionSingleFlight,
-		passregistration.FreshWorkflowReevaluation,
-		passregistration.PrivateMemoryCOW,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resolved, passEvidence, err := passes.ResolveRuntime(runtimeconfig.MechanismSet{}, runtimeconfig.MechanismSet{})
-	evidence := passEvidence.Mechanisms
-	if err != nil || resolved != (runtimeconfig.MechanismSet{}) || evidence.Validate() != nil {
-		t.Fatalf("resolved=%+v evidence=%+v err=%v", resolved, evidence, err)
-	}
-	for _, name := range []runtimeconfig.MechanismName{
-		runtimeconfig.MechanismFunctionCache, runtimeconfig.MechanismSingleFlight,
-		runtimeconfig.MechanismFreshReevaluation, runtimeconfig.MechanismMemoryCOW,
-	} {
-		if evidence.Disposition(name) != runtimeconfig.MechanismFallback {
-			t.Fatalf("%s did not report fallback", name)
-		}
-	}
 	invocation := composableFunctionInvocation(hashCharacter('9'))
 	var calls int
 	compute := func(context.Context, *agentfunction.Guard) ([]byte, error) {
@@ -353,14 +320,11 @@ func TestRealGuestCOWSingleUseOutcomeIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	manager, base := newComposableWorkspace(t)
-	passes := unifiedPassCatalog(t)
-	passes, err = passes.Enable(passregistration.PrivateMemoryCOW)
-	if err != nil {
-		t.Fatal(err)
-	}
 	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.PreparedRuntime = true
+	config.Mechanisms.MemoryCOW = true
 
-	factory := wazeroengine.Factory{Passes: passes, WorkspaceManager: manager, WorkspaceRef: base, WorkspaceOwner: "cow-outcome"}
+	factory := wazeroengine.Factory{WorkspaceManager: manager, WorkspaceRef: base, WorkspaceOwner: "cow-outcome"}
 	runner, err := factory.New(context.Background(), artifact, config)
 	if err != nil {
 		if goruntime.GOOS != "linux" || errors.Is(err, runtimeconfig.ErrMechanismDisabled) {
@@ -456,16 +420,14 @@ func TestRealGuestColdIOContinuationPreservesPythonState(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan := coldIOCapabilityPlan(t)
-	passes := unifiedPassCatalog(t)
-	passes, err = passes.Enable(passregistration.ColdIOResidency)
-	if err != nil {
-		t.Fatal(err)
-	}
 	config := runtimeconfig.DefaultRunConfig()
+	config.Mechanisms.PreparedRuntime = true
+	config.Mechanisms.MemoryCOW = true
+	config.Mechanisms.ColdIOContinuation = true
 	config.ColdIO = &runtimeconfig.ColdIOPolicy{
 		Strategy: runtimeconfig.ColdIOFixed, ColdAfter: 10 * time.Millisecond, PageOutAfter: 20 * time.Millisecond,
 	}
-	factory := wazeroengine.Factory{Passes: passes, BrokerFactory: func(context.Context) (*capability.Broker, error) {
+	factory := wazeroengine.Factory{BrokerFactory: func(context.Context) (*capability.Broker, error) {
 		return capability.NewBroker(capability.Config{RunIdentity: "cold-python", Plan: plan})
 	}}
 	runner, err := factory.New(context.Background(), artifact, config)

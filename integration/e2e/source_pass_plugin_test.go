@@ -14,6 +14,7 @@ import (
 
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
+	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
 )
 
@@ -36,23 +37,19 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	registry := unifiedPassCatalog(t)
-	registry, err = registry.Enable(sourcepatch.PureScalarCSEName)
-	if err != nil {
-		t.Fatal(err)
-	}
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 90 * time.Second
 	config.ExecutionProfile = &profile
-	runner, err := (wazeroengine.Factory{Passes: registry}).New(context.Background(), artifact, config)
+	config.Mechanisms.SemanticAnalysis = true
+	runner, err := (wazeroengine.Factory{}).New(context.Background(), artifact, config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer runner.Close(context.Background())
 	engine := trustedSemanticRunner(t, runner)
-	selectedPass, ok := registry.Lookup(sourcepatch.PureScalarCSEName)
-	if !ok {
-		t.Fatal("catalog lost CSE pass")
+	cse, err := sourcepatch.NewPureScalarCSE(passregistration.SemanticAnalyzerSHA256)
+	if err != nil {
+		t.Fatal(err)
 	}
 	session, err := engine.NewSemanticAnalysisSession(context.Background(), wazeroengine.SemanticAnalysisSessionLimits{
 		MaxRequests: 6, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
@@ -71,7 +68,7 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	execution, err := registry.Execute(context.Background(), sourcepatch.PureScalarCSEName, session, engine, request)
+	execution, err := cse.Execute(context.Background(), session, engine, request)
 	if err != nil || !execution.Applied || execution.Patch.ReplacementCount != 1 {
 		t.Fatalf("execution=%+v err=%v", execution, err)
 	}
@@ -84,7 +81,7 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	negative, err := registry.Execute(context.Background(), sourcepatch.PureScalarCSEName, session, engine, negativeRequest)
+	negative, err := cse.Execute(context.Background(), session, engine, negativeRequest)
 	if err != nil || negative.Applied || negative.Patch.Status != "not_applicable" {
 		t.Fatalf("negative execution=%+v err=%v", negative, err)
 	}
@@ -98,7 +95,7 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	selfReference, err := registry.Execute(context.Background(), sourcepatch.PureScalarCSEName, session, engine, selfReferenceRequest)
+	selfReference, err := cse.Execute(context.Background(), session, engine, selfReferenceRequest)
 	if err != nil || selfReference.Applied || selfReference.Patch.Status != "not_applicable" {
 		t.Fatalf("self-reference execution=%+v err=%v", selfReference, err)
 	}
@@ -114,7 +111,7 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	unknownCall, err := registry.Execute(context.Background(), sourcepatch.PureScalarCSEName, session, engine, unknownCallRequest)
+	unknownCall, err := cse.Execute(context.Background(), session, engine, unknownCallRequest)
 	if err != nil || unknownCall.Applied || unknownCall.Patch.Status != "not_applicable" {
 		t.Fatalf("unknown-call execution=%+v err=%v", unknownCall, err)
 	}
@@ -130,7 +127,7 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	identity, err := registry.Execute(context.Background(), sourcepatch.PureScalarCSEName, session, engine, identityRequest)
+	identity, err := cse.Execute(context.Background(), session, engine, identityRequest)
 	if err != nil || identity.Applied || identity.Patch.Status != "not_applicable" {
 		t.Fatalf("identity execution=%+v err=%v", identity, err)
 	}
@@ -168,7 +165,7 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 
 	expression := strings.TrimSuffix(strings.Repeat("seed * seed - 48 + ", 200), " + ")
 	benchmarkSource := "seed = 7\nleft = " + expression + "\nright = " + expression + "\nresult = left == right\n"
-	benchmarkPatch, err := registry.Transform(context.Background(), sourcepatch.PureScalarCSEName, session, benchmarkSource)
+	benchmarkPatch, err := cse.Transform(context.Background(), session, benchmarkSource)
 	if err != nil || !benchmarkPatch.Applied() {
 		t.Fatalf("benchmark patch=%+v err=%v", benchmarkPatch, err)
 	}
@@ -186,7 +183,7 @@ func TestRealGuestStaticPassPluginTransformsAndExecutesOriginalRequest(t *testin
 			t.Fatal(err)
 		}
 		started = time.Now()
-		derived, err = engine.RunSourcePatchDerived(context.Background(), benchmarkRequest, benchmarkPatch, selectedPass.Registration())
+		derived, err = engine.RunSourcePatchDerived(context.Background(), benchmarkRequest, benchmarkPatch, cse.Registration())
 		treatmentNanos[index] = time.Since(started).Nanoseconds()
 		if err != nil {
 			t.Fatal(err)
@@ -224,23 +221,19 @@ func TestRealGuestPureScalarFoldPaperPass(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	registry := unifiedPassCatalog(t)
-	registry, err = registry.Enable(sourcepatch.PureScalarFoldName)
-	if err != nil {
-		t.Fatal(err)
-	}
 	config := runtimeconfig.DefaultRunConfig()
 	config.Timeout = 90 * time.Second
 	config.ExecutionProfile = &profile
-	runner, err := (wazeroengine.Factory{Passes: registry}).New(context.Background(), artifact, config)
+	config.Mechanisms.SemanticAnalysis = true
+	runner, err := (wazeroengine.Factory{}).New(context.Background(), artifact, config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer runner.Close(context.Background())
 	engine := trustedSemanticRunner(t, runner)
-	selectedPass, ok := registry.Lookup(sourcepatch.PureScalarFoldName)
-	if !ok {
-		t.Fatal("catalog lost scalar-fold pass")
+	fold, err := sourcepatch.NewPureScalarFold(passregistration.SemanticAnalyzerSHA256)
+	if err != nil {
+		t.Fatal(err)
 	}
 	session, err := engine.NewSemanticAnalysisSession(context.Background(), wazeroengine.SemanticAnalysisSessionLimits{
 		MaxRequests: 4, MaxCumulativeRequestBytes: 1 << 20, MaxDuration: 60 * time.Second,
@@ -259,7 +252,7 @@ func TestRealGuestPureScalarFoldPaperPass(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	execution, err := registry.Execute(context.Background(), sourcepatch.PureScalarFoldName, session, engine, request)
+	execution, err := fold.Execute(context.Background(), session, engine, request)
 	if err != nil || !execution.Applied || execution.Patch.ReplacementCount != 1 {
 		t.Fatalf("execution=%+v err=%v", execution, err)
 	}
@@ -277,7 +270,7 @@ func TestRealGuestPureScalarFoldPaperPass(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	negative, err := registry.Execute(context.Background(), sourcepatch.PureScalarFoldName, session, engine, negativeRequest)
+	negative, err := fold.Execute(context.Background(), session, engine, negativeRequest)
 	if err != nil || negative.Applied || negative.Patch.Status != "not_applicable" {
 		t.Fatalf("negative execution=%+v err=%v", negative, err)
 	}
@@ -290,7 +283,7 @@ func TestRealGuestPureScalarFoldPaperPass(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	identity, err := registry.Execute(context.Background(), sourcepatch.PureScalarFoldName, session, engine, identityRequest)
+	identity, err := fold.Execute(context.Background(), session, engine, identityRequest)
 	if err != nil || identity.Applied || identity.Patch.Status != "not_applicable" {
 		t.Fatalf("identity execution=%+v err=%v", identity, err)
 	}
@@ -301,7 +294,7 @@ func TestRealGuestPureScalarFoldPaperPass(t *testing.T) {
 
 	expression := strings.TrimSuffix(strings.Repeat("1 + ", 200), " + ")
 	benchmarkSource := "folded = " + expression + "\nresult = folded\n"
-	benchmarkPatch, err := registry.Transform(context.Background(), sourcepatch.PureScalarFoldName, session, benchmarkSource)
+	benchmarkPatch, err := fold.Transform(context.Background(), session, benchmarkSource)
 	if err != nil || !benchmarkPatch.Applied() {
 		t.Fatalf("benchmark patch=%+v err=%v", benchmarkPatch, err)
 	}
@@ -319,7 +312,7 @@ func TestRealGuestPureScalarFoldPaperPass(t *testing.T) {
 			t.Fatal(err)
 		}
 		started = time.Now()
-		derived, runErr := engine.RunSourcePatchDerived(context.Background(), benchmarkRequest, benchmarkPatch, selectedPass.Registration())
+		derived, runErr := engine.RunSourcePatchDerived(context.Background(), benchmarkRequest, benchmarkPatch, fold.Registration())
 		treatmentNanos[index] = time.Since(started).Nanoseconds()
 		if runErr != nil {
 			t.Fatal(runErr)

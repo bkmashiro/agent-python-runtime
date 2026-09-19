@@ -12,7 +12,6 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	"github.com/bkmashiro/agent-python-runtime/runtime/numpycodec"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/resultblob"
 	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
@@ -372,10 +371,10 @@ type familyCapabilityRunner struct {
 	ref            runtimeconfig.InvocationRef
 }
 
-func (runner *familyCapabilityRunner) RunCapabilitySourcePatchInline(ctx context.Context, _ []byte, _ passregistration.Registration, trustedPrepare string, _ []sourcepatch.CapabilityProjection) (passplugin.CapabilitySourcePatchRun, error) {
+func (runner *familyCapabilityRunner) RunCapabilitySourcePatchInline(ctx context.Context, _ []byte, _ passregistration.Registration, trustedPrepare string, _ []sourcepatch.CapabilityProjection) (sourcepatch.Execution, error) {
 	runner.trustedPrepare = trustedPrepare
 	runner.ref, _ = engine.InvocationRefFromContext(ctx)
-	return passplugin.CapabilitySourcePatchRun{
+	return sourcepatch.Execution{
 		Payload: []byte(`{"schema_version":"pysolate.run-response.v1","run_id":"execution","status":"ok","result":1,"receipts":[],"metrics":{"capability_calls":0,"result_bytes":1}}`),
 		Applied: true,
 	}, nil

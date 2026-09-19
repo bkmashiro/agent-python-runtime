@@ -8,7 +8,6 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/capability"
 	enginecontract "github.com/bkmashiro/agent-python-runtime/runtime/engine"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
 	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/sourcepatch"
 )
@@ -297,12 +296,12 @@ func (runner *preparedFamilyRunner) runInvocation(ctx context.Context, request [
 // invocation binding while forwarding the final source-patch execution to the
 // prepared child Engine. The trusted source here is the capability prelude for
 // this invocation, not image preparation.
-func (runner *preparedFamilyRunner) RunCapabilitySourcePatchInline(ctx context.Context, request []byte, registration passregistration.Registration, trustedPrepare string, projections []sourcepatch.CapabilityProjection) (passplugin.CapabilitySourcePatchRun, error) {
-	delegate, ok := runner.delegate.(passplugin.CapabilitySourcePatchRunner)
+func (runner *preparedFamilyRunner) RunCapabilitySourcePatchInline(ctx context.Context, request []byte, registration passregistration.Registration, trustedPrepare string, projections []sourcepatch.CapabilityProjection) (sourcepatch.Execution, error) {
+	delegate, ok := runner.delegate.(sourcepatch.CapabilitySourcePatchRunner)
 	if !ok {
-		return passplugin.CapabilitySourcePatchRun{}, ErrPreparedFamilyConfig
+		return sourcepatch.Execution{}, ErrPreparedFamilyConfig
 	}
-	var result passplugin.CapabilitySourcePatchRun
+	var result sourcepatch.Execution
 	_, err := runner.runInvocation(ctx, request, trustedPrepare, func(runContext context.Context) ([]byte, error) {
 		var runErr error
 		result, runErr = delegate.RunCapabilitySourcePatchInline(runContext, request, registration, runner.preparePrefix+trustedPrepare, projections)
@@ -382,4 +381,4 @@ func (runner *preparedFamilyRunner) Properties() enginecontract.Properties {
 }
 
 var _ enginecontract.Runner = (*preparedFamilyRunner)(nil)
-var _ passplugin.CapabilitySourcePatchRunner = (*preparedFamilyRunner)(nil)
+var _ sourcepatch.CapabilitySourcePatchRunner = (*preparedFamilyRunner)(nil)

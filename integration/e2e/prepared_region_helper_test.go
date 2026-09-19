@@ -17,8 +17,6 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	"github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/preparedregion"
 	"github.com/bkmashiro/agent-python-runtime/runtime/semantic"
 )
@@ -810,15 +808,11 @@ func preparedRegionASTSHA(t *testing.T, artifact []byte, config runtimeconfig.Ru
 
 func preparedRegionPassConfig(t *testing.T, config runtimeconfig.RunConfig) runtimeconfig.RunConfig {
 	t.Helper()
-	preparedPass := passregistration.PreparedRuntimeInstantiation
+	config.Mechanisms.PreparedRuntime = true
 	if runtime.GOOS == "linux" {
-		preparedPass = passregistration.PrivateMemoryCOW
+		config.Mechanisms.MemoryCOW = true
 	}
-	lowered, _, err := passplugin.LowerDefaultRunConfig(config, preparedPass)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return lowered
+	return config
 }
 
 func loadPreparedRegionArtifact(t *testing.T) ([]byte, runtimeconfig.ExecutionProfile) {

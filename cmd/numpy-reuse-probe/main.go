@@ -19,7 +19,6 @@ import (
 	runtimeconfig "github.com/bkmashiro/agent-python-runtime/runtime"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
 	"github.com/bkmashiro/agent-python-runtime/runtime/numpycodec"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
 	passregistration "github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/resultblob"
 )
@@ -415,15 +414,9 @@ func runFresh(ctx context.Context, b bundle, privateCOW bool, runID string, requ
 	profile := b.profile
 	config.ExecutionProfile = &profile
 	if privateCOW {
-		config.Mechanisms = runtimeconfig.MechanismSet{SemanticAnalysis: true}
-		passes, passErr := passplugin.NewDefaultEnabledCatalog(passregistration.PrivateMemoryCOW)
-		if passErr != nil {
-			return nil, guestEvidence{}, passErr
-		}
-		config, _, passErr = passes.ApplyRunConfig(config)
-		if passErr != nil {
-			return nil, guestEvidence{}, passErr
-		}
+		config.Mechanisms.SemanticAnalysis = true
+		config.Mechanisms.PreparedRuntime = true
+		config.Mechanisms.MemoryCOW = true
 	}
 	engine, err := wazeroengine.New(ctx, b.wasm, config)
 	if err != nil {

@@ -35,41 +35,6 @@ func TestCustomDefinitionRegistersWithoutCentralSwitch(t *testing.T) {
 	}
 }
 
-func TestAnalyzerFreeStageDefinitionsRegisterWithoutAnalyzer(t *testing.T) {
-	tests := []struct {
-		definition passregistration.Definition
-		stage      passregistration.Stage
-		consumer   passregistration.Consumer
-	}{
-		{passregistration.PreparedValueBindingDefinition(), passregistration.StageRunBinding, passregistration.RunBinding},
-	}
-	for _, test := range tests {
-		registration, err := test.definition.Register("", testConfig)
-		if err != nil {
-			t.Fatalf("stage=%s: %v", test.stage, err)
-		}
-		if registration.Stage() != test.stage || registration.Consumer() != test.consumer || registration.AnalyzerSHA256() != "" {
-			t.Fatalf("registration=%+v", registration)
-		}
-	}
-}
-
-func TestRuntimeLoweringDefinitionsRegisterWithoutAnalyzer(t *testing.T) {
-	definitions := passregistration.RuntimeOptimizationDefinitions()
-	if len(definitions) != 8 {
-		t.Fatalf("runtime optimization definitions=%d", len(definitions))
-	}
-	for _, definition := range definitions {
-		registration, err := definition.Register("", testConfig)
-		if err != nil {
-			t.Fatalf("pass=%s: %v", definition.Name(), err)
-		}
-		if registration.Stage() != passregistration.StageRuntimeLowering || registration.Consumer() != passregistration.MechanismLowering || registration.AnalyzerSHA256() != "" {
-			t.Fatalf("registration=%+v", registration)
-		}
-	}
-}
-
 func TestSourceStagesStillRequireAnalyzerIdentity(t *testing.T) {
 	if _, err := passregistration.PreparedNumpyLoadDefinition().Register("", testConfig); err == nil {
 		t.Fatal("hybrid source pass accepted an empty analyzer identity")

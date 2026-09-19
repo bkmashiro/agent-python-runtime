@@ -21,8 +21,6 @@ import (
 	agentfunction "github.com/bkmashiro/agent-python-runtime/runtime/agentfunction"
 	"github.com/bkmashiro/agent-python-runtime/runtime/engine"
 	wazeroengine "github.com/bkmashiro/agent-python-runtime/runtime/engine/wazero"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passplugin"
-	"github.com/bkmashiro/agent-python-runtime/runtime/passregistration"
 	"github.com/bkmashiro/agent-python-runtime/runtime/subagent"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workflow"
 	"github.com/bkmashiro/agent-python-runtime/runtime/workspace"
@@ -51,19 +49,6 @@ func benchmarkTreatments(matrix string) []composableacceptance.Treatment {
 		composableacceptance.TreatmentCacheCorruption,
 		composableacceptance.TreatmentCancellation,
 	}
-}
-
-func scenarioPassMechanisms(t *testing.T, names ...passregistration.Name) runtimeconfig.MechanismSet {
-	t.Helper()
-	registry, err := passplugin.NewDefaultEnabledCatalog(names...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	selection, err := registry.LowerMechanisms(runtimeconfig.MechanismSet{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return selection.Mechanisms
 }
 
 func TestBenchmarkTreatmentsDefaultToFresh(t *testing.T) {
@@ -430,17 +415,12 @@ func runScenarioCoreTreatment(t *testing.T, artifact []byte, artifactSHA string,
 		return runScenarioGuestExecution(t, artifact, scenario, scenarioSHA, oracleSHA, treatment, config)
 	case composableacceptance.TreatmentPrepared:
 		config := runtimeconfig.DefaultRunConfig()
-		config, _, err := passplugin.LowerDefaultRunConfig(config, passregistration.PreparedRuntimeInstantiation)
-		if err != nil {
-			t.Fatal(err)
-		}
+		config.Mechanisms.PreparedRuntime = true
 		return runScenarioGuestExecution(t, artifact, scenario, scenarioSHA, oracleSHA, treatment, config)
 	case composableacceptance.TreatmentCOW:
 		config := runtimeconfig.DefaultRunConfig()
-		config, _, err := passplugin.LowerDefaultRunConfig(config, passregistration.PrivateMemoryCOW)
-		if err != nil {
-			t.Fatal(err)
-		}
+		config.Mechanisms.PreparedRuntime = true
+		config.Mechanisms.MemoryCOW = true
 		return runScenarioGuestExecution(t, artifact, scenario, scenarioSHA, oracleSHA, treatment, config)
 
 	case composableacceptance.TreatmentCacheOff:
@@ -560,9 +540,9 @@ func runScenarioGuestExecution(t *testing.T, artifact []byte, scenario composabl
 
 func runScenarioCacheExecution(t *testing.T, artifactSHA string, scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string, cacheOn bool) (composableacceptance.Row, bool) {
 	t.Helper()
-	mechanisms := scenarioPassMechanisms(t)
+	mechanisms := runtimeconfig.MechanismSet{}
 	if cacheOn {
-		mechanisms = scenarioPassMechanisms(t, passregistration.AgentFunctionRetention)
+		mechanisms = runtimeconfig.MechanismSet{ImmutableBranches: true, FunctionCache: true}
 	}
 	started := time.Now()
 	row, recorder := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentCacheOff, started, 0)
@@ -647,9 +627,9 @@ func cacheLookupOutcome(hit bool) composableacceptance.TraceEventOutcome {
 
 func runScenarioSingleFlightExecution(t *testing.T, artifactSHA string, scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string, singleFlight bool) (composableacceptance.Row, bool) {
 	t.Helper()
-	mechanisms := scenarioPassMechanisms(t)
+	mechanisms := runtimeconfig.MechanismSet{}
 	if singleFlight {
-		mechanisms = scenarioPassMechanisms(t, passregistration.AgentFunctionSingleFlight)
+		mechanisms = runtimeconfig.MechanismSet{SingleFlight: true}
 	}
 	started := time.Now()
 	row, recorder := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentSingleFlightOff, started, 0)
@@ -863,9 +843,9 @@ func runScenarioFanoutExecution(t *testing.T, artifact []byte, scenario composab
 
 func runScenarioReevaluationExecution(t *testing.T, artifact []byte, scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string, resumeEnabled bool) (composableacceptance.Row, bool) {
 	t.Helper()
-	mechanisms := scenarioPassMechanisms(t)
+	mechanisms := runtimeconfig.MechanismSet{}
 	if resumeEnabled {
-		mechanisms = scenarioPassMechanisms(t, passregistration.FreshWorkflowReevaluation)
+		mechanisms = runtimeconfig.MechanismSet{ImmutableBranches: true, FunctionCache: true, FreshReevaluation: true}
 	}
 	treatment := composableacceptance.TreatmentReevaluationOff
 	guestCount := uint64(1)
@@ -1165,7 +1145,7 @@ func runScenarioInvalidChildExecution(t *testing.T, artifact []byte, scenario co
 
 func runScenarioChangedObservationExecution(t *testing.T, artifact []byte, scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string) (composableacceptance.Row, bool) {
 	t.Helper()
-	mechanisms := scenarioPassMechanisms(t, passregistration.FreshWorkflowReevaluation)
+	mechanisms := runtimeconfig.MechanismSet{ImmutableBranches: true, FunctionCache: true, FreshReevaluation: true}
 	started := time.Now()
 	row, recorder := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentChangedObserve, started, 1)
 	manager, base := newComposableWorkspace(t)
@@ -1283,7 +1263,7 @@ func runScenarioBranchConflictExecution(t *testing.T, _ []byte, scenario composa
 
 func runScenarioCacheCorruptionExecution(t *testing.T, artifactSHA string, scenario composableacceptance.Scenario, scenarioSHA, oracleSHA string) (composableacceptance.Row, bool) {
 	t.Helper()
-	mechanisms := scenarioPassMechanisms(t, passregistration.AgentFunctionRetention)
+	mechanisms := runtimeconfig.MechanismSet{ImmutableBranches: true, FunctionCache: true}
 	started := time.Now()
 	row, recorder := scenarioRow(scenario, scenarioSHA, oracleSHA, composableacceptance.TreatmentCacheCorruption, started, 0)
 	storeDir := filepath.Join(t.TempDir(), "cache-corruption-"+scenario.ID)

@@ -20,7 +20,7 @@ Work: replay 128 persisted read outcomes, check their computed result inside Pyt
 - Zero unexpected errors across these valid requests. No p95/p99 claim.
 - Post-request process RSS medians: fresh **405.2 MiB**, seeded COW **395.8 MiB**. These include Go/compiler/SQLite memory, not just Guest pages, and are not a capacity claim.
 
-Preparation adds startup and retained-image cost. The default remains fresh, and different seeds are not placed into an unbounded image cache. Final integrated resource-limit tests and other cost lanes remain in progress.
+Preparation adds startup and retained-image cost. The default remains fresh, and different seeds are not placed into an unbounded image cache. Integrated correctness and resource checks have since passed, as recorded below.
 
 Reproduce with `go run ./cmd/pysolate-bench -mode durable-replay -work tools -calls 128 -n 5`, then the candidate with `-prepare cow` on Linux. `-prepare copy` is available without Linux mapping support. Raw non-sensitive rows are in `docs/performance-data/seeded-replay/`.
 
@@ -49,3 +49,32 @@ The executor uses fixed active and queued limits, FIFO ordering, explicit resubm
 With MaxActive=2, the Executor's park batch was 1.807–1.819 s, versus 1.805–1.819 s for a simple two-slot semaphore. Resume batches were 66–69 ms versus 66–73 ms. Peak simultaneous Host waits stayed at two. This demonstrates bounded behavior with approximately baseline cost, not a throughput improvement over a semaphore.
 
 Unbounded submission reached sixteen Host waits, finishing the park phase around 246–249 ms but sampled process RSS was 607–615 MiB, versus 426–444 MiB for Executor. Once all sixteen Runs were parked, Executor RSS was 402–420 MiB. Measurements are process RSS sampled at tool/park boundaries, not per-Guest memory or a guaranteed global peak. The unbounded arm is a resource/latency trade-off reference, not a same-admission-policy comparison. No default concurrency recommendation follows from this small workload.
+
+## Guest compilation and source-processing work
+
+The Guest build now precompiles 150 frequently imported stdlib/runtime modules with the host CPython from the same build. Standard checked-hash pyc files use virtual `/usr/lib/python3.14/...` filenames. A Guest audit-hook probe confirmed imports consumed bytecode without compiling those source files. No module is imported earlier and no admission rule changes. The Guest grows from 32,919,442 to 34,193,743 bytes (about 1.22 MiB).
+
+The PLM transformer no longer deep-copies its privately owned, unmodified argument AST nodes. Prefix intake parses only the unconsumed complete tail and stops admission at the first barrier. A differential test checks every two-chunk split of ten source shapes against the original algorithm; another test confirms complete leading statements are parsed once. An unfinished statement can still be retried; this is not a general incremental Python parser.
+
+Same Go harness and fixed Linux envelope, 3 processes per arm and 5 warm runs each; medians of per-process medians:
+
+- fresh/no-op: **505.76 -> 67.98 ms**;
+- COW, 64 independent PLM calls, zero synthetic delay: **225.10 -> 71.85 ms**;
+- COW, 64 streamed prefix calls, zero synthetic delay: **347.85 -> 80.90 ms**;
+- COW, 8 PLM calls with 20-ms synthetic delay: **197.73 -> 47.39 ms**.
+
+Raw rows are in [guest-final.jsonl](performance-data/guest-final.jsonl). The prior unsupported `sum(...)` PLM smoke is excluded. Admission is now an executable harness check.
+
+A final matched **`result = 42`** CLI process test compares the original Guest without disk cache to the final Guest with a warmed native cache; [cli-combined.json](performance-data/cli-combined.json) contains all outputs and process times. The median was **3.08 s -> 0.15 s**. This is a combined configuration comparison, not an attribution to either optimization alone. Timers include process startup, file reading, construction, execution and close; shell resolution is 0.01 s.
+
+The final Guest SHA-256 is `9ae9e368764db31505d4314801256361f4117fe288478efff4db321a167245bb`. Keep the old artifact for existing durable definitions: artifact identity remains enforced; this change does not migrate histories.
+
+## Integration checks and remaining costs
+
+`make check` passes against the final Guest on macOS; all root and durable tests pass in Linux. Targeted real PLM/prefix/seeded-preparation race tests and Store/journal/Executor race tests pass. The final seeded-COW + read-ahead stack also recovered after a Linux VM HardStop between the provider's commit and journal outcome: one read dispatch, two write requests, one idempotent effect. This does not establish physical-host power-loss tolerance.
+
+The throughput comparison deliberately does not claim that Executor is faster than an equivalent semaphore, or that cache hits make compilation free. Keep Runner lifetimes long where appropriate. Use an explicit private native cache for repeated processes. Seeded preparation is appropriate for a shared fixed seed; use fresh attempts when seeds vary. Images keep a one-time memory baseline alive, and COW remains Linux-specific.
+
+Deferred: mutable cross-process payload-size caches and schema changes; general scheduling/polling/persistent queues; PLM plus durable replay; optional omission of transformed-source diagnostics. The latter is now a visible remaining Python-side cost but changing the output contract is outside this slice. Live call persistence still pays WAL/FULL and exact quota accounting; those guarantees were not relaxed.
+
+Two independent read-only cross-checks found no reproducible defects in the reviewed memory/replay and queue/prefix/AST changes. The VM is stopped and task-owned Slurm jobs completed. No CI run, main merge or deployment was triggered.

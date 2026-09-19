@@ -1,6 +1,6 @@
 # Megagoal: strengthen fast, deterministic and resource-aware execution
 
-Status: active. This roadmap is the single execution pointer for the approved goal.
+Status: complete. Implementation, paired measurements, integrated verification and resource cleanup are finished.
 
 ## Desired state
 
@@ -103,7 +103,7 @@ Deliver: implemented changes, exact versions/artifacts, concise before/after res
 
 ## Execution pointer
 
-Current: bounded Executor integrated and verified against a semaphore and unbounded submission. Evaluate the separate Guest-bytecode candidate, then run final combined validation.
-Next: accept or reject the bytecode candidate from same-Go/same-VM comparisons, finish all selected gates, shut down task-owned resources, and publish the final report.
-Blocked: none. Baseline/core source remains archived at ae071608. Measurements run only on the single controlled Linux VM.
-Delivered slices: seeded deterministic preparation plus safe COW park ownership; bounded immutable-history read-ahead; explicit caller-owned/native on-disk compilation cache. Measured results and raw rows are in docs/performance-results.md and docs/performance-data/.
+Current: complete. All selected changes are implemented and verified; cross-checks found no reproducible defects within scope.
+Next: none for this goal. Apply the measured defaults to real consumers; preserve the documented restrictions and cost boundaries.
+Blocked: none. Further API/semantic changes are deferred, not silently included.
+Delivered: seeded deterministic copy/COW preparation with safe park lifetime; bounded immutable-history read-ahead; explicit native compilation caching; bounded FIFO durable Executor; selected Guest bytecode and linear work for completed prefix statements. Results, trade-offs, raw rows and verification are in docs/performance-results.md. Main was not merged and nothing was deployed.

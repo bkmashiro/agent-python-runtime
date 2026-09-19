@@ -13,24 +13,27 @@ class Prefix:
         self.early_names = {spec["name"] for spec in manifest if spec["allow_early_read"]}
         self.prepare = prepare
         self.source = ""
-        self.seen = 0
+        self.parsed = 0
+        self.stopped = False
         self.ready = []
         self.claimed = 0
 
     def feed(self, chunk):
         self.source += chunk
+        if self.stopped:
+            return
         # A trailing partial line is not a complete received statement.
-        complete = self.source[:self.source.rfind("\n") + 1]
+        end = self.source.rfind("\n") + 1
+        complete = self.source[self.parsed:end]
         try:
             tree = ast.parse(complete, filename="<pysolate>")
         except SyntaxError:
             return  # Incomplete/invalid source is diagnosed at final compile.
-        for index, statement in enumerate(tree.body):
+        self.parsed = end
+        for statement in tree.body:
             if not self.candidate(statement):
+                self.stopped = True
                 break  # Never pass a branch, dependency, mutation, import, or other code.
-            if index < self.seen:
-                continue
-            self.seen = index + 1
             call = statement.value
             try:
                 args = {k.arg: self.argument(k.value) for k in call.keywords}

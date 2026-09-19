@@ -22,10 +22,11 @@ WASI=${PYSOLATE_CPYTHON_WASI:-"${PY}/cross-build/wasm32-wasip1"}
 VFS=${PYSOLATE_WASI_VFS:-"${INPUTS}/tools/wasi-vfs-cli/wasi-vfs"}
 VFS_LIB=${PYSOLATE_WASI_VFS_LIB:-"${INPUTS}/tools/wasi-vfs-lib/libwasi_vfs.a"}
 WASM_TOOLS=${PYSOLATE_WASM_TOOLS:-"${INPUTS}/tools/wasm-tools/wasm-tools"}
+HOST_PY=${PYSOLATE_HOST_PYTHON:-"${PY}/cross-build/build/python"}
 CLANG=${SDK}/bin/clang
 LLVM_AR=${SDK}/bin/llvm-ar
 
-for f in "${CLANG}" "${LLVM_AR}" "${VFS}" "${VFS_LIB}" "${WASM_TOOLS}" \
+for f in "${CLANG}" "${LLVM_AR}" "${VFS}" "${VFS_LIB}" "${WASM_TOOLS}" "${HOST_PY}" \
   "${PY}/Include/Python.h" "${WASI}/libpython3.14.a" \
   "${WASI}/Modules/_decimal/libmpdec/libmpdec.a" "${WASI}/Modules/expat/libexpat.a"; do
   [[ -e ${f} ]] || { echo "missing build input: ${f}" >&2; exit 6; }
@@ -74,6 +75,7 @@ for src, name in ((bootstrap,'pysolate_bootstrap.py'),(plm,'plm.py'),(prefix,'pr
     shutil.copyfile(src, out/name); os.utime(out/name,(0,0))
 copy_tree(numpy, out/'site-packages/numpy')
 PY
+"${HOST_PY}" -S "${ROOT}/tools/precompile-stdlib.py" "${BUILD}/vfs"
 "${VFS}" pack "${BUILD}/link/raw.wasm" --dir "${BUILD}/vfs::/usr/lib/python3.14" -o "${DIST}/pysolate.wasm"
 "${WASM_TOOLS}" validate "${DIST}/pysolate.wasm"
 printf 'Built %s\nsha256: ' "${DIST}/pysolate.wasm"

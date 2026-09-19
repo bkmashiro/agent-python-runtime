@@ -1,0 +1,56 @@
+[
+  {
+    "sample": "matched-cli-base-0.time",
+    "stdout": "42",
+    "seconds": {
+      "real": 3.08,
+      "user": 3.03,
+      "sys": 0.05
+    }
+  },
+  {
+    "sample": "matched-cli-base-1.time",
+    "stdout": "42",
+    "seconds": {
+      "real": 3.09,
+      "user": 3.08,
+      "sys": 0.02
+    }
+  },
+  {
+    "sample": "matched-cli-base-2.time",
+    "stdout": "42",
+    "seconds": {
+      "real": 3.02,
+      "user": 3.02,
+      "sys": 0.0
+    }
+  },
+  {
+    "sample": "matched-cli-final-0.time",
+    "stdout": "42",
+    "seconds": {
+      "real": 0.16,
+      "user": 0.14,
+      "sys": 0.01
+    }
+  },
+  {
+    "sample": "matched-cli-final-1.time",
+    "stdout": "42",
+    "seconds": {
+      "real": 0.15,
+      "user": 0.14,
+      "sys": 0.01
+    }
+  },
+  {
+    "sample": "matched-cli-final-2.time",
+    "stdout": "42",
+    "seconds": {
+      "real": 0.15,
+      "user": 0.14,
+      "sys": 0.01
+    }
+  }
+]

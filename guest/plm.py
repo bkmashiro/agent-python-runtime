@@ -4,7 +4,6 @@ Only adjacent tool assignments are reordered: prepare after argument definitions
 resolve at the original statement. Other statements and control regions are barriers.
 """
 import ast
-import copy
 
 
 def transform(source, manifest):
@@ -103,7 +102,7 @@ def transform(source, manifest):
                     loaded = {n.id for k in call.keywords for n in ast.walk(k.value) if isinstance(n, ast.Name)}
                     start = 1 + max((definitions.get(n, -1) for n in loaded), default=-1)
                     slot = fresh("_pysolate_future")
-                    args = ast.Dict(keys=[ast.Constant(k.arg) for k in call.keywords], values=copy.deepcopy([k.value for k in call.keywords]))
+                    args = ast.Dict(keys=[ast.Constant(k.arg) for k in call.keywords], values=[k.value for k in call.keywords])
                     tool_name = ast.Constant(call.func.id)
                     thunk = ast.Lambda(args=ast.arguments(posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]),
                                        body=ast.Tuple(elts=[tool_name, args], ctx=ast.Load()))

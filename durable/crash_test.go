@@ -87,7 +87,7 @@ func TestCrashHelper(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runner, err := durable.NewRunner(ctx, store, realGuest(t), "crash-v1", crashTools(t, directory, true))
+	runner, err := durable.NewRunner(ctx, store, realGuest(t), "crash-v1", crashTools(t, directory, true), crashPreparation()...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func recoverAfterCrash(t *testing.T, directory string) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	runner, err := durable.NewRunner(ctx, store, realGuest(t), "crash-v1", crashTools(t, directory, false))
+	runner, err := durable.NewRunner(ctx, store, realGuest(t), "crash-v1", crashTools(t, directory, false), crashPreparation()...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,4 +174,20 @@ func recoverAfterCrash(t *testing.T, directory string) {
 	if reads != 1 || writes != 2 || effects != 1 {
 		t.Fatalf("read=%d write=%d effects=%d", reads, writes, effects)
 	}
+}
+
+func crashPreparation() []durable.Preparation {
+	switch os.Getenv("PYSOLATE_CRASH_PREPARED") {
+	case "copy":
+		return []durable.Preparation{{Seed: "seed"}}
+	case "cow":
+		return []durable.Preparation{{Seed: "seed", COW: true}}
+	default:
+		return nil
+	}
+}
+
+func TestRealPreparedProcessKillAfterExternalCommit(t *testing.T) {
+	t.Setenv("PYSOLATE_CRASH_PREPARED", "copy")
+	TestRealProcessKillAfterExternalCommit(t)
 }

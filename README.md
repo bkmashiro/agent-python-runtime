@@ -116,6 +116,10 @@ go vet ./...
 
 Real-Guest tests fail when the artifact is missing. Linux COW tests require Linux. This implementation intentionally does not preserve the old HTTP/CLI protocols or their experimental execution paths.
 
+## Performance and bounded execution
+
+See [the measured results and trade-offs](docs/performance-results.md) for seeded reconstruction, native cache, Guest startup, PLM/prefix and admission. The default paths remain explicit; improvements are not a claim that every workload or cold cache is faster.
+
 ## Verified scope
 
 The new Guest was built and run, including matrix operations and separate NumPy Generator/RandomState integer-ABI regressions. `make check` passes with the real artifact. Targeted PLM/prefix and Store/journal race tests pass; a whole durable race run exceeded its initial 150-second execution budget and was not counted as a pass.

@@ -6,31 +6,44 @@ import (
 	"fmt"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/experimental"
+	experimentalsysfs "github.com/tetratelabs/wazero/experimental/sysfs"
+	"os"
 )
 
 // NewPrepared captures clean initialization for private full-copy restoration.
 // This is not a checkpoint of user execution or Host resources.
 func NewPrepared(ctx context.Context, wasm []byte, manifest Manifest) (*Runner, error) {
-	return prepare(ctx, wasm, manifest, false, nil)
+	return prepare(ctx, wasm, manifest, false, false, nil)
 }
 
 // NewPreparedCOW shares the clean image through private Linux mappings.
 // Globals, tables and Host resources are still created independently for each attempt.
 func NewPreparedCOW(ctx context.Context, wasm []byte, manifest Manifest) (*Runner, error) {
-	return prepare(ctx, wasm, manifest, true, nil)
+	return prepare(ctx, wasm, manifest, true, false, nil)
+}
+
+// NewPreparedWorkspace captures an image whose WASI preopen shape includes a
+// private /workspace mount. Use the resulting Runner only with RunWorkspace.
+func NewPreparedWorkspace(ctx context.Context, wasm []byte, manifest Manifest) (*Runner, error) {
+	return prepare(ctx, wasm, manifest, false, true, nil)
+}
+
+// NewPreparedWorkspaceCOW is the Linux COW variant of NewPreparedWorkspace.
+func NewPreparedWorkspaceCOW(ctx context.Context, wasm []byte, manifest Manifest) (*Runner, error) {
+	return prepare(ctx, wasm, manifest, true, true, nil)
 }
 
 // NewPreparedRecorded captures one seed for deterministic full-copy attempts.
 func NewPreparedRecorded(ctx context.Context, wasm []byte, manifest Manifest, seed string) (*Runner, error) {
-	return prepare(ctx, wasm, manifest, false, []string{seed})
+	return prepare(ctx, wasm, manifest, false, false, []string{seed})
 }
 
 // NewPreparedRecordedCOW captures one seed for deterministic private COW attempts.
 func NewPreparedRecordedCOW(ctx context.Context, wasm []byte, manifest Manifest, seed string) (*Runner, error) {
-	return prepare(ctx, wasm, manifest, true, []string{seed})
+	return prepare(ctx, wasm, manifest, true, false, []string{seed})
 }
 
-func prepare(ctx context.Context, wasm []byte, manifest Manifest, cow bool, seed []string) (*Runner, error) {
+func prepare(ctx context.Context, wasm []byte, manifest Manifest, cow, workspace bool, seed []string) (*Runner, error) {
 	if len(seed) > 1 || (len(seed) == 1 && seed[0] == "") {
 		return nil, errors.New("preparation accepts one nonempty recording seed")
 	}
@@ -50,12 +63,26 @@ func prepare(ctx context.Context, wasm []byte, manifest Manifest, cow bool, seed
 			return nil, err
 		}
 	}
+	r.workspaceImage = workspace
 	var rec *recording
-	if len(seed) == 1 {
+	if len(seed) == 1 || workspace {
 		state := newRun(ctx, r, false)
 		defer state.close()
-		rec = newRecording(seed[0], nil)
-		state.recording = rec
+		if len(seed) == 1 {
+			rec = newRecording(seed[0], nil)
+			state.recording = rec
+		}
+		if workspace {
+			empty, err := os.MkdirTemp("", "pysolate-workspace-shape-")
+			if err != nil {
+				return nil, err
+			}
+			defer os.RemoveAll(empty)
+			state.fsConfig, err = workspaceFSConfig(experimentalsysfs.DirFS(empty))
+			if err != nil {
+				return nil, err
+			}
+		}
 		ctx = state.ctx
 	}
 	m, err := r.newGuest(ctx, &boundedText{}, &boundedText{})

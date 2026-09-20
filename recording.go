@@ -36,12 +36,15 @@ func (r *Runner) RunRecorded(ctx context.Context, source string, inputs any, see
 	if (r.image != nil || r.cow != nil) && (r.preparedState == nil || r.preparedState.seed != seed) {
 		return Output{}, errors.New("prepared recording seed does not match")
 	}
-	return r.run(ctx, source, inputs, false, nil, newRecording(seed, journal))
+	return r.run(ctx, source, inputs, false, nil, newRecording(seed, journal), nil)
 }
 
 func (r *Runner) moduleConfig(ctx context.Context, stdout, stderr *boundedText) wazero.ModuleConfig {
 	config := wazero.NewModuleConfig().WithName("").WithStartFunctions().WithStdout(stdout).WithStderr(stderr)
 	state, _ := ctx.Value(runKey{}).(*runState)
+	if state != nil && state.fsConfig != nil {
+		config = config.WithFSConfig(state.fsConfig)
+	}
 	if state == nil || state.recording == nil {
 		return config.WithRandSource(rand.Reader).WithSysWalltime().WithSysNanotime().WithSysNanosleep()
 	}

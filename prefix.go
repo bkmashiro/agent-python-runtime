@@ -11,6 +11,9 @@ import (
 // RunPrefix receives append-only UTF-8 source fragments. Closing chunks commits
 // the source for one execution in the same Guest; ctx cancels an unfinished stream.
 func (r *Runner) RunPrefix(ctx context.Context, chunks <-chan string, inputs any) (Output, error) {
+	if r.workspaceImage {
+		return Output{}, errors.New("workspace-prepared runner requires RunWorkspace")
+	}
 	if chunks == nil {
 		return Output{}, errors.New("nil source stream")
 	}
@@ -19,7 +22,7 @@ func (r *Runner) RunPrefix(ctx context.Context, chunks <-chan string, inputs any
 			return Output{}, fmt.Errorf("missing prefix Guest export: %s", name)
 		}
 	}
-	return r.run(ctx, "", inputs, true, chunks, nil)
+	return r.run(ctx, "", inputs, true, chunks, nil, nil)
 }
 
 func receiveSource(ctx context.Context, m api.Module, initial []byte, chunks <-chan string) error {

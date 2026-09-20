@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"sync"
+
+	"github.com/tetratelabs/wazero"
 )
 
 // One owner per Run. Only the Guest thread edits the map; workers publish via done.
@@ -20,6 +22,7 @@ type runState struct {
 	next       uint32
 	futures    map[uint32]*future
 	workers    sync.WaitGroup
+	fsConfig   wazero.FSConfig
 }
 
 type future struct {

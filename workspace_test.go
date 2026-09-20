@@ -1,0 +1,145 @@
+package pysolate
+
+import (
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+	"time"
+
+	workspacepkg "github.com/bkmashiro/agent-python-runtime/runtime/workspace"
+)
+
+func TestWorkspaceGuestReadsAndEditsPrivateFiles(t *testing.T) {
+	wasm, err := readGuestArtifact()
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(t.TempDir(), "source")
+	if err := os.Mkdir(source, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "notes.txt"), []byte("before"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(source, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, ".git", "config"), []byte("host-only"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	base := filepath.Join(t.TempDir(), "workspaces")
+	if err := os.Mkdir(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := workspacepkg.NewManager(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	ref, err := manager.CreateFromDirectory(source, workspacepkg.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease, err := manager.Acquire(ref, "guest-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Release()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	runner, err := New(ctx, wasm, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	out, err := runner.RunWorkspace(ctx, `from pathlib import Path
+p=Path('/workspace/notes.txt')
+p.write_text(p.read_text() + '-after')
+Path('/workspace/new.txt').write_text('created')
+result=sorted(x.name for x in Path('/workspace').iterdir())`, nil, lease)
+	var names []string
+	decodeErr := json.Unmarshal(out.Value, &names)
+	if err != nil || decodeErr != nil || len(names) != 2 || names[0] != "new.txt" || names[1] != "notes.txt" {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+	files, err := lease.Files()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 2 || files[0].Path != "new.txt" || string(files[1].Data) != "before-after" {
+		t.Fatalf("files=%#v", files)
+	}
+	original, err := os.ReadFile(filepath.Join(source, "notes.txt"))
+	if err != nil || string(original) != "before" {
+		t.Fatalf("source changed: %q err=%v", original, err)
+	}
+	if _, err := os.Stat(filepath.Join(source, "new.txt")); !os.IsNotExist(err) {
+		t.Fatalf("workspace write escaped to source: %v", err)
+	}
+}
+
+func TestWorkspaceIsNotAmbient(t *testing.T) {
+	wasm, err := readGuestArtifact()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	runner, err := New(ctx, wasm, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	out, err := runner.Run(ctx, `from pathlib import Path
+result=Path('/workspace').exists()`, nil)
+	if err != nil || string(out.Value) != "false" {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+}
+
+func TestPreparedRunnersAttachWorkspacePerRun(t *testing.T) {
+	wasm, err := readGuestArtifact()
+	if err != nil {
+		t.Fatal(err)
+	}
+	constructors := map[string]func(context.Context, []byte, Manifest) (*Runner, error){"copy": NewPreparedWorkspace}
+	if runtime.GOOS == "linux" {
+		constructors["cow"] = NewPreparedWorkspaceCOW
+	}
+	for name, construct := range constructors {
+		t.Run(name, func(t *testing.T) {
+			base := filepath.Join(t.TempDir(), "workspaces")
+			if err := os.Mkdir(base, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			manager, err := workspacepkg.NewManager(base)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer manager.Close()
+			ref, err := manager.Create([]workspacepkg.InitialFile{{Path: "value.txt", Data: []byte("41")}}, workspacepkg.DefaultLimits())
+			if err != nil {
+				t.Fatal(err)
+			}
+			lease, err := manager.Acquire(ref, "prepared-test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer lease.Release()
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			runner, err := construct(ctx, wasm, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer runner.Close(context.Background())
+			out, err := runner.RunWorkspace(ctx, `result=int(open('/workspace/value.txt').read())+1`, nil, lease)
+			if err != nil || string(out.Value) != "42" {
+				t.Fatalf("out=%+v err=%v", out, err)
+			}
+		})
+	}
+}

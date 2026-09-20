@@ -8,11 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"sort"
 	"strings"
 
+	workspacepkg "github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
+	experimentalsys "github.com/tetratelabs/wazero/experimental/sys"
+	experimentalsysfs "github.com/tetratelabs/wazero/experimental/sysfs"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 	wazerosys "github.com/tetratelabs/wazero/sys"
 )
@@ -20,19 +22,24 @@ import (
 // Runner owns compiled code, tools and an optional clean image, never a live user Guest.
 // Close must happen after all Run calls return. Tool implementations must honor context.
 type Runner struct {
-	artifactID    string
-	runtime       wazero.Runtime
-	code          wazero.CompiledModule
-	manifest      Manifest
-	guestManifest []guestToolSpec
-	preparedState *preparedRecording
-	image         []byte // Immutable full-copy baseline; COW owns its image separately.
-	cow           cowRuntime
+	artifactID     string
+	runtime        wazero.Runtime
+	code           wazero.CompiledModule
+	manifest       Manifest
+	guestManifest  []guestToolSpec
+	preparedState  *preparedRecording
+	image          []byte // Immutable full-copy baseline; COW owns its image separately.
+	cow            cowRuntime
+	workspaceImage bool
 }
 
 type guestToolSpec struct {
-	Name           string `json:"name"`
-	AllowEarlyRead bool   `json:"allow_early_read"`
+	Name           string          `json:"name"`
+	Description    string          `json:"description,omitempty"`
+	InputSchema    any             `json:"input_schema,omitempty"`
+	Annotations    ToolAnnotations `json:"annotations,omitempty"`
+	AllowEarlyRead bool            `json:"allow_early_read"`
+	InjectGlobal   bool            `json:"inject_global"`
 }
 
 type Output struct {
@@ -73,19 +80,12 @@ func New(ctx context.Context, wasm []byte, manifest Manifest) (*Runner, error) {
 		manifest:      make(Manifest, len(manifest)),
 		guestManifest: make([]guestToolSpec, 0, len(manifest)),
 	}
-	for name, spec := range manifest {
-		if !pythonIdentifier.MatchString(name) || pythonKeywords[name] || name == "inputs" || name == "__name__" || name == "__builtins__" || strings.HasPrefix(name, "_pysolate") {
-			r.Close(ctx)
-			return nil, fmt.Errorf("tool name cannot be injected into Python: %s", name)
-		}
-		if spec.Call == nil {
-			r.Close(ctx)
-			return nil, fmt.Errorf("tool has no Host implementation: %s", name)
-		}
-		r.manifest[name] = spec
-		r.guestManifest = append(r.guestManifest, guestToolSpec{Name: name, AllowEarlyRead: spec.AllowEarlyRead})
+	var err error
+	r.manifest, r.guestManifest, err = normalizeManifest(manifest)
+	if err != nil {
+		r.Close(ctx)
+		return nil, err
 	}
-	sort.Slice(r.guestManifest, func(i, j int) bool { return r.guestManifest[i].Name < r.guestManifest[j].Name })
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, r.runtime); err != nil {
 		r.Close(ctx)
 		return nil, err
@@ -96,7 +96,6 @@ func New(ctx context.Context, wasm []byte, manifest Manifest) (*Runner, error) {
 		r.Close(ctx)
 		return nil, err
 	}
-	var err error
 	r.code, err = r.runtime.CompileModule(ctx, wasm)
 	if err != nil {
 		r.Close(ctx)
@@ -135,17 +134,53 @@ func (r *Runner) Close(ctx context.Context) error {
 
 // Run owns the instance, I/O and all Guest allocations until it returns.
 func (r *Runner) Run(ctx context.Context, source string, inputs any) (Output, error) {
-	return r.run(ctx, source, inputs, false, nil, nil)
+	if r.workspaceImage {
+		return Output{}, errors.New("workspace-prepared runner requires RunWorkspace")
+	}
+	return r.run(ctx, source, inputs, false, nil, nil, nil)
 }
 
 // RunPLM enables the built-in Guest AST pass, only for explicitly allowed snapshot reads.
 func (r *Runner) RunPLM(ctx context.Context, source string, inputs any) (Output, error) {
-	return r.run(ctx, source, inputs, true, nil, nil)
+	if r.workspaceImage {
+		return Output{}, errors.New("workspace-prepared runner requires RunWorkspace")
+	}
+	return r.run(ctx, source, inputs, true, nil, nil, nil)
 }
 
-func (r *Runner) run(ctx context.Context, source string, inputs any, plm bool, chunks <-chan string, recording *recording) (Output, error) {
+// RunWorkspace grants one private bounded workspace at /workspace for this
+// attempt. The lease remains caller-owned and may be reused after Run returns.
+func (r *Runner) RunWorkspace(ctx context.Context, source string, inputs any, lease *workspacepkg.Lease) (Output, error) {
+	if lease == nil {
+		return Output{}, errors.New("nil workspace lease")
+	}
+	filesystem, _, err := lease.BeginRun()
+	if err != nil {
+		return Output{}, err
+	}
+	defer lease.EndRun()
+	if (r.image != nil || r.cow != nil) && !r.workspaceImage {
+		return Output{}, errors.New("prepared runner was not captured for workspace mounts")
+	}
+	fsConfig, err := workspaceFSConfig(filesystem)
+	if err != nil {
+		return Output{}, err
+	}
+	return r.run(ctx, source, inputs, false, nil, nil, fsConfig)
+}
+
+func workspaceFSConfig(filesystem experimentalsys.FS) (wazero.FSConfig, error) {
+	base, ok := wazero.NewFSConfig().(experimentalsysfs.FSConfig)
+	if !ok {
+		return nil, errors.New("wazero does not support rooted workspace mounts")
+	}
+	return base.WithSysFSMount(filesystem, "workspace"), nil
+}
+
+func (r *Runner) run(ctx context.Context, source string, inputs any, plm bool, chunks <-chan string, recording *recording, fsConfig wazero.FSConfig) (Output, error) {
 	state := newRun(ctx, r, plm)
 	state.recording = recording
+	state.fsConfig = fsConfig
 	defer state.close()
 	ctx = state.ctx
 	request, err := json.Marshal(struct {

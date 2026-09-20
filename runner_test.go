@@ -119,18 +119,30 @@ func TestManifestValidation(t *testing.T) {
 		name     string
 		manifest Manifest
 	}{
-		{"invalid identifier", Manifest{"not-valid": {Call: noop}}},
-		{"Python keyword", Manifest{"class": {Call: noop}}},
-		{"reserved input", Manifest{"inputs": {Call: noop}}},
-		{"internal helper", Manifest{"_pysolate_prepare": {Call: noop}}},
+		{"space in canonical name", Manifest{"not valid": {Call: noop}}},
+		{"leading punctuation", Manifest{"-invalid": {Call: noop}}},
+		{"invalid schema", Manifest{"lookup": {Call: noop, InputSchema: json.RawMessage(`[]`)}}},
 		{"missing implementation", Manifest{"lookup": {}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if r, err := New(context.Background(), nil, tc.manifest); err == nil {
-				r.Close(context.Background())
+			if _, _, err := normalizeManifest(tc.manifest); err == nil {
 				t.Fatal("expected manifest validation error")
 			}
 		})
+	}
+	_, guest, err := normalizeManifest(Manifest{
+		"class":             {Call: noop},
+		"inputs":            {Call: noop},
+		"_pysolate_prepare": {Call: noop},
+		"mcp.server/tool":   {Call: noop},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, spec := range guest {
+		if spec.InjectGlobal {
+			t.Fatalf("reserved or canonical-only tool was injected: %#v", spec)
+		}
 	}
 }
 

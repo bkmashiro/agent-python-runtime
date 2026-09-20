@@ -59,10 +59,10 @@ mapfile -t NUMPY_LIBS < <(python3 "${PROFILE}" link-libraries --lock "${LOCK}")
   -Wl,--max-memory=536870912 -Wl,-z,stack-size=16777216 -Wl,--strip-all \
   -o "${BUILD}/link/raw.wasm"
 
-python3 - "${PY}/Lib" "${BUILD}/vfs" "${ROOT}/guest/bootstrap.py" "${ROOT}/guest/plm.py" "${ROOT}/guest/prefix.py" "${NUMPY_PACKAGE}" <<'PY'
+python3 - "${PY}/Lib" "${BUILD}/vfs" "${ROOT}/guest/bootstrap.py" "${ROOT}/guest/plm.py" "${ROOT}/guest/prefix.py" "${ROOT}/guest/pysolate.py" "${NUMPY_PACKAGE}" <<'PY'
 from pathlib import Path
 import shutil, sys, os
-lib, out, bootstrap, plm, prefix, numpy = map(Path, sys.argv[1:])
+lib, out, bootstrap, plm, prefix, pysolate, numpy = map(Path, sys.argv[1:])
 def copy_tree(src, dst):
     for p in sorted(src.rglob('*')):
         rel=p.relative_to(src); q=dst/rel
@@ -71,7 +71,7 @@ def copy_tree(src, dst):
         elif p.is_file() and not p.name.endswith(('.pyc', '.pyo')):
             q.parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(p,q); os.utime(q,(0,0))
 copy_tree(lib, out)
-for src, name in ((bootstrap,'pysolate_bootstrap.py'),(plm,'plm.py'),(prefix,'prefix.py')):
+for src, name in ((bootstrap,'pysolate_bootstrap.py'),(plm,'plm.py'),(prefix,'prefix.py'),(pysolate,'pysolate.py')):
     shutil.copyfile(src, out/name); os.utime(out/name,(0,0))
 copy_tree(numpy, out/'site-packages/numpy')
 PY

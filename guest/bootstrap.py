@@ -2,6 +2,7 @@
 import json
 import sys
 from _pysolate import call, prepare, resolve
+import pysolate
 
 _prefix = None
 
@@ -64,8 +65,10 @@ def execute(request):
                 "plm": True,
             }
         scope = {"__name__": "__main__", "inputs": request["inputs"]}
+        pysolate.configure(request["manifest"], invoke_tool)
         for spec in request["manifest"]:
-            scope[spec["name"]] = make_tool(spec["name"])
+            if spec.get("inject_global"):
+                scope[spec["name"]] = pysolate.tools[spec["name"]]
         code = request["source"]
         if request.get("plm"):
             import ast

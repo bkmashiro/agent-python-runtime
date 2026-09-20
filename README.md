@@ -17,7 +17,7 @@ Runner owns compiled code and an optional clean image
 There are four responsibilities:
 
 - **Runner:** ordinary execution, PLM and append-only source input share one lifecycle.
-- **Tools:** a name maps to a Go function and an explicit early-read declaration.
+- **Tools:** Host providers discover canonical tools, metadata and Go call implementations; a small Python shim exposes only that catalog.
 - **Image:** optional full-copy or Linux private COW memory, captured before user execution.
 - **Store:** optional SQLite history for deterministic replay and durable waits.
 
@@ -59,12 +59,35 @@ out, err := runner.Run(ctx, `result = price(item="book") * inputs["quantity"]`, 
 
 A Runner compiles once and may serve independent Runs. Each Run owns its Python state and tool workers. Tools must be concurrency-safe and honor their context. Call `Close` after all Runs have returned.
 
+### Dynamic Host tools and MCP adapters
+
+`ToolSpec` can carry a description, JSON input schema and discovery annotations. Canonical names do not have to be Python identifiers, so provider-native names remain stable. Guest Python uses the small packaged shim:
+
+```python
+from pysolate import tools
+
+print(tools.names())
+print(tools.describe("mcp.filesystem.read_file"))
+result = tools.call("mcp.filesystem.read_file", path="notes.txt")
+```
+
+Safe Python identifiers are also injected as top-level convenience functions, preserving `price(...)` and the existing PLM path. Metadata is descriptive: MCP `readOnlyHint` does not enable early execution. The Host must still set `AllowEarlyRead` explicitly.
+
+`ToolProvider` and `ManifestFromProviders` merge discovered catalogs while rejecting duplicate names. `mcpadapter.Provider` converts an already connected MCP client into one namespaced provider. MCP transport, authentication, session lifecycle, schema enforcement and credentials stay on the Host and are never packaged into Guest Python.
+
+### Private workspaces
+
+`runtime/workspace` creates a bounded private filesystem and grants an exclusive writer lease. `CreateFromDirectory` copies an ordinary Host working tree once; `.git` metadata remains Host-owned and source files are never modified in place. `RunWorkspace` mounts that lease only at `/workspace`; ordinary `Run` still has no Host filesystem authority. The rooted adapter rejects traversal, symlinks, hard links, devices, filesystem-boundary crossings and writes beyond Host-selected file/byte/depth limits.
+
+Workspace-prepared images need the same WASI preopen shape captured at initialization. Use `NewPreparedWorkspace` or Linux `NewPreparedWorkspaceCOW`, then execute with `RunWorkspace`. Ordinary `NewPrepared` runners reject workspace attachment instead of restoring an incompatible image. Workspace state can continue across disposable Guests, but publication back to a real project remains a separate Host operation. Writable workspaces are not part of `RunRecorded` durable replay.
+
 ## Optional execution modes
 
 - `RunPLM` prepares only explicitly allowed stable, read-only snapshots. Values and errors are delivered at their original Python calls. Failed tools are not automatically retried.
 - `RunPrefix` accepts append-only source chunks, prepares eligible reads and executes the completed source in the same Guest. It shares the Run's existing future table.
 - `NewPrepared` copies a clean initialized image into each Guest.
 - `NewPreparedCOW` uses sealed Linux memfd/private mappings. It does not fall back to a different backend or restore an active stack.
+- `NewPreparedWorkspace` and `NewPreparedWorkspaceCOW` capture the mount shape required by private workspaces.
 
 ```sh
 go run ./cmd/pysolate -source examples/echo.py -mode plm
@@ -87,7 +110,7 @@ The new SQLite format does not migrate old runtime databases. Cancellation stops
 
 ## Boundaries
 
-No Host directories, environment, network sockets or subprocess authority are mounted into the Guest. Guest imports are the libraries packaged in the artifact, including NumPy. Tools are the external-I/O boundary; the Host is responsible for their authorization and argument validation.
+No Host directories, environment, network sockets or subprocess authority are ambient in the Guest. Guest imports remain the small fixed artifact, including NumPy. External services, credentials and MCP connections stay behind Host tools. A Host can separately grant one runtime-owned private workspace at `/workspace`; arbitrary Host paths are never accepted as Guest mounts.
 
 Current engineering defaults are 512 MiB maximum linear memory, 1 MiB per request/result and per stdout/stderr buffer, 1024 tool issues per attempt, and 64 outstanding early reads. Use context deadlines for elapsed-time bounds. The durable Store retains at most 64 MiB of logical payload per Run; SQLite/WAL physical overhead is separate.
 
@@ -95,10 +118,13 @@ Current engineering defaults are 512 MiB maximum linear memory, 1 MiB per reques
 
 ```text
 runner.go, bridge.go       Guest lifecycle and Host calls
+tool_provider.go           provider discovery and normalized tool metadata
+mcpadapter/                narrow adapter for connected MCP clients
 future.go, prefix.go       Run-owned early reads and source streaming
 prepared.go, cow*.go       clean images and private memory
 recording.go               deterministic attempts and journal stops
 durable/                   SQLite Store and recovery driver
+runtime/workspace/         bounded rooted private filesystems
 guest/                     CPython bridge, execution and small AST passes
 cmd/pysolate/              CLI
 ```

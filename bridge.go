@@ -18,6 +18,9 @@ type Tool func(ctx context.Context, args json.RawMessage) (any, error)
 type ToolSpec struct {
 	Call           Tool
 	AllowEarlyRead bool
+	Description    string
+	InputSchema    json.RawMessage
+	Annotations    ToolAnnotations
 }
 
 // Manifest is copied by New and injected into each Guest execution.

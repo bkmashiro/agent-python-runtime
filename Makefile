@@ -12,4 +12,5 @@ check:
 	test -f "$(GUEST)"
 	PYSOLATE_GUEST="$(abspath $(GUEST))" go test ./... -count=1
 	PYTHONPATH=guest python3 -m unittest discover -s guest
+	python3 -m unittest discover -s tools -p 'test_*.py'
 	go vet ./...

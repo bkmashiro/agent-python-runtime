@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "profile": "agent-core",
+  "target": "wasm32-wasip1",
+  "runtime": {
+    "cpython": "3.14.0",
+    "numpy": "1.26.0b1"
+  },
+  "build_inputs": [
+    "tools/build-inputs.lock.json",
+    "guest/build/profiles/numpy-core.lock.json"
+  ],
+  "policy": {
+    "runtime_package_installation": false,
+    "guest_network": false,
+    "guest_subprocess": false,
+    "ambient_host_filesystem": false,
+    "host_tools": true,
+    "private_workspace": true
+  },
+  "qualification": [
+    {"name": "json", "operation": "json_roundtrip"},
+    {"name": "csv", "operation": "csv_roundtrip"},
+    {"name": "text", "operation": "text_processing"},
+    {"name": "regex", "operation": "regex_capture"},
+    {"name": "datetime", "operation": "datetime_iso"},
+    {"name": "hashlib", "operation": "sha256"},
+    {"name": "html", "operation": "html_parse"},
+    {"name": "xml", "operation": "xml_parse"},
+    {"name": "numpy", "operation": "numpy_core"},
+    {"name": "workspace", "operation": "workspace_edit_acceptance"}
+  ]
+}

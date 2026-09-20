@@ -114,7 +114,7 @@ The new SQLite format does not migrate old runtime databases. Cancellation stops
 
 ## Boundaries
 
-No Host directories, environment, network sockets or subprocess authority are ambient in the Guest. Guest imports remain the small fixed artifact, including NumPy. External services, credentials and MCP connections stay behind Host tools. A Host can separately grant one runtime-owned private workspace at `/workspace`; arbitrary Host paths are never accepted as Guest mounts.
+No Host directories, environment, network sockets or subprocess authority are ambient in the Guest. Guest imports use the locked [`agent-core` artifact profile](docs/artifact-profiles.md), including NumPy. External services, credentials and MCP connections stay behind Host tools. A Host can separately grant one runtime-owned private workspace at `/workspace`; arbitrary Host paths are never accepted as Guest mounts.
 
 Current engineering defaults are 512 MiB maximum linear memory, 1 MiB per request/result and per stdout/stderr buffer, 1024 tool issues per attempt, and 64 outstanding early reads. Use context deadlines for elapsed-time bounds. The durable Store retains at most 64 MiB of logical payload per Run; SQLite/WAL physical overhead is separate.
 
@@ -141,6 +141,8 @@ make check
 PYSOLATE_GUEST="$PWD/dist/pysolate.wasm" go test ./... -count=1
 PYSOLATE_GUEST="$PWD/dist/pysolate.wasm" go test -race ./... -count=1
 PYTHONPATH=guest python3 -m unittest discover -s guest
+python3 -m unittest discover -s tools -p 'test_*.py'
+python3 tools/probe-guest-modules.py --guest dist/pysolate.wasm
 go vet ./...
 ```
 

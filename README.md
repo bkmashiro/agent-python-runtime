@@ -79,6 +79,12 @@ Every generated function still dispatches through the same narrow Host call ABI.
 
 Workspace-prepared images need the same WASI preopen shape captured at initialization. Use `NewPreparedWorkspace` or Linux `NewPreparedWorkspaceCOW`, then execute with `RunWorkspace`. Ordinary `NewPrepared` runners reject workspace attachment instead of restoring an incompatible image. Workspace state can continue across disposable Guests, but publication back to a real project remains a separate Host operation. Writable workspaces are not part of `RunRecorded` durable replay.
 
+`Lease.Snapshot` produces a path-independent revision and a bounded file manifest; `workspace.Diff` reports deterministic added, modified and deleted metadata without embedding file contents. Python errors preserve private changes for Host inspection until cleanup. See [the workspace lifecycle and executable acceptance](docs/workspace.md), or run:
+
+```sh
+go run ./examples/workspace-edit -guest dist/pysolate.wasm
+```
+
 ## Optional execution modes
 
 - `RunPLM` prepares only explicitly allowed stable, read-only snapshots. Values and errors are delivered at their original Python calls. Failed tools are not automatically retried.

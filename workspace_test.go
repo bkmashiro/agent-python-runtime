@@ -3,9 +3,11 @@ package pysolate
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -141,5 +143,70 @@ func TestPreparedRunnersAttachWorkspacePerRun(t *testing.T) {
 				t.Fatalf("out=%+v err=%v", out, err)
 			}
 		})
+	}
+}
+
+func TestFailedWorkspaceRunRemainsInspectableUntilCleanup(t *testing.T) {
+	wasm, err := readGuestArtifact()
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := filepath.Join(t.TempDir(), "workspaces")
+	if err := os.Mkdir(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := workspacepkg.NewManager(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref, err := manager.Create([]workspacepkg.InitialFile{{Path: "before.txt", Data: []byte("before")}}, workspacepkg.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease, err := manager.Acquire(ref, "failed-run-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := lease.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	runner, err := New(ctx, wasm, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, runErr := runner.RunWorkspace(ctx, `open('/workspace/partial.txt', 'w').write('inspect me')
+raise RuntimeError('expected failure')`, nil, lease)
+	if runErr == nil || !strings.Contains(runErr.Error(), "expected failure") {
+		t.Fatalf("run error=%v", runErr)
+	}
+	if err := runner.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	after, err := lease.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	changes := workspacepkg.Diff(before, after)
+	if changes.Added != 1 || len(changes.Changes) != 1 || changes.Changes[0].Path != "partial.txt" {
+		t.Fatalf("changes=%#v", changes)
+	}
+	files, err := lease.Files()
+	if err != nil || len(files) != 2 || files[1].Path != "partial.txt" || string(files[1].Data) != "inspect me" {
+		t.Fatalf("files=%#v err=%v", files, err)
+	}
+	if err := lease.Release(); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lease.Files(); !errors.Is(err, workspacepkg.ErrWorkspaceClosed) {
+		t.Fatalf("files after cleanup error=%v", err)
+	}
+	if _, err := manager.Acquire(ref, "after-cleanup"); !errors.Is(err, workspacepkg.ErrWorkspaceClosed) {
+		t.Fatalf("acquire after cleanup error=%v", err)
 	}
 }

@@ -44,7 +44,8 @@ The CLI grants only a pure `echo` demonstration tool. Applications supply their 
 
 ```go
 tools := pysolate.Manifest{
-    "price": {
+    "market/get-price": {
+        PythonPath: "stock.getprice",
         Call: func(ctx context.Context, args json.RawMessage) (any, error) {
             return 21, nil // Application-owned authorization and argument validation go here.
         },
@@ -54,26 +55,23 @@ tools := pysolate.Manifest{
 runner, err := pysolate.New(ctx, wasm, tools)
 if err != nil { return err }
 defer runner.Close(context.Background())
-out, err := runner.Run(ctx, `result = price(item="book") * inputs["quantity"]`, map[string]int{"quantity": 2})
+out, err := runner.Run(ctx, `result = stock.getprice(item="book") * inputs["quantity"]`, map[string]int{"quantity": 2})
 ```
 
 A Runner compiles once and may serve independent Runs. Each Run owns its Python state and tool workers. Tools must be concurrency-safe and honor their context. Call `Close` after all Runs have returned.
 
 ### Dynamic Host tools and MCP adapters
 
-`ToolSpec` can carry a description, JSON input schema and discovery annotations. Canonical names do not have to be Python identifiers, so provider-native names remain stable. Guest Python uses the small packaged shim:
+`ToolSpec` separates the canonical Host identity from its `PythonPath`, and can carry a description, JSON input schema and discovery annotations. Provider-native identities remain stable while the generated Python surface stays natural:
 
 ```python
-from pysolate import tools
-
-print(tools.names())
-print(tools.describe("mcp.filesystem.read_file"))
-result = tools.call("mcp.filesystem.read_file", path="notes.txt")
+price = stock.getprice(symbol="AAPL")
+contents = filesystem.read_file(path="notes.txt")
 ```
 
-Safe Python identifiers are also injected as top-level convenience functions, preserving `price(...)` and the existing PLM path. Metadata is descriptive: MCP `readOnlyHint` does not enable early execution. The Host must still set `AllowEarlyRead` explicitly.
+Every generated function still dispatches through the same narrow Host call ABI. Only canonical identity, Python path and the early-read bit enter the Guest; descriptions and schemas stay on the Host so an Agent can inspect them before generating a one-shot script. There is no runtime `describe()` round trip. Top-level paths such as `price(...)` remain supported. Metadata is descriptive: MCP `readOnlyHint` does not enable early execution. The Host must still set `AllowEarlyRead` explicitly.
 
-`ToolProvider` and `ManifestFromProviders` merge discovered catalogs while rejecting duplicate names. `mcpadapter.Provider` converts an already connected MCP client into one namespaced provider. MCP transport, authentication, session lifecycle, schema enforcement and credentials stay on the Host and are never packaged into Guest Python.
+`ToolProvider` and `ManifestFromProviders` merge discovered catalogs while rejecting duplicate canonical identities and colliding Python paths. `mcpadapter.Provider` converts an already connected MCP client into separately configured canonical and Python namespaces. MCP transport, authentication, session lifecycle, schema enforcement and credentials stay on the Host and are never packaged into Guest Python.
 
 ### Private workspaces
 

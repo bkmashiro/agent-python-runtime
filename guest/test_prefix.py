@@ -56,6 +56,20 @@ class PrefixTests(unittest.TestCase):
         p.feed("order=buy(symbol='ACME')\nprice=lookup(key='book')\n")
         self.assertEqual(p.ready, [])
 
+    def test_attribute_chain_prepares_canonical_name(self):
+        manifest = [{
+            "name": "mcp.market/get-price",
+            "python_path": "stock.getprice",
+            "allow_early_read": True,
+        }]
+        calls = []
+        p = Prefix(None, manifest, lambda request: calls.append(request) or 1)
+        p.feed("price=stock.getprice(symbol='AAPL')\n")
+        self.assertEqual(json.loads(calls[0]), {
+            "tool": "mcp.market/get-price",
+            "args": {"symbol": "AAPL"},
+        })
+
 
 if __name__ == "__main__":
     unittest.main()

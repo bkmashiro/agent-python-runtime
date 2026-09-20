@@ -13,11 +13,13 @@ import (
 // Treat args as read-only; the run also retains them for Future matching.
 type Tool func(ctx context.Context, args json.RawMessage) (any, error)
 
-// ToolSpec binds a Python-visible tool name to its Host implementation.
-// Early-read tools must return a stable snapshot for the run and honor ctx.
+// ToolSpec binds a canonical Host tool identity and PythonPath to a Host
+// implementation. Early-read tools must return a stable snapshot for the run
+// and honor ctx.
 type ToolSpec struct {
 	Call           Tool
 	AllowEarlyRead bool
+	PythonPath     string
 	Description    string
 	InputSchema    json.RawMessage
 	Annotations    ToolAnnotations

@@ -131,17 +131,16 @@ func TestManifestValidation(t *testing.T) {
 		})
 	}
 	_, guest, err := normalizeManifest(Manifest{
-		"class":             {Call: noop},
-		"inputs":            {Call: noop},
-		"_pysolate_prepare": {Call: noop},
-		"mcp.server/tool":   {Call: noop},
+		"canonical.class":  {Call: noop, PythonPath: "safe.class_"},
+		"canonical.inputs": {Call: noop, PythonPath: "safe.inputs"},
+		"mcp.server/tool":  {Call: noop, PythonPath: "server.tool"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, spec := range guest {
-		if spec.InjectGlobal {
-			t.Fatalf("reserved or canonical-only tool was injected: %#v", spec)
+		if spec.PythonPath == "" {
+			t.Fatalf("tool lacks Python path: %#v", spec)
 		}
 	}
 }

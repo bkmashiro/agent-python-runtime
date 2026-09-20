@@ -36,8 +36,9 @@ func TestProviderDiscoversPaginatedMCPToolsAndDelegatesCalls(t *testing.T) {
 		"next": {Tools: []Tool{{Name: "write_file", Annotations: Annotations{DestructiveHint: true}}}},
 	}}
 	provider := Provider{
-		Client:    client,
-		Namespace: "mcp.filesystem",
+		Client:             client,
+		CanonicalNamespace: "mcp.filesystem",
+		PythonNamespace:    "filesystem",
 		AllowEarlyRead: func(tool Tool) bool {
 			return tool.Annotations.ReadOnlyHint
 		},
@@ -46,7 +47,7 @@ func TestProviderDiscoversPaginatedMCPToolsAndDelegatesCalls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(manifest) != 2 || !manifest["mcp.filesystem.read_file"].AllowEarlyRead || manifest["mcp.filesystem.write_file"].AllowEarlyRead {
+	if len(manifest) != 2 || !manifest["mcp.filesystem.read_file"].AllowEarlyRead || manifest["mcp.filesystem.write_file"].AllowEarlyRead || manifest["mcp.filesystem.read_file"].PythonPath != "filesystem.read_file" {
 		t.Fatalf("unexpected manifest: %#v", manifest)
 	}
 	got, err := manifest["mcp.filesystem.read_file"].Call(context.Background(), json.RawMessage(`{"path":"a.txt"}`))
@@ -60,7 +61,7 @@ func TestProviderDiscoversPaginatedMCPToolsAndDelegatesCalls(t *testing.T) {
 
 func TestProviderDoesNotTrustMCPReadOnlyHintByDefault(t *testing.T) {
 	client := &fakeClient{pages: map[string]ToolPage{"": {Tools: []Tool{{Name: "read", Annotations: Annotations{ReadOnlyHint: true}}}}}}
-	manifest, err := pysolate.ManifestFromProviders(context.Background(), Provider{Client: client, Namespace: "mcp.server"})
+	manifest, err := pysolate.ManifestFromProviders(context.Background(), Provider{Client: client, CanonicalNamespace: "mcp.server", PythonNamespace: "server"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -76,6 +76,7 @@ func NewFromProviders(ctx context.Context, wasm []byte, providers ...ToolProvide
 func normalizeManifest(manifest Manifest) (Manifest, []guestToolSpec, error) {
 	normalized := make(Manifest, len(manifest))
 	guest := make([]guestToolSpec, 0, len(manifest))
+	paths := make([]string, 0, len(manifest))
 	for name, source := range manifest {
 		if err := validateToolName(name); err != nil {
 			return nil, nil, err
@@ -87,6 +88,14 @@ func normalizeManifest(manifest Manifest) (Manifest, []guestToolSpec, error) {
 			return nil, nil, fmt.Errorf("tool description exceeds %d bytes: %s", maxToolDescriptionBytes, name)
 		}
 		spec := source
+		if spec.PythonPath == "" {
+			if !validPythonPath(name) {
+				return nil, nil, fmt.Errorf("tool %s requires an explicit Python path", name)
+			}
+			spec.PythonPath = name
+		} else if !validPythonPath(spec.PythonPath) {
+			return nil, nil, fmt.Errorf("invalid Python tool path for %s: %s", name, spec.PythonPath)
+		}
 		if spec.InputSchema != nil {
 			if len(spec.InputSchema) > maxToolSchemaBytes {
 				return nil, nil, fmt.Errorf("tool input schema exceeds %d bytes: %s", maxToolSchemaBytes, name)
@@ -98,20 +107,14 @@ func normalizeManifest(manifest Manifest) (Manifest, []guestToolSpec, error) {
 			spec.InputSchema = append(json.RawMessage(nil), spec.InputSchema...)
 		}
 		normalized[name] = spec
-		var schema any
-		if spec.InputSchema != nil {
-			if err := json.Unmarshal(spec.InputSchema, &schema); err != nil {
-				return nil, nil, fmt.Errorf("decode tool input schema %s: %w", name, err)
-			}
+		guest = append(guest, guestToolSpec{Name: name, PythonPath: spec.PythonPath, AllowEarlyRead: spec.AllowEarlyRead})
+		paths = append(paths, spec.PythonPath)
+	}
+	sort.Strings(paths)
+	for index, pythonPath := range paths {
+		if index > 0 && (pythonPath == paths[index-1] || strings.HasPrefix(pythonPath, paths[index-1]+".")) {
+			return nil, nil, fmt.Errorf("Python tool path collision: %s", pythonPath)
 		}
-		guest = append(guest, guestToolSpec{
-			Name:           name,
-			Description:    spec.Description,
-			InputSchema:    schema,
-			Annotations:    spec.Annotations,
-			AllowEarlyRead: spec.AllowEarlyRead,
-			InjectGlobal:   injectableToolName(name),
-		})
 	}
 	sort.Slice(guest, func(i, j int) bool { return guest[i].Name < guest[j].Name })
 	return normalized, guest, nil
@@ -124,6 +127,12 @@ func validateToolName(name string) error {
 	return nil
 }
 
-func injectableToolName(name string) bool {
-	return pythonIdentifier.MatchString(name) && !pythonKeywords[name] && name != "inputs" && name != "__name__" && name != "__builtins__" && !strings.HasPrefix(name, "_pysolate")
+func validPythonPath(name string) bool {
+	parts := strings.Split(name, ".")
+	for index, part := range parts {
+		if !pythonIdentifier.MatchString(part) || pythonKeywords[part] || (index == 0 && (part == "inputs" || part == "__name__" || part == "__builtins__" || strings.HasPrefix(part, "_pysolate"))) {
+			return false
+		}
+	}
+	return len(parts) > 0
 }

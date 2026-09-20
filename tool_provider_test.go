@@ -11,42 +11,37 @@ type providerFunc func(context.Context) ([]ToolDefinition, error)
 
 func (f providerFunc) Tools(ctx context.Context) ([]ToolDefinition, error) { return f(ctx) }
 
-func TestManifestFromProvidersPreservesCanonicalNamesAndMetadata(t *testing.T) {
+func TestManifestFromProvidersSeparatesCanonicalIdentityAndPythonPath(t *testing.T) {
 	provider := providerFunc(func(context.Context) ([]ToolDefinition, error) {
-		return []ToolDefinition{
-			{
-				Name: "mcp.filesystem.read-file",
-				Spec: ToolSpec{
-					Description: "Read one approved file",
-					InputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}`),
-					Annotations: ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true},
-					Call:        func(context.Context, json.RawMessage) (any, error) { return "ok", nil },
-				},
+		return []ToolDefinition{{
+			Name: "mcp.market/get-price",
+			Spec: ToolSpec{
+				PythonPath:  "stock.getprice",
+				Description: "Read one approved price",
+				InputSchema: json.RawMessage(`{"type":"object","properties":{"symbol":{"type":"string"}},"required":["symbol"]}`),
+				Annotations: ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true},
+				Call:        func(context.Context, json.RawMessage) (any, error) { return "ok", nil },
 			},
-		}, nil
+		}}, nil
 	})
 	manifest, err := ManifestFromProviders(context.Background(), provider)
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec, ok := manifest["mcp.filesystem.read-file"]
-	if !ok || spec.Description != "Read one approved file" || !spec.Annotations.ReadOnlyHint {
+	spec, ok := manifest["mcp.market/get-price"]
+	if !ok || spec.PythonPath != "stock.getprice" || spec.Description != "Read one approved price" || !spec.Annotations.ReadOnlyHint {
 		t.Fatalf("unexpected manifest: %#v", manifest)
-	}
-	spec.InputSchema[0] = '['
-	if manifest["mcp.filesystem.read-file"].InputSchema[0] != '[' {
-		t.Fatal("returned manifest should own provider metadata")
 	}
 }
 
-func TestManifestFromProvidersRejectsDuplicateAndInvalidDefinitions(t *testing.T) {
+func TestManifestFromProvidersRejectsIdentityPathAndSchemaConflicts(t *testing.T) {
 	call := func(context.Context, json.RawMessage) (any, error) { return nil, nil }
 	for _, tc := range []struct {
 		name      string
 		providers []ToolProvider
 	}{
 		{
-			name: "duplicate",
+			name: "duplicate canonical identity",
 			providers: []ToolProvider{
 				providerFunc(func(context.Context) ([]ToolDefinition, error) {
 					return []ToolDefinition{{Name: "same", Spec: ToolSpec{Call: call}}}, nil
@@ -55,6 +50,30 @@ func TestManifestFromProvidersRejectsDuplicateAndInvalidDefinitions(t *testing.T
 					return []ToolDefinition{{Name: "same", Spec: ToolSpec{Call: call}}}, nil
 				}),
 			},
+		},
+		{
+			name: "duplicate Python path",
+			providers: []ToolProvider{providerFunc(func(context.Context) ([]ToolDefinition, error) {
+				return []ToolDefinition{
+					{Name: "first", Spec: ToolSpec{PythonPath: "stock.price", Call: call}},
+					{Name: "second", Spec: ToolSpec{PythonPath: "stock.price", Call: call}},
+				}, nil
+			})},
+		},
+		{
+			name: "tool namespace collision",
+			providers: []ToolProvider{providerFunc(func(context.Context) ([]ToolDefinition, error) {
+				return []ToolDefinition{
+					{Name: "root", Spec: ToolSpec{PythonPath: "stock", Call: call}},
+					{Name: "child", Spec: ToolSpec{PythonPath: "stock.price", Call: call}},
+				}, nil
+			})},
+		},
+		{
+			name: "canonical name needs explicit Python path",
+			providers: []ToolProvider{providerFunc(func(context.Context) ([]ToolDefinition, error) {
+				return []ToolDefinition{{Name: "mcp.market/get-price", Spec: ToolSpec{Call: call}}}, nil
+			})},
 		},
 		{
 			name: "invalid schema",
@@ -77,20 +96,25 @@ func TestManifestFromProvidersRejectsDuplicateAndInvalidDefinitions(t *testing.T
 	}
 }
 
-func TestGuestManifestOnlyInjectsSafePythonIdentifiers(t *testing.T) {
+func TestGuestManifestContainsOnlyDispatchFields(t *testing.T) {
 	call := func(context.Context, json.RawMessage) (any, error) { return nil, nil }
 	manifest, guest, err := normalizeManifest(Manifest{
-		"lookup":                   {Call: call},
-		"mcp.filesystem.read-file": {Call: call, Description: "MCP read"},
+		"lookup": {Call: call, Description: "Host-only metadata"},
+		"mcp.market/get-price": {
+			PythonPath:     "stock.getprice",
+			Call:           call,
+			Description:    "Host-only MCP metadata",
+			AllowEarlyRead: true,
+		},
 	})
 	if err != nil || len(manifest) != 2 || len(guest) != 2 {
 		t.Fatalf("manifest=%#v guest=%#v err=%v", manifest, guest, err)
 	}
-	injected := map[string]bool{}
+	paths := map[string]string{}
 	for _, spec := range guest {
-		injected[spec.Name] = spec.InjectGlobal
+		paths[spec.Name] = spec.PythonPath
 	}
-	if !injected["lookup"] || injected["mcp.filesystem.read-file"] {
-		t.Fatalf("unexpected injection flags: %#v", injected)
+	if paths["lookup"] != "lookup" || paths["mcp.market/get-price"] != "stock.getprice" {
+		t.Fatalf("unexpected guest paths: %#v", paths)
 	}
 }

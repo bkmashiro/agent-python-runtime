@@ -7,22 +7,24 @@ import (
 	"time"
 )
 
-func TestDynamicToolShimInRealGuest(t *testing.T) {
+func TestDynamicToolNamespaceInRealGuest(t *testing.T) {
 	wasm, err := readGuestArtifact()
 	if err != nil {
 		t.Fatal(err)
 	}
-	name := "mcp.filesystem.read-file"
-	manifest := Manifest{name: {
-		Description: "Read one approved file",
-		InputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}`),
-		Annotations: ToolAnnotations{ReadOnlyHint: true},
+	canonical := "mcp.market/get-price"
+	manifest := Manifest{canonical: {
+		PythonPath:     "stock.getprice",
+		Description:    "Read one approved price",
+		InputSchema:    json.RawMessage(`{"type":"object","properties":{"symbol":{"type":"string"}},"required":["symbol"]}`),
+		Annotations:    ToolAnnotations{ReadOnlyHint: true},
+		AllowEarlyRead: true,
 		Call: func(_ context.Context, args json.RawMessage) (any, error) {
 			var input map[string]any
 			if err := json.Unmarshal(args, &input); err != nil {
 				return nil, err
 			}
-			return input, nil
+			return map[string]any{"canonical": canonical, "symbol": input["symbol"], "price": 123}, nil
 		},
 	}}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -32,27 +34,20 @@ func TestDynamicToolShimInRealGuest(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer runner.Close(context.Background())
-	out, err := runner.Run(ctx, `from pysolate import tools
-meta=tools.describe("mcp.filesystem.read-file")
-result={
- "names": list(tools.names()),
- "description": meta["description"],
- "readonly": meta["annotations"]["read_only_hint"],
- "value": tools.call("mcp.filesystem.read-file", path="notes.txt"),
-}`, nil)
+	out, err := runner.RunPLM(ctx, `quote=stock.getprice(symbol="AAPL")
+result=quote`, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var value struct {
-		Names       []string       `json:"names"`
-		Description string         `json:"description"`
-		ReadOnly    bool           `json:"readonly"`
-		Value       map[string]any `json:"value"`
+		Canonical string `json:"canonical"`
+		Symbol    string `json:"symbol"`
+		Price     int    `json:"price"`
 	}
 	if err := json.Unmarshal(out.Value, &value); err != nil {
 		t.Fatal(err)
 	}
-	if len(value.Names) != 1 || value.Names[0] != name || value.Description != "Read one approved file" || !value.ReadOnly || value.Value["path"] != "notes.txt" {
-		t.Fatalf("unexpected value: %#v", value)
+	if value.Canonical != canonical || value.Symbol != "AAPL" || value.Price != 123 || out.Transformed == "" {
+		t.Fatalf("unexpected value=%#v transformed=%q", value, out.Transformed)
 	}
 }

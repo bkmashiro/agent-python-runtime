@@ -65,10 +65,7 @@ def execute(request):
                 "plm": True,
             }
         scope = {"__name__": "__main__", "inputs": request["inputs"]}
-        pysolate.configure(request["manifest"], invoke_tool)
-        for spec in request["manifest"]:
-            if spec.get("inject_global"):
-                scope[spec["name"]] = pysolate.tools[spec["name"]]
+        scope.update(pysolate.configure(request["manifest"], invoke_tool))
         code = request["source"]
         if request.get("plm"):
             import ast

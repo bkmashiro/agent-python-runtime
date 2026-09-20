@@ -34,12 +34,9 @@ type Runner struct {
 }
 
 type guestToolSpec struct {
-	Name           string          `json:"name"`
-	Description    string          `json:"description,omitempty"`
-	InputSchema    any             `json:"input_schema,omitempty"`
-	Annotations    ToolAnnotations `json:"annotations,omitempty"`
-	AllowEarlyRead bool            `json:"allow_early_read"`
-	InjectGlobal   bool            `json:"inject_global"`
+	Name           string `json:"name"`
+	PythonPath     string `json:"python_path"`
+	AllowEarlyRead bool   `json:"allow_early_read"`
 }
 
 type Output struct {

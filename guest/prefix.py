@@ -10,7 +10,11 @@ class Prefix:
     def __init__(self, inputs, manifest, prepare):
         self.inputs = inputs
         self.manifest = manifest
-        self.early_names = {spec["name"] for spec in manifest if spec["allow_early_read"]}
+        self.path_to_tool = {
+            spec.get("python_path", spec["name"]): spec["name"]
+            for spec in manifest if spec["allow_early_read"]
+        }
+        self.tool_roots = {path.split(".", 1)[0] for path in self.path_to_tool}
         self.prepare = prepare
         self.source = ""
         self.parsed = 0
@@ -37,7 +41,7 @@ class Prefix:
             call = statement.value
             try:
                 args = {k.arg: self.argument(k.value) for k in call.keywords}
-                request = json.dumps({"tool": call.func.id, "args": args})
+                request = json.dumps({"tool": self.tool_name(call), "args": args})
             except Exception:
                 continue  # Argument errors are still raised at the actual Python call.
             handle = self.prepare(request)
@@ -48,12 +52,25 @@ class Prefix:
         if not (isinstance(statement, ast.Assign) and len(statement.targets) == 1
                 and isinstance(statement.targets[0], ast.Name)
                 and statement.targets[0].id != "inputs"
-                and statement.targets[0].id not in self.early_names):
+                and statement.targets[0].id not in self.tool_roots):
             return False
         call = statement.value
-        return (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
-                and call.func.id in self.early_names and not call.args
+        return (isinstance(call, ast.Call) and self.tool_name(call) is not None and not call.args
                 and all(k.arg is not None and self.literal_or_input(k.value) for k in call.keywords))
+
+    @staticmethod
+    def function_path(node):
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            prefix = Prefix.function_path(node.value)
+            return prefix + "." + node.attr if prefix else None
+        return None
+
+    def tool_name(self, call):
+        if not isinstance(call, ast.Call):
+            return None
+        return self.path_to_tool.get(self.function_path(call.func))
 
     @staticmethod
     def literal_or_input(node):

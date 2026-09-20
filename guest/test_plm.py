@@ -1,5 +1,6 @@
 """Only tests the AST pass here; execution acceptance also uses real Wasm."""
 import ast
+import types
 import unittest
 from plm import transform
 
@@ -59,6 +60,30 @@ class PassTests(unittest.TestCase):
         scope, _, _, helpers = self.execute('_pysolate_prepare = 123\na = lookup(key="book")\nresult = _pysolate_prepare')
         self.assertEqual(scope["result"], 123)
         self.assertNotEqual(helpers[0], '_pysolate_prepare')
+
+    def test_attribute_chain_dispatches_canonical_name(self):
+        manifest = [{
+            "name": "mcp.market/get-price",
+            "python_path": "stock.getprice",
+            "allow_early_read": True,
+        }]
+        events = []
+        def prepare(thunk):
+            name, args = thunk()
+            events.append(("prepare", name, args["symbol"]))
+            return name, args
+        def resolve(token, name, **args):
+            events.append(("resolve", name, args["symbol"]))
+            return 123
+        tree, helpers = transform('price=stock.getprice(symbol="AAPL")\nresult=price', manifest)
+        scope = {"stock": types.SimpleNamespace(getprice=lambda **_: 0)}
+        scope.update(zip(helpers, (prepare, resolve)))
+        exec(compile(tree, "<test>", "exec"), scope)
+        self.assertEqual(scope["result"], 123)
+        self.assertEqual(events, [
+            ("prepare", "mcp.market/get-price", "AAPL"),
+            ("resolve", "mcp.market/get-price", "AAPL"),
+        ])
 
 
 if __name__ == "__main__":

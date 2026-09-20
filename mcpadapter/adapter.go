@@ -45,18 +45,23 @@ type Client interface {
 }
 
 type Provider struct {
-	Client         Client
-	Namespace      string
-	AllowEarlyRead func(Tool) bool
+	Client             Client
+	CanonicalNamespace string
+	PythonNamespace    string
+	AllowEarlyRead     func(Tool) bool
 }
 
 func (p Provider) Tools(ctx context.Context) ([]pysolate.ToolDefinition, error) {
 	if p.Client == nil {
 		return nil, errors.New("MCP adapter requires a client")
 	}
-	namespace := strings.TrimSuffix(p.Namespace, ".")
-	if namespace == "" {
-		return nil, errors.New("MCP adapter requires a namespace")
+	canonicalNamespace := strings.TrimSuffix(p.CanonicalNamespace, ".")
+	if canonicalNamespace == "" {
+		return nil, errors.New("MCP adapter requires a canonical namespace")
+	}
+	pythonNamespace := strings.TrimSuffix(p.PythonNamespace, ".")
+	if pythonNamespace == "" {
+		return nil, errors.New("MCP adapter requires a Python namespace")
 	}
 	var definitions []pysolate.ToolDefinition
 	cursor := ""
@@ -82,8 +87,9 @@ func (p Provider) Tools(ctx context.Context) ([]pysolate.ToolDefinition, error) 
 			remoteName := tool.Name
 			allowEarly := p.AllowEarlyRead != nil && p.AllowEarlyRead(tool)
 			definitions = append(definitions, pysolate.ToolDefinition{
-				Name: namespace + "." + remoteName,
+				Name: canonicalNamespace + "." + remoteName,
 				Spec: pysolate.ToolSpec{
+					PythonPath:     pythonNamespace + "." + remoteName,
 					Description:    tool.Description,
 					InputSchema:    append(json.RawMessage(nil), tool.InputSchema...),
 					AllowEarlyRead: allowEarly,

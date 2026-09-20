@@ -33,7 +33,7 @@ python3 tools/setup-numpy.py         # pinned static NumPy build
 bash build-guest.sh                  # relink this project's Guest
 ```
 
-`PYSOLATE_BUILD_INPUTS` selects an existing CPython/WASI cache. The link script also accepts `PYSOLATE_NUMPY_NATIVE_ROOT` and `PYSOLATE_NUMPY_PACKAGE_ROOT` to reuse NumPy inputs. Changing user Python does not require rebuilding the Guest. The build separates legacy RandomState symbols from Generator symbols because their integer ABIs differ in a static WASI link.
+`PYSOLATE_BUILD_INPUTS` selects an existing CPython/WASI cache. The link script also accepts `PYSOLATE_NUMPY_NATIVE_ROOT` and `PYSOLATE_NUMPY_PACKAGE_ROOT` to reuse NumPy inputs. The supported `agent-core` artifact contains CPython, NumPy and one pinned pure-Python package, PyYAML. Changing user Python or Host tool catalogs does not require rebuilding the Guest; bootstrap or pure-Python package changes need only a VFS repack. The build separates legacy RandomState symbols from Generator symbols because their integer ABIs differ in a static WASI link.
 
 ```sh
 printf 'result = inputs["value"] + 1\n' | go run ./cmd/pysolate -inputs '{"value":41}'
@@ -75,7 +75,7 @@ Every generated function still dispatches through the same narrow Host call ABI.
 
 ### Private workspaces
 
-`runtime/workspace` creates a bounded private filesystem and grants an exclusive writer lease. `CreateFromDirectory` copies an ordinary Host working tree once; `.git` metadata remains Host-owned and source files are never modified in place. `RunWorkspace` mounts that lease only at `/workspace`; ordinary `Run` still has no Host filesystem authority. The rooted adapter rejects traversal, symlinks, hard links, devices, filesystem-boundary crossings and writes beyond Host-selected file/byte/depth limits.
+`runtime/workspace` creates a bounded private filesystem and grants an exclusive writer lease. `CreateFromDirectory` copies an ordinary Host working tree once; `.git` metadata remains Host-owned and source files are never modified in place. `RunWorkspace` mounts that lease only at `/workspace` and starts user code there with `/workspace` first on `sys.path`, enabling relative files and local-module imports. Ordinary `Run` still has no Host filesystem authority. The rooted adapter rejects traversal, symlinks, hard links, devices, filesystem-boundary crossings and writes beyond Host-selected file/byte/depth limits.
 
 Workspace-prepared images need the same WASI preopen shape captured at initialization. Use `NewPreparedWorkspace` or Linux `NewPreparedWorkspaceCOW`, then execute with `RunWorkspace`. Ordinary `NewPrepared` runners reject workspace attachment instead of restoring an incompatible image. Workspace state can continue across disposable Guests, but publication back to a real project remains a separate Host operation. Writable workspaces are not part of `RunRecorded` durable replay.
 
@@ -83,7 +83,10 @@ Workspace-prepared images need the same WASI preopen shape captured at initializ
 
 ```sh
 go run ./examples/workspace-edit -guest dist/pysolate.wasm
+go run ./examples/agent-core-usecases -guest dist/pysolate.wasm
 ```
+
+See [the qualified common-usecase boundary](docs/common-usecases.md) for repository/config editing, structured-data processing, Host-enriched scripts and deliberate exclusions.
 
 ### Long-running service
 

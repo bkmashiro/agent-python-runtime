@@ -81,6 +81,12 @@ The real loopback HTTP benchmark excluded one warm-up per worker and then measur
 
 An extra request sent while all four slots were blocked received HTTP 429 in **0.10 ms**; admitted requests were not placed in an implicit queue. These are descriptive tails from 50 samples per worker, not production SLOs or broad capacity claims. Raw request rows and exact metadata are in [`performance-data/service-hot/`](performance-data/service-hot/). Reproduce with `go run ./cmd/pysolate-service-bench -guest dist/pysolate.wasm -iterations 50 -concurrency 1,2,4 -max-active 4 -mode all`.
 
+## Common-usecase profile cost
+
+The repository/config/data expansion adds one pinned pure-Python dependency, PyYAML 6.0.3, plus precompiled bytecode and package license metadata. The packed artifact changed from **34,199,690 to 34,684,853 bytes**, an increase of **485,163 bytes (1.42%)**. The native raw core stayed byte-identical at `bac2e4a1e700a6f08443a33eb931dee025b718b7b568643224359f69980ae138`; only the Python VFS was repacked. The qualified packed artifact is `d75b6f9cadc9fd0d04b111da6cff4823bd8b592e088941a6ba1d6208d8aa3729`.
+
+Two alternating old/new runs on the same 2-vCPU Linux arm64 VM used 50 measured requests per worker after one excluded warm-up. Median service preparation changed from **2.947 s to 2.983 s** (+36.7 ms, 1.25%). At concurrency 1, median-of-run p50 E2E changed from **1.55 to 1.53 ms** for plain Run and **1.73 to 1.77 ms** for workspace Run. At concurrency 2 it changed from **2.11 to 2.15 ms** plain and **2.30 to 2.44 ms** workspace. These small differences include normal two-run noise; the concrete workspace convenience costs about 0.04 ms at concurrency 1 in this sample. The real Linux acceptance also passed local module import, TOML/YAML edits, AST inspection, CSV/JSONL plus NumPy processing, one namespaced Host tool call backed by a real local HTTP request, and JSON/CSV/Markdown output. Raw rows and acceptance output are in [`performance-data/common-usecases/`](performance-data/common-usecases/).
+
 ## Integration checks and remaining costs
 
 `make check` passes against the final Guest on macOS; all root and durable tests pass in Linux. Targeted real PLM/prefix/seeded-preparation race tests and Store/journal/Executor race tests pass. The final seeded-COW + read-ahead stack also recovered after a Linux VM HardStop between the provider's commit and journal outcome: one read dispatch, two write requests, one idempotent effect. This does not establish physical-host power-loss tolerance.

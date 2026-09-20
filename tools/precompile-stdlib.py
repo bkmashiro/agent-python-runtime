@@ -9,7 +9,8 @@ if sys.version_info[:2] != (3, 14):
 sys.pycache_prefix = None
 stage = Path(sys.argv[1]).resolve()
 modules = ('encodings codecs json re enum copy copyreg weakref ast _ast_unparse types collections '
-           'functools operator contextlib _collections_abc pysolate_bootstrap plm prefix').split()
+           'functools operator contextlib _collections_abc pysolate_bootstrap plm prefix '
+           'site-packages/yaml').split()
 files = set()
 for name in modules:
     source = stage / (name + '.py')

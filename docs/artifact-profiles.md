@@ -10,9 +10,10 @@ Current declared runtime:
 
 - CPython 3.14.0;
 - NumPy 1.26.0b1;
+- PyYAML 6.0.3, pure Python only;
 - target `wasm32-wasip1`.
 
-No extra pure-Python dependency is currently included. Add one only when a real acceptance workload fails and a Host capability is not the appropriate boundary.
+PyYAML is the only extra pure-Python dependency. Its source archive, version, SHA-256 and MIT license are pinned in `tools/build-inputs.lock.json`; the build copies no `_yaml` native extension and packages its metadata and license. External services, credentials, package installation, sockets and subprocesses remain Host concerns.
 
 ## Qualification
 
@@ -24,7 +25,7 @@ python3 tools/probe-guest-modules.py \
   --output /tmp/agent-core-qualification.json
 ```
 
-The command executes representative JSON, CSV, text, regex, datetime, SHA-256, HTML, XML and NumPy operations inside the Guest. It also runs the real private-workspace acceptance with Host HTTP, read-only SQLite and idempotent external-write tools. A profile passes only when every declared probe exists, succeeds, and the observed CPython and NumPy versions match the profile.
+The command executes representative JSON, JSONL, CSV, text, regex, datetime, SHA-256, HTML, XML, TOML, INI, URL/Base64, repository-code, safe YAML and NumPy operations inside the Guest. It also runs the original private-workspace acceptance with Host HTTP, read-only SQLite and idempotent external-write tools, plus the common-usecase acceptance for local imports, configuration editing, data normalization and a named Host market-data tool. A profile passes only when every declared probe exists, succeeds, and the observed CPython, NumPy and PyYAML versions match the profile.
 
 The report records the exact artifact byte size and SHA-256. It is runtime evidence, not a committed mutable “latest” result.
 
@@ -39,6 +40,8 @@ PYSOLATE_RELINK=1 bash build-guest.sh
 # Reuse the existing raw core and only rebuild/precompile/pack the Python tree.
 PYSOLATE_RELINK=0 bash build-guest.sh
 ```
+
+Guest bootstrap changes and pure-Python package changes use the repack path; they do not require relinking CPython or NumPy. The build still checks that the pinned PyYAML source, package metadata and license are present before packing.
 
 The default is `1`, which is conservative for native changes. The reusable core is `build/guest/native/raw-core.wasm` unless `PYSOLATE_RAW_CORE` overrides it. Repack mode still validates the final Wasm.
 

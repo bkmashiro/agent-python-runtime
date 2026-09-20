@@ -7,6 +7,8 @@ BUILD=${PYSOLATE_BUILD_DIR:-"${ROOT}/build/guest"}
 INPUTS=${PYSOLATE_BUILD_INPUTS:-"${ROOT}/build/inputs"}
 NUMPY_ROOT=${PYSOLATE_NUMPY_NATIVE_ROOT:-"${ROOT}/build/numpy/numpy-native"}
 NUMPY_PACKAGE=${PYSOLATE_NUMPY_PACKAGE_ROOT:-"${ROOT}/build/numpy/numpy-package/numpy"}
+PYYAML_ROOT=${PYSOLATE_PYYAML_ROOT:-"${INPUTS}/pure/pyyaml"}
+PYYAML_SOURCE=${PYYAML_ROOT}/lib/yaml
 DIST=${PYSOLATE_DIST_DIR:-"${ROOT}/dist"}
 RAW_CORE=${PYSOLATE_RAW_CORE:-"${BUILD}/native/raw-core.wasm"}
 RELINK=${PYSOLATE_RELINK:-1}
@@ -17,6 +19,8 @@ PROFILE="${ROOT}/guest/build/native_package_profile.py"
 [[ $(uname -s) == Linux && $(uname -m) == x86_64 ]] || { echo 'build-guest.sh requires Linux x86_64' >&2; exit 2; }
 [[ -d ${INPUTS} ]] || { echo "missing PYSOLATE_BUILD_INPUTS: ${INPUTS}" >&2; exit 3; }
 [[ -n ${NUMPY_PACKAGE} && -d ${NUMPY_PACKAGE} ]] || { echo 'set PYSOLATE_NUMPY_PACKAGE_ROOT to the qualified NumPy package tree' >&2; exit 5; }
+[[ -d ${PYYAML_SOURCE} ]] || { echo 'missing pinned PyYAML pure-Python package under build inputs' >&2; exit 10; }
+[[ -f ${PYYAML_ROOT}/LICENSE && -f ${PYYAML_ROOT}/PKG-INFO ]] || { echo 'missing PyYAML package metadata or license' >&2; exit 11; }
 [[ ${RELINK} == 0 || ${RELINK} == 1 ]] || { echo 'PYSOLATE_RELINK must be 0 or 1' >&2; exit 8; }
 
 SDK=${PYSOLATE_WASI_SDK:-"${INPUTS}/tools/wasi-sdk"}
@@ -74,10 +78,10 @@ else
   [[ -f ${RAW_CORE} ]] || { echo "missing reusable raw core: ${RAW_CORE}" >&2; exit 9; }
 fi
 
-python3 - "${PY}/Lib" "${BUILD}/vfs" "${ROOT}/guest/bootstrap.py" "${ROOT}/guest/plm.py" "${ROOT}/guest/prefix.py" "${ROOT}/guest/pysolate.py" "${NUMPY_PACKAGE}" <<'PY'
+python3 - "${PY}/Lib" "${BUILD}/vfs" "${ROOT}/guest/bootstrap.py" "${ROOT}/guest/plm.py" "${ROOT}/guest/prefix.py" "${ROOT}/guest/pysolate.py" "${NUMPY_PACKAGE}" "${PYYAML_SOURCE}" "${PYYAML_ROOT}/LICENSE" "${PYYAML_ROOT}/PKG-INFO" <<'PY'
 from pathlib import Path
 import shutil, sys, os
-lib, out, bootstrap, plm, prefix, pysolate, numpy = map(Path, sys.argv[1:])
+lib, out, bootstrap, plm, prefix, pysolate, numpy, pyyaml, pyyaml_license, pyyaml_metadata = map(Path, sys.argv[1:])
 def copy_tree(src, dst):
     for p in sorted(src.rglob('*')):
         rel=p.relative_to(src); q=dst/rel
@@ -89,6 +93,11 @@ copy_tree(lib, out)
 for src, name in ((bootstrap,'pysolate_bootstrap.py'),(plm,'plm.py'),(prefix,'prefix.py'),(pysolate,'pysolate.py')):
     shutil.copyfile(src, out/name); os.utime(out/name,(0,0))
 copy_tree(numpy, out/'site-packages/numpy')
+copy_tree(pyyaml, out/'site-packages/yaml')
+dist_info = out/'site-packages/PyYAML-6.0.3.dist-info'
+dist_info.mkdir(parents=True, exist_ok=True)
+for src, name in ((pyyaml_license, 'LICENSE'), (pyyaml_metadata, 'METADATA')):
+    shutil.copyfile(src, dist_info/name); os.utime(dist_info/name,(0,0))
 PY
 "${HOST_PY}" -S "${ROOT}/tools/precompile-stdlib.py" "${BUILD}/vfs"
 "${VFS}" pack "${RAW_CORE}" --dir "${BUILD}/vfs::/usr/lib/python3.14" -o "${DIST}/pysolate.wasm"

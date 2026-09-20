@@ -181,11 +181,12 @@ func (r *Runner) run(ctx context.Context, source string, inputs any, plm bool, c
 	defer state.close()
 	ctx = state.ctx
 	request, err := json.Marshal(struct {
-		Source   string          `json:"source"`
-		Inputs   any             `json:"inputs"`
-		PLM      bool            `json:"plm"`
-		Manifest []guestToolSpec `json:"manifest"`
-	}{source, inputs, plm, r.guestManifest})
+		Source    string          `json:"source"`
+		Inputs    any             `json:"inputs"`
+		PLM       bool            `json:"plm"`
+		Workspace bool            `json:"workspace"`
+		Manifest  []guestToolSpec `json:"manifest"`
+	}{source, inputs, plm, fsConfig != nil, r.guestManifest})
 	if err != nil {
 		return Output{}, err
 	}

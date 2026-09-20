@@ -4,7 +4,8 @@
   "target": "wasm32-wasip1",
   "runtime": {
     "cpython": "3.14.0",
-    "numpy": "1.26.0b1"
+    "numpy": "1.26.0b1",
+    "pyyaml": "6.0.3"
   },
   "build_inputs": [
     "tools/build-inputs.lock.json",
@@ -27,7 +28,12 @@
     {"name": "hashlib", "operation": "sha256"},
     {"name": "html", "operation": "html_parse"},
     {"name": "xml", "operation": "xml_parse"},
+    {"name": "yaml", "operation": "yaml_safe_roundtrip"},
+    {"name": "repository-code", "operation": "repository_code_tools"},
+    {"name": "config", "operation": "config_formats"},
+    {"name": "data-utilities", "operation": "data_utilities"},
     {"name": "numpy", "operation": "numpy_core"},
-    {"name": "workspace", "operation": "workspace_edit_acceptance"}
+    {"name": "workspace", "operation": "workspace_edit_acceptance"},
+    {"name": "common-usecases", "operation": "common_usecases_acceptance"}
   ]
 }

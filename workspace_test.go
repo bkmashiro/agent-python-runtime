@@ -83,6 +83,51 @@ result=sorted(x.name for x in Path('/workspace').iterdir())`, nil, lease)
 	}
 }
 
+func TestWorkspaceIsCurrentDirectoryAndImportRoot(t *testing.T) {
+	wasm, err := readGuestArtifact()
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := filepath.Join(t.TempDir(), "workspaces")
+	if err := os.Mkdir(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := workspacepkg.NewManager(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	ref, err := manager.Create([]workspacepkg.InitialFile{{Path: "helper.py", Data: []byte("value = 41\n")}}, workspacepkg.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease, err := manager.Acquire(ref, "workspace-python-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Release()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	runner, err := New(ctx, wasm, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	out, err := runner.RunWorkspace(ctx, `import os
+from helper import value
+open("relative.txt", "w").write(str(value + 1))
+result=[os.getcwd(), value]`, nil, lease)
+	var value []any
+	decodeErr := json.Unmarshal(out.Value, &value)
+	if err != nil || decodeErr != nil || len(value) != 2 || value[0] != "/workspace" || value[1] != float64(41) {
+		t.Fatalf("out=%+v err=%v decodeErr=%v", out, err, decodeErr)
+	}
+	file, err := lease.ReadFile("relative.txt", 16)
+	if err != nil || string(file.Data) != "42" {
+		t.Fatalf("file=%#v err=%v", file, err)
+	}
+}
+
 func TestWorkspaceIsNotAmbient(t *testing.T) {
 	wasm, err := readGuestArtifact()
 	if err != nil {

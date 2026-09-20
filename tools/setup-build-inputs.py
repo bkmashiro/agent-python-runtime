@@ -40,6 +40,7 @@ def main():
         'wasmtime-linux-x86_64': ('tools/wasmtime', False),
         'wasi-vfs-cli-linux-x86_64': ('tools/wasi-vfs-cli', True),
         'wasi-vfs-static-library': ('tools/wasi-vfs-lib', True),
+        'pyyaml-source': ('pure/pyyaml', False),
     }
     def digest(file):
         with file.open('rb') as stream:

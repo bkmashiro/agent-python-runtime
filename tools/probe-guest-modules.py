@@ -65,6 +65,42 @@ import xml.etree.ElementTree as ET
 value = ET.fromstring("<items><item id='7'/></items>").find("item").attrib["id"]
 assert value == "7"
 """,
+    "yaml_safe_roundtrip": """
+import yaml
+from importlib.metadata import version
+assert version("PyYAML") == yaml.__version__ == "6.0.3"
+document = yaml.safe_load("workflow:\\n  retries: 2\\n  enabled: true\\n")
+encoded = yaml.safe_dump(document, sort_keys=True)
+value = yaml.safe_load(encoded)["workflow"]
+assert value == {"enabled": True, "retries": 2}
+""",
+    "repository_code_tools": """
+import ast, difflib, io, tokenize
+from pathlib import PurePosixPath
+tree = ast.parse("def add(a, b):\\n    return a + b\\n")
+tokens = [token.string for token in tokenize.generate_tokens(io.StringIO("answer = 42\\n").readline)]
+diff = list(difflib.unified_diff(["old\\n"], ["new\\n"], lineterm=""))
+value = {"function": tree.body[0].name, "token": "answer" in tokens, "diff_lines": len(diff), "path": str(PurePosixPath("src") / "main.py")}
+assert value == {"function": "add", "token": True, "diff_lines": 5, "path": "src/main.py"}
+""",
+    "config_formats": """
+import configparser, tomllib
+toml = tomllib.loads('[project]\\nname = "agent-core"\\n')
+ini = configparser.ConfigParser()
+ini.read_string("[run]\\nenabled = yes\\n")
+value = {"name": toml["project"]["name"], "enabled": ini.getboolean("run", "enabled")}
+assert value == {"name": "agent-core", "enabled": True}
+""",
+    "data_utilities": """
+import base64, json, statistics
+from collections import Counter
+from decimal import Decimal
+from urllib.parse import parse_qs, urlencode
+rows = [json.loads(line) for line in '{"kind":"a","value":1}\\n{"kind":"a","value":3}\\n'.splitlines()]
+query = urlencode({"q": "hello world"})
+value = {"count": Counter(row["kind"] for row in rows)["a"], "median": statistics.median(row["value"] for row in rows), "decimal": str(Decimal("0.1") + Decimal("0.2")), "query": parse_qs(query)["q"][0], "base64": base64.b64encode(b"abc").decode()}
+assert value == {"count": 2, "median": 2.0, "decimal": "0.3", "query": "hello world", "base64": "YWJj"}
+""",
     "numpy_core": """
 import numpy as np
 matrix = np.array([[1, 2], [3, 4]], dtype=np.int64)
@@ -72,6 +108,8 @@ value = {"sum": int(matrix.sum()), "dot": int(np.dot(matrix[0], matrix[1]))}
 assert value == {"sum": 10, "dot": 11}
 """,
 }
+
+ACCEPTANCE_OPERATIONS = {"workspace_edit_acceptance", "common_usecases_acceptance"}
 
 
 def load_profile(path: Path) -> dict:
@@ -88,7 +126,7 @@ def load_profile(path: Path) -> dict:
         if item["name"] in names:
             raise ValueError(f"duplicate qualification name: {item['name']}")
         names.add(item["name"])
-        if item["operation"] != "workspace_edit_acceptance" and item["operation"] not in OPERATIONS:
+        if item["operation"] not in ACCEPTANCE_OPERATIONS and item["operation"] not in OPERATIONS:
             raise ValueError(f"unknown qualification operation: {item['operation']}")
     return profile
 
@@ -100,14 +138,15 @@ def guest_source(profile: dict) -> str:
     ]
     for item in profile["qualification"]:
         operation = item["operation"]
-        if operation == "workspace_edit_acceptance":
+        if operation in ACCEPTANCE_OPERATIONS:
             continue
         name = item["name"]
         body = textwrap.dedent(OPERATIONS[operation]).strip()
         sections.append(f"try:\n{textwrap.indent(body, '    ')}\n    checks[{name!r}] = {{'ok': True, 'value': value}}\n")
         sections.append(f"except BaseException as error:\n    checks[{name!r}] = {{'ok': False, 'error': f'{{type(error).__name__}}: {{error}}'}}\n")
     sections.append("import numpy as _profile_numpy\n")
-    sections.append("result = {'runtime': {'python': '.'.join(str(x) for x in sys.version_info[:3]), 'numpy': _profile_numpy.__version__}, 'checks': checks}\n")
+    sections.append("import yaml as _profile_yaml\n")
+    sections.append("result = {'runtime': {'python': '.'.join(str(x) for x in sys.version_info[:3]), 'numpy': _profile_numpy.__version__, 'pyyaml': _profile_yaml.__version__}, 'checks': checks}\n")
     return "".join(sections)
 
 
@@ -155,14 +194,42 @@ def qualify(profile_path: Path, guest: Path) -> dict:
             }
         except Exception as error:
             checks["workspace"] = {"ok": False, "error": f"{type(error).__name__}: {error}"}
+    if any(item["operation"] == "common_usecases_acceptance" for item in profile["qualification"]):
+        try:
+            common = run_json(["go", "run", "./examples/agent-core-usecases", "-guest", str(guest)], ROOT)
+            value = common["value"]
+            changes = common["changes"]
+            checks["common-usecases"] = {
+                "ok": value["project"] == "agent-core"
+                and value["cwd"] == "/workspace"
+                and value["mean"] == 15
+                and value["gross_price"] == 150
+                and common["host_requests"] == 1
+                and changes["added"] == 3
+                and changes["modified"] == 1,
+                "value": {
+                    "project": value["project"],
+                    "cwd": value["cwd"],
+                    "mean": value["mean"],
+                    "gross_price": value["gross_price"],
+                    "added": changes["added"],
+                    "modified": changes["modified"],
+                    "host_requests": common["host_requests"],
+                },
+            }
+        except Exception as error:
+            checks["common-usecases"] = {"ok": False, "error": f"{type(error).__name__}: {error}"}
 
     expected = {item["name"] for item in profile["qualification"]}
     observed_runtime = guest_result["runtime"]
     passed = (
         set(checks) == expected
         and all(value.get("ok") is True for value in checks.values())
-        and observed_runtime.get("python") == profile["runtime"]["cpython"]
-        and observed_runtime.get("numpy") == profile["runtime"]["numpy"]
+        and observed_runtime == {
+            "python": profile["runtime"]["cpython"],
+            "numpy": profile["runtime"]["numpy"],
+            "pyyaml": profile["runtime"]["pyyaml"],
+        }
     )
     return {
         "schema_version": 1,

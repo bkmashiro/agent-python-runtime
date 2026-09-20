@@ -12,7 +12,7 @@
 6. Take a post-run snapshot and call `workspace.Diff`.
 7. Read selected files through `Lease.Files`, then release the lease and close the manager.
 
-A lease can persist across multiple disposable Guests. Python memory and `/tmp` do not persist. Ordinary `Run` has no `/workspace` mount.
+A lease can persist across multiple disposable Guests. Python memory and `/tmp` do not persist. `RunWorkspace` starts user code with `/workspace` as its current directory and first import root, so relative file access and imports from the private tree work naturally. Ordinary `Run` has no `/workspace` mount and does not receive this import path.
 
 ```go
 before, err := lease.Snapshot()
@@ -58,6 +58,7 @@ Run the real Host-tool and workspace workflow:
 
 ```sh
 go run ./examples/workspace-edit -guest dist/pysolate.wasm
+go run ./examples/agent-core-usecases -guest dist/pysolate.wasm
 ```
 
 The example uses:
@@ -67,4 +68,4 @@ The example uses:
 - an idempotent Host-side write behind `audit.record(...)`;
 - a fixture containing Python, JSON, Markdown and binary files.
 
-The Guest edits Python and JSON, writes a report, and leaves the source fixture unchanged. The command prints only Guest output, opaque revisions and bounded change metadata. It does not print the Host backing path or SQLite DSN.
+The first Guest edits Python and JSON, writes a report, and leaves the source fixture unchanged. The common-usecase example additionally imports a local workspace module, reads TOML/CSV/JSONL, safely updates YAML, parses Python with `ast`, computes NumPy statistics, calls a namespaced Host market-data tool backed by a real local HTTP request, and writes normalized CSV/JSON/Markdown results. Commands print only Guest output, opaque revisions and bounded change metadata. They do not print Host backing paths or service credentials.

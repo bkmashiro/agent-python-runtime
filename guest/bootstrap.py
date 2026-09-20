@@ -1,5 +1,6 @@
 """Execution convention: inputs in, result out; optional whole-program PLM."""
 import json
+import os
 import sys
 from _pysolate import call, prepare, resolve
 import pysolate
@@ -66,6 +67,10 @@ def execute(request):
             }
         scope = {"__name__": "__main__", "inputs": request["inputs"]}
         scope.update(pysolate.configure(request["manifest"], invoke_tool))
+        if request.get("workspace"):
+            os.chdir("/workspace")
+            if "/workspace" not in sys.path:
+                sys.path.insert(0, "/workspace")
         code = request["source"]
         if request.get("plm"):
             import ast

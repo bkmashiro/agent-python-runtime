@@ -19,9 +19,10 @@ class ProfileTests(unittest.TestCase):
         source = probe.guest_source(profile)
         compile(source, "<qualification>", "exec")
         for item in profile["qualification"]:
-            if item["operation"] != "workspace_edit_acceptance":
+            if item["operation"] not in probe.ACCEPTANCE_OPERATIONS:
                 self.assertIn(repr(item["name"]), source)
         self.assertNotIn("workspace_edit_acceptance", source)
+        self.assertNotIn("common_usecases_acceptance", source)
 
     def test_unknown_operation_and_duplicate_name_fail_closed(self):
         base = {

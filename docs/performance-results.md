@@ -69,6 +69,18 @@ A final matched **`result = 42`** CLI process test compares the original Guest w
 
 The final Guest SHA-256 is `9ae9e368764db31505d4314801256361f4117fe288478efff4db321a167245bb`. Keep the old artifact for existing durable definitions: artifact identity remains enforced; this change does not migrate histories.
 
+## Long-running HTTP service hot path
+
+The bounded local service keeps separate prepared no-workspace and workspace images, but shares one in-memory wazero compilation cache between their Runners. On the same 2-vCPU/2-GiB Linux arm64 VM with Go 1.26.0 and artifact `35d931b29b8595aefa6fa1c01763a01afb7a7031d1c0e65bc7db3f69a95ae005` (34,199,690 bytes), sharing compilation reduced one-process service preparation from **5.44 s to 2.95 s**. Both prepared images still initialize independently; the cache removes the second native compilation rather than hiding preparation inside request timing.
+
+The real loopback HTTP benchmark excluded one warm-up per worker and then measured 50 requests per worker. It includes request JSON, TCP loopback, admission, Guest creation/execution/cleanup, response encoding and client decoding. The workspace case also writes one file and computes before/after snapshots plus a diff. Observed final p50/p95 E2E latencies were:
+
+- concurrency 1: plain **1.48/2.33 ms**; workspace **1.71/1.82 ms**;
+- concurrency 2: plain **2.05/3.09 ms**; workspace **2.33/3.03 ms**;
+- concurrency 4 on two vCPUs: plain **4.13/7.79 ms**; workspace **4.41/6.80 ms**.
+
+An extra request sent while all four slots were blocked received HTTP 429 in **0.10 ms**; admitted requests were not placed in an implicit queue. These are descriptive tails from 50 samples per worker, not production SLOs or broad capacity claims. Raw request rows and exact metadata are in [`performance-data/service-hot/`](performance-data/service-hot/). Reproduce with `go run ./cmd/pysolate-service-bench -guest dist/pysolate.wasm -iterations 50 -concurrency 1,2,4 -max-active 4 -mode all`.
+
 ## Integration checks and remaining costs
 
 `make check` passes against the final Guest on macOS; all root and durable tests pass in Linux. Targeted real PLM/prefix/seeded-preparation race tests and Store/journal/Executor race tests pass. The final seeded-COW + read-ahead stack also recovered after a Linux VM HardStop between the provider's commit and journal outcome: one read dispatch, two write requests, one idempotent effect. This does not establish physical-host power-loss tolerance.

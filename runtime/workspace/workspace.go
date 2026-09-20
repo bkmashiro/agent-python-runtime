@@ -50,15 +50,15 @@ func (limits Limits) validate() error {
 }
 
 type InitialFile struct {
-	Path       string
-	Data       []byte
-	Executable bool
+	Path       string `json:"path"`
+	Data       []byte `json:"data"`
+	Executable bool   `json:"executable,omitempty"`
 }
 
 type File struct {
-	Path       string
-	Data       []byte
-	Executable bool
+	Path       string `json:"path"`
+	Data       []byte `json:"data"`
+	Executable bool   `json:"executable,omitempty"`
 }
 
 type treeUsage struct {
@@ -218,6 +218,33 @@ func validRef(ref Ref) bool {
 	return err == nil
 }
 
+// Destroy removes one unleased workspace. Callers must release any Lease first.
+func (manager *Manager) Destroy(ref Ref) error {
+	if manager == nil {
+		return ErrWorkspaceClosed
+	}
+	if !validRef(ref) {
+		return fmt.Errorf("%w: invalid workspace reference", ErrInvalidWorkspace)
+	}
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	if manager.closed {
+		return ErrWorkspaceClosed
+	}
+	item := manager.entries[ref]
+	if item == nil {
+		return ErrWorkspaceNotFound
+	}
+	if item.owner != "" {
+		return ErrWorkspaceBusy
+	}
+	if err := os.RemoveAll(item.root); err != nil {
+		return err
+	}
+	delete(manager.entries, ref)
+	return nil
+}
+
 func (manager *Manager) Close() error {
 	if manager == nil {
 		return nil
@@ -319,6 +346,47 @@ func (lease *Lease) Files() ([]File, error) {
 		files = append(files, File{Path: name, Data: data, Executable: usage.entries[name].Perm()&0o111 != 0})
 	}
 	return files, nil
+}
+
+// ReadFile returns one regular file without materializing the rest of the
+// workspace. maxBytes bounds the response allocation.
+func (lease *Lease) ReadFile(name string, maxBytes uint64) (File, error) {
+	if lease == nil || maxBytes == 0 {
+		return File{}, ErrInvalidWorkspace
+	}
+	lease.mu.Lock()
+	defer lease.mu.Unlock()
+	if lease.released {
+		return File{}, ErrWorkspaceClosed
+	}
+	if lease.running {
+		return File{}, ErrWorkspaceBusy
+	}
+	cleaned, err := cleanGuestPath(name, lease.filesystem.limits.MaxDepth, false)
+	if err != nil || cleaned != name {
+		return File{}, fmt.Errorf("%w: invalid file path", ErrInvalidWorkspace)
+	}
+	usage, err := scanOrdinaryTree(lease.root, lease.filesystem.limits)
+	if err != nil {
+		return File{}, err
+	}
+	size, ok := usage.sizes[name]
+	if !ok {
+		return File{}, fs.ErrNotExist
+	}
+	if size > maxBytes {
+		return File{}, fmt.Errorf("%w: file exceeds read limit", ErrInvalidWorkspace)
+	}
+	root, err := os.OpenRoot(lease.root)
+	if err != nil {
+		return File{}, err
+	}
+	defer root.Close()
+	data, err := root.ReadFile(name)
+	if err != nil {
+		return File{}, err
+	}
+	return File{Path: name, Data: data, Executable: usage.entries[name].Perm()&0o111 != 0}, nil
 }
 
 func (lease *Lease) Release() error {

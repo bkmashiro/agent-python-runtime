@@ -82,6 +82,40 @@ func TestManagerRejectsTraversalAndOversizedInput(t *testing.T) {
 	}
 }
 
+func TestManagerDestroyRequiresReleasedLease(t *testing.T) {
+	manager := newTestManager(t)
+	ref, err := manager.Create([]InitialFile{{Path: "small.txt", Data: []byte("ok")}}, DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease, err := manager.Acquire(ref, "destroy-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Destroy(ref); !errors.Is(err, ErrWorkspaceBusy) {
+		t.Fatalf("destroy leased workspace err=%v", err)
+	}
+	file, err := lease.ReadFile("small.txt", 2)
+	if err != nil || string(file.Data) != "ok" {
+		t.Fatalf("read file=%#v err=%v", file, err)
+	}
+	if _, err := lease.ReadFile("small.txt", 1); !errors.Is(err, ErrInvalidWorkspace) {
+		t.Fatalf("bounded read err=%v", err)
+	}
+	if _, err := lease.ReadFile("../escape", 2); !errors.Is(err, ErrInvalidWorkspace) {
+		t.Fatalf("traversal read err=%v", err)
+	}
+	if err := lease.Release(); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Destroy(ref); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Acquire(ref, "after-destroy"); !errors.Is(err, ErrWorkspaceNotFound) {
+		t.Fatalf("acquire destroyed workspace err=%v", err)
+	}
+}
+
 func TestMountedFilesystemRejectsEscapeLinksAndQuotaOverflow(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "workspaces")
 	if err := os.Mkdir(base, 0o700); err != nil {

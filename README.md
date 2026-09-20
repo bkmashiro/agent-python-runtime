@@ -85,6 +85,16 @@ Workspace-prepared images need the same WASI preopen shape captured at initializ
 go run ./examples/workspace-edit -guest dist/pysolate.wasm
 ```
 
+### Long-running service
+
+`cmd/pysolate-server` keeps the compiled module and prepared clean images hot behind a bounded local HTTP API. It supports stateless Runs plus create/run/snapshot/read/destroy workspace lifecycles. Saturated execution capacity returns HTTP 429 immediately; the service does not grow an implicit queue.
+
+```sh
+go run ./cmd/pysolate-server -guest dist/pysolate.wasm -listen 127.0.0.1:8080 -max-active 4
+```
+
+The standalone binary intentionally grants no Host tools. An embedding application passes its trusted provider/MCP-derived `Manifest` to `service.New`; changing that catalog rebuilds service preparation but not the Guest artifact. See [the service API, trust boundary and loopback benchmark](docs/service.md).
+
 ## Optional execution modes
 
 - `RunPLM` prepares only explicitly allowed stable, read-only snapshots. Values and errors are delivered at their original Python calls. Failed tools are not automatically retried.
@@ -131,6 +141,8 @@ durable/                   SQLite Store and recovery driver
 runtime/workspace/         bounded rooted private filesystems
 guest/                     CPython bridge, execution and small AST passes
 cmd/pysolate/              CLI
+cmd/pysolate-server/       bounded local HTTP service
+cmd/pysolate-service-bench/ real loopback hot-path benchmark
 ```
 
 ## Check

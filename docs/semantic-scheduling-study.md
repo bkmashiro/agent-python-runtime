@@ -1,7 +1,7 @@
 # Semantic scheduling study: phase costs before policy
 
-Status: proposed study, not a supported scheduling capability.
-Implementation baseline: `51293c7b91ab6b24011fb81f7a1769b378c34e39`.
+Status: phase harness and bounded live-I/O scheduling implemented; broader policy remains a study.
+Implementation baseline: `51293c7b91ab6b24011fb81f7a1769b378c34e39`; live-I/O implementation and evidence are committed with this document.
 
 ## Question
 
@@ -18,9 +18,10 @@ This document does not authorize arbitrary preemption, unsafe effect retries, a 
 
 ## Current boundaries
 
-- `Runner.Resume` reconstructs one deterministic attempt and returns `ErrParked` when a durable wait cannot yet continue.
+- `Runner.Advance` reconstructs one deterministic attempt and returns durable completion or park as explicit state.
 - A parked durable Run retains its definition, completed call history, and wait identity; it does not retain a resumable Python stack.
-- `Executor` provides bounded active attempts and FIFO admission. A Host call made by a live Guest keeps that active slot until the call returns.
+- `Executor` separately bounds running and resident attempts. Inline Host calls keep the running slot; an explicitly `ExternalIO` Tool yields it while retaining the live Guest and reacquires it before Python continues.
+- Ready live continuations precede new admissions, with a bounded burst; external Tool and resident counts remain independently bounded.
 - Tool recovery declarations determine whether an unresolved external operation may be dispatched, looked up, parked, or sent for manual handling.
 - Prepared copy/COW can reduce reconstruction cost for one fixed seed. COW is Linux-only.
 
@@ -115,6 +116,20 @@ The checked-in pilot data under `docs/performance-data/semantic-phases/` used th
 
 The pilot establishes measurement separation and workload correctness. It does not establish a population-level scheduling gain; that requires Linux memory measurements and controlled competing arrivals after a decision boundary is found.
 
+### Live-I/O slot reuse pilot
+
+`ExternalIO` is an explicit Tool scheduling declaration. During that Host callback, the Executor releases only the running slot. The Wasm instance, Python stack, and Guest memory remain resident, so continuation does not reconstruct or replay the program. Once the callback returns, the attempt joins the ready-continuation queue and must reacquire a running slot before Python resumes. `MaxResident` and `MaxInflightTools` independently bound retained Guests and concurrent external callbacks.
+
+The checked-in five-sample pilot under `docs/performance-data/live-wait/` used the same `d75b6f9c…3729` artifact, macOS arm64, copy preparation, two fixed Runs, one running slot, two resident slots, two external-tool slots, no private heap fixture, and a controlled 100 ms Host delay. Setup was excluded from the compared phase:
+
+- Inline scheduling serialized the Host waits: median first park batch **238.16 ms**, with peak Host concurrency **1**.
+- `ExternalIO` overlapped the two Host waits: median first park batch **125.91 ms**, with peak Host concurrency **2**.
+- The controlled batch duration fell by **47.1%**. This demonstrates capacity reuse for an I/O-heavy shape; it is not a general throughput or production-latency claim.
+
+The later approval boundary still performs the existing durable park and replay. Resume timings are recorded but are not attributed to live-I/O scheduling because no live Tool callback occurs in that phase. macOS does not expose the Linux `/proc` RSS measurement used by this harness, so this pilot makes no memory claim. Run `./demos/07-live-io.sh` for the side-by-side demonstration.
+
+The scheduling declaration is intentionally absent from the durable Tool snapshot: it may be tuned without invalidating Runs, while `Version` and `Recovery` remain semantic compatibility boundaries. A crash after an external response but before journal completion retains the existing recovery semantics; yielding a slot does not make an unsafe operation retryable.
+
 ## Cost model
 
 For one waiting Run, retaining a Guest has an approximate memory-area cost:
@@ -148,8 +163,8 @@ Optimization estimates never decide effect safety. Before comparing costs, filte
 
 If single-Run phase data supports further work, compare policies in this order:
 
-1. fixed concurrency/FIFO;
-2. result-ready continuation before new work, with aging;
+1. fixed concurrency/FIFO with inline Host calls;
+2. explicit live-I/O slot release plus result-ready continuation, with a bounded admission burst;
 3. explicit durable park and re-admission;
 4. dependency-aware ordering supplied by the Harness;
 5. safe pressure eviction only if measured memory pressure and reconstruction costs justify it.

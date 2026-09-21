@@ -32,15 +32,29 @@ var (
 	ErrCancelled     = errors.New("durable run cancelled")
 )
 
+// SchedulingClass controls only local Executor capacity while a Host callback
+// is live. It does not change durable recovery or replay semantics.
+type SchedulingClass string
+
+const (
+	// Inline keeps the running slot for the whole Host call. It is the default.
+	Inline SchedulingClass = "inline"
+	// ExternalIO lets an Executor reuse the running slot while the opted-in
+	// Host call blocks. The live Guest still counts against MaxResident.
+	ExternalIO SchedulingClass = "external_io"
+)
+
 // Tool is the durable declaration for one Host tool. Version and Recovery
 // are persisted with a run; changing either one makes that run non-resumable.
+// Scheduling is Host-local resource policy and is deliberately not persisted.
 type Tool struct {
-	Name     string
-	Version  string
-	Call     pysolate.Tool
-	Recovery RecoveryMode
-	Lookup   LookupFunc
-	Wait     WaitFunc
+	Name       string
+	Version    string
+	Call       pysolate.Tool
+	Recovery   RecoveryMode
+	Lookup     LookupFunc
+	Wait       WaitFunc
+	Scheduling SchedulingClass
 }
 
 // LookupFunc resolves a previously reserved external call. Done may contain a
@@ -141,6 +155,16 @@ func NewRunner(ctx context.Context, store *Store, artifact []byte, environmentVe
 		if _, exists := toolMap[tool.Name]; exists {
 			return nil, fmt.Errorf("%w: duplicate tool %q", ErrInvalidRunner, tool.Name)
 		}
+		switch tool.Scheduling {
+		case "", Inline:
+			tool.Scheduling = Inline
+		case ExternalIO:
+			if tool.Recovery == WaitMode {
+				return nil, fmt.Errorf("%w: wait tool %q cannot use external I/O scheduling", ErrInvalidRunner, tool.Name)
+			}
+		default:
+			return nil, fmt.Errorf("%w: tool %q has invalid scheduling class", ErrInvalidRunner, tool.Name)
+		}
 		switch tool.Recovery {
 		case RetrySafe, Idempotent, Manual:
 			if tool.Call == nil {
@@ -170,7 +194,7 @@ func NewRunner(ctx context.Context, store *Store, artifact []byte, environmentVe
 	manifest := make(pysolate.Manifest, len(toolMap))
 	for _, tool := range toolMap {
 		snapshot = append(snapshot, toolDeclaration{Name: tool.Name, Version: tool.Version, Recovery: tool.Recovery})
-		manifest[tool.Name] = pysolate.ToolSpec{Call: tool.Call}
+		manifest[tool.Name] = pysolate.ToolSpec{Call: scheduledTool(tool.Scheduling, tool.Call)}
 	}
 	sort.Slice(snapshot, func(left, right int) bool { return snapshot[left].Name < snapshot[right].Name })
 	encoded, err := json.Marshal(snapshot)
@@ -203,6 +227,27 @@ func NewRunner(ctx context.Context, store *Store, artifact []byte, environmentVe
 		toolSnapshot:       json.RawMessage(encoded),
 		active:             make(map[string]context.CancelFunc),
 	}, nil
+}
+
+func scheduledTool(class SchedulingClass, call pysolate.Tool) pysolate.Tool {
+	if class != ExternalIO {
+		return call
+	}
+	return func(ctx context.Context, args json.RawMessage) (result any, err error) {
+		err = executeExternalIO(ctx, func() error {
+			result, err = call(ctx, args)
+			return err
+		})
+		return result, err
+	}
+}
+
+func executeExternalIO(ctx context.Context, call func() error) error {
+	if err := yieldExecution(ctx); err != nil {
+		return err
+	}
+	callErr := call()
+	return errors.Join(callErr, reacquireExecution(ctx))
 }
 
 func waitToolPlaceholder(context.Context, json.RawMessage) (any, error) {
@@ -543,7 +588,17 @@ func (journal *journal) complete(logged LoggedCall, response []byte) ([]byte, er
 }
 
 func (journal *journal) lookup(ctx context.Context, logged LoggedCall, tool Tool, next func(context.Context) []byte) ([]byte, error) {
-	resolved, err := tool.Lookup(ctx, logged.Arguments)
+	var resolved LookupResult
+	var err error
+	lookup := func() error {
+		resolved, err = tool.Lookup(ctx, logged.Arguments)
+		return err
+	}
+	if tool.Scheduling == ExternalIO {
+		err = executeExternalIO(ctx, lookup)
+	} else {
+		err = lookup()
+	}
 	if err != nil {
 		return nil, err
 	}

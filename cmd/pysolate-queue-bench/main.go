@@ -28,12 +28,21 @@ func run() error {
 	guest := flag.String("guest", "dist/pysolate.wasm", "Guest")
 	mode := flag.String("mode", "executor", "executor/semaphore/unbounded")
 	tasks := flag.Int("tasks", 16, "logical Runs")
-	active := flag.Int("active", 2, "active attempt bound")
+	active := flag.Int("active", 2, "running Guest bound")
+	resident := flag.Int("resident", 0, "resident Guest bound; defaults to active")
+	toolActive := flag.Int("tool-active", 0, "in-flight external Tool bound; defaults to resident")
+	externalIO := flag.Bool("external-io", false, "let the opted-in probe yield its running slot")
 	heap := flag.Int("heap", 8, "private allocation MiB per Guest")
 	hold := flag.Duration("hold", 200*time.Millisecond, "synthetic Host wait")
 	cow := flag.Bool("cow", true, "use seeded COW, false selects copy")
 	flag.Parse()
-	if *tasks < 1 || *tasks > 64 || *active < 1 || *heap < 0 || *heap > 64 {
+	if *resident == 0 {
+		*resident = *active
+	}
+	if *toolActive == 0 {
+		*toolActive = *resident
+	}
+	if *tasks < 1 || *tasks > 64 || *active < 1 || *resident < *active || *toolActive < 1 || *heap < 0 || *heap > 64 {
 		return errors.New("invalid bounded fixture")
 	}
 	if *mode != "executor" && *mode != "semaphore" && *mode != "unbounded" {
@@ -55,13 +64,17 @@ func run() error {
 	defer store.Close()
 	var held, peak atomic.Int32
 	var peakRSS atomic.Int64
+	scheduling := durable.Inline
+	if *externalIO {
+		scheduling = durable.ExternalIO
+	}
 	sample := func() {
 		v := rss()
 		for old := peakRSS.Load(); v > old && !peakRSS.CompareAndSwap(old, v); old = peakRSS.Load() {
 		}
 	}
 	tools := []durable.Tool{
-		{Name: "probe", Version: "v1", Recovery: durable.RetrySafe, Call: func(ctx context.Context, _ json.RawMessage) (any, error) {
+		{Name: "probe", Version: "v1", Recovery: durable.RetrySafe, Scheduling: scheduling, Call: func(ctx context.Context, _ json.RawMessage) (any, error) {
 			n := held.Add(1)
 			defer held.Add(-1)
 			for old := peak.Load(); n > old && !peak.CompareAndSwap(old, n); old = peak.Load() {
@@ -100,7 +113,7 @@ func run() error {
 	}
 	var executor *durable.Executor
 	if *mode == "executor" {
-		executor, err = durable.NewExecutor(runner, durable.Limits{MaxActive: *active, MaxQueued: *tasks})
+		executor, err = durable.NewExecutor(runner, durable.Limits{MaxRunning: *active, MaxResident: *resident, MaxInflightTools: *toolActive, MaxQueued: *tasks})
 		if err != nil {
 			return err
 		}
@@ -179,15 +192,19 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	if *mode != "unbounded" && int(peak.Load()) > *active {
-		return errors.New("admission bound exceeded")
+	peakLimit := *active
+	if *mode == "executor" && *externalIO {
+		peakLimit = *toolActive
+	}
+	if *mode != "unbounded" && int(peak.Load()) > peakLimit {
+		return errors.New("configured concurrency bound exceeded")
 	}
 	var peakMem, parkedMem any
 	if peakRSS.Load() > 0 {
 		peakMem = peakRSS.Load()
 		parkedMem = afterPark
 	}
-	return json.NewEncoder(os.Stdout).Encode(map[string]any{"mode": *mode, "tasks": *tasks, "active_limit": *active, "heap_mib": *heap, "synthetic_hold_ns": hold.Nanoseconds(), "setup_ns": setup.Nanoseconds(), "park_batch_ns": parked.Nanoseconds(), "resume_batch_ns": resumed.Nanoseconds(), "peak_host_waits": peak.Load(), "sampled_peak_rss_kib": peakMem, "after_park_rss_kib": parkedMem, "park_request_ns": phaseLatencies[0], "resume_request_ns": phaseLatencies[1], "completed": *tasks})
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{"mode": *mode, "tasks": *tasks, "running_limit": *active, "resident_limit": *resident, "tool_limit": *toolActive, "external_io": *externalIO, "heap_mib": *heap, "synthetic_hold_ns": hold.Nanoseconds(), "setup_ns": setup.Nanoseconds(), "park_batch_ns": parked.Nanoseconds(), "resume_batch_ns": resumed.Nanoseconds(), "peak_host_waits": peak.Load(), "sampled_peak_rss_kib": peakMem, "after_park_rss_kib": parkedMem, "park_request_ns": phaseLatencies[0], "resume_request_ns": phaseLatencies[1], "completed": *tasks})
 }
 func rss() int64 {
 	raw, _ := os.ReadFile("/proc/self/status")

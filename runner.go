@@ -181,18 +181,9 @@ func (r *Runner) run(ctx context.Context, source string, inputs any, plm bool, c
 	state.fsConfig = fsConfig
 	defer state.close()
 	ctx = state.ctx
-	request, err := json.Marshal(struct {
-		Source    string          `json:"source"`
-		Inputs    any             `json:"inputs"`
-		PLM       bool            `json:"plm"`
-		Workspace bool            `json:"workspace"`
-		Manifest  []guestToolSpec `json:"manifest"`
-	}{source, inputs, plm, fsConfig != nil, r.guestManifest})
+	request, err := r.marshalRunRequest(source, inputs, plm, fsConfig != nil)
 	if err != nil {
 		return Output{}, err
-	}
-	if len(request) > maxMessage {
-		return Output{}, errors.New("request exceeds 1 MiB")
 	}
 	stdout, stderr := &boundedText{}, &boundedText{}
 	// No host directories, environment, stdin, network or process capabilities.
@@ -201,50 +192,82 @@ func (r *Runner) run(ctx context.Context, source string, inputs any, plm bool, c
 		return Output{}, err
 	}
 	defer m.Close(context.Background())
-	fail := func(err error) (Output, error) {
-		var exited *wazerosys.ExitError
-		if state.controlErr != nil && errors.As(err, &exited) && exited.ExitCode() == journalExitCode {
-			return Output{Stdout: stdout.String()}, state.controlErr
-		}
-		return Output{Stdout: stdout.String()}, fmt.Errorf("%w%s", err, stderr.String())
-	}
-	if chunks != nil {
-		if err := receiveSource(ctx, m, request, chunks); err != nil {
-			return fail(err)
-		}
-		// Input and source already belong to this Guest. Do not send a second copy.
-		request = []byte(`{"prefix":true}`)
-	}
-	packed, err := callWithBytes(ctx, m, "execute", request)
+	response, err := executeGuest(ctx, m, request, chunks)
 	if err != nil {
-		return fail(err)
-	}
-	// execute returns (length << 32) | pointer. Go copies before release/Close.
-	p, n := uint32(packed[0]), uint32(packed[0]>>32)
-	if p == 0 {
-		return fail(errors.New("Guest execution bridge failed: "))
-	}
-	defer m.ExportedFunction("release").Call(ctx, uint64(p))
-	if n > maxMessage {
-		return fail(errors.New("result exceeds 1 MiB"))
-	}
-	data, ok := m.Memory().Read(p, n)
-	if !ok {
-		return fail(errors.New("Guest result outside linear memory"))
-	}
-	var response struct {
-		Value       json.RawMessage `json:"value"`
-		Error       string          `json:"error"`
-		Transformed string          `json:"transformed"`
-	}
-	if err := json.Unmarshal(data, &response); err != nil {
-		return fail(err)
+		return runFailure(state, stdout, stderr, err)
 	}
 	out := Output{Value: response.Value, Stdout: stdout.String(), Transformed: response.Transformed}
 	if response.Error != "" {
 		return out, &PythonError{Message: response.Error}
 	}
 	return out, nil
+}
+
+func (r *Runner) marshalRunRequest(source string, inputs any, plm, workspace bool) ([]byte, error) {
+	request, err := json.Marshal(struct {
+		Source    string          `json:"source"`
+		Inputs    any             `json:"inputs"`
+		PLM       bool            `json:"plm"`
+		Workspace bool            `json:"workspace"`
+		Manifest  []guestToolSpec `json:"manifest"`
+	}{source, inputs, plm, workspace, r.guestManifest})
+	if err != nil {
+		return nil, err
+	}
+	if len(request) > maxMessage {
+		return nil, errors.New("request exceeds 1 MiB")
+	}
+	return request, nil
+}
+
+func executeGuest(ctx context.Context, m api.Module, request []byte, chunks <-chan string) (guestExecutionResponse, error) {
+	if chunks != nil {
+		if err := receiveSource(ctx, m, request, chunks); err != nil {
+			return guestExecutionResponse{}, err
+		}
+		// Input and source already belong to this Guest. Do not send a second copy.
+		request = []byte(`{"prefix":true}`)
+	}
+	packed, err := callWithBytes(ctx, m, "execute", request)
+	if err != nil {
+		return guestExecutionResponse{}, err
+	}
+	return readGuestResponse(ctx, m, packed)
+}
+
+type guestExecutionResponse struct {
+	Value       json.RawMessage `json:"value"`
+	Error       string          `json:"error"`
+	Transformed string          `json:"transformed"`
+}
+
+func readGuestResponse(ctx context.Context, m api.Module, packed []uint64) (guestExecutionResponse, error) {
+	// execute returns (length << 32) | pointer. Go copies before release/Close.
+	p, n := uint32(packed[0]), uint32(packed[0]>>32)
+	if p == 0 {
+		return guestExecutionResponse{}, errors.New("Guest execution bridge failed: ")
+	}
+	defer m.ExportedFunction("release").Call(ctx, uint64(p))
+	if n > maxMessage {
+		return guestExecutionResponse{}, errors.New("result exceeds 1 MiB")
+	}
+	data, ok := m.Memory().Read(p, n)
+	if !ok {
+		return guestExecutionResponse{}, errors.New("Guest result outside linear memory")
+	}
+	var response guestExecutionResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		return guestExecutionResponse{}, err
+	}
+	return response, nil
+}
+
+func runFailure(state *runState, stdout, stderr *boundedText, err error) (Output, error) {
+	var exited *wazerosys.ExitError
+	if state.controlErr != nil && errors.As(err, &exited) && exited.ExitCode() == journalExitCode {
+		return Output{Stdout: stdout.String()}, state.controlErr
+	}
+	return Output{Stdout: stdout.String()}, fmt.Errorf("%w%s", err, stderr.String())
 }
 
 // The 1 MiB message/output limit is a demo policy, not a Wasm limit.

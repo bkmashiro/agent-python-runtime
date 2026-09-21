@@ -19,10 +19,9 @@ type Limits struct {
 }
 
 type Executor struct {
-	resume    func(context.Context, string) (pysolate.Output, error)
-	cancel    func(context.Context, string) error
-	maxActive int
-	maxQueued int
+	controller AttemptController
+	maxActive  int
+	maxQueued  int
 
 	mu       sync.Mutex
 	closed   bool
@@ -39,7 +38,7 @@ type Attempt struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 	stop   func() bool
-	out    pysolate.Output
+	result AdvanceResult
 	err    error
 	state  attemptState
 }
@@ -52,22 +51,23 @@ const (
 	attemptDone
 )
 
-func NewExecutor(runner *Runner, limits Limits) (*Executor, error) {
-	if runner == nil || limits.MaxActive <= 0 || limits.MaxQueued < 0 {
+func NewExecutor(controller AttemptController, limits Limits) (*Executor, error) {
+	if controller == nil || limits.MaxActive <= 0 || limits.MaxQueued < 0 {
 		return nil, ErrInvalidRunner
 	}
 	return &Executor{
-		resume:    runner.Resume,
-		cancel:    runner.Cancel,
-		maxActive: limits.MaxActive,
-		maxQueued: limits.MaxQueued,
-		drain:     make(chan struct{}),
-		attempts:  make(map[string]*Attempt),
+		controller: controller,
+		maxActive:  limits.MaxActive,
+		maxQueued:  limits.MaxQueued,
+		drain:      make(chan struct{}),
+		attempts:   make(map[string]*Attempt),
 	}, nil
 }
 
-func (e *Executor) Submit(ctx context.Context, runID string) (*Attempt, error) {
-	if e == nil || e.resume == nil || runID == "" {
+// Admit schedules one fresh attempt. A parked result releases active capacity;
+// callers may resolve its protocol and admit the same Run again later.
+func (e *Executor) Admit(ctx context.Context, runID string) (*Attempt, error) {
+	if e == nil || e.controller == nil || runID == "" {
 		return nil, ErrInvalidRunner
 	}
 	if ctx == nil {
@@ -112,31 +112,55 @@ func (e *Executor) Submit(ctx context.Context, runID string) (*Attempt, error) {
 	return a, nil
 }
 
-func (a *Attempt) Wait(ctx context.Context) (pysolate.Output, error) {
+// Submit is retained as an alias for callers using the original FIFO API.
+func (e *Executor) Submit(ctx context.Context, runID string) (*Attempt, error) {
+	return e.Admit(ctx, runID)
+}
+
+// Result returns the control-plane result of one attempt. Returned output
+// bytes and Park metadata are copied so repeated calls are independent.
+func (a *Attempt) Result(ctx context.Context) (AdvanceResult, error) {
 	if a == nil {
-		return pysolate.Output{}, ErrInvalidRunner
+		return AdvanceResult{}, ErrInvalidRunner
 	}
 	if ctx == nil {
-		return pysolate.Output{}, errors.New("nil wait context")
+		return AdvanceResult{}, errors.New("nil result context")
 	}
 	select {
 	case <-a.done:
-		out := a.out
-		out.Value = append([]byte(nil), out.Value...)
-		return out, a.err
+		result := a.result
+		result.Output.Value = append([]byte(nil), result.Output.Value...)
+		if result.Park != nil {
+			park := *result.Park
+			result.Park = &park
+		}
+		return result, a.err
 	case <-ctx.Done():
-		return pysolate.Output{}, ctx.Err()
+		return AdvanceResult{}, ctx.Err()
 	}
 }
 
+// Wait preserves the original API. New lifecycle code should use Result so a
+// normal park transition is not mixed with execution failures.
+func (a *Attempt) Wait(ctx context.Context) (pysolate.Output, error) {
+	result, err := a.Result(ctx)
+	if err != nil {
+		return result.Output, err
+	}
+	if result.State == AttemptParked {
+		return result.Output, parkError(result.Park)
+	}
+	return result.Output, nil
+}
+
 func (e *Executor) Cancel(ctx context.Context, runID string) error {
-	if e == nil || e.resume == nil || runID == "" {
+	if e == nil || e.controller == nil || runID == "" {
 		return ErrInvalidRunner
 	}
 	if ctx == nil {
 		return errors.New("nil cancel context")
 	}
-	if err := e.cancel(ctx, runID); err != nil {
+	if err := e.controller.Cancel(ctx, runID); err != nil {
 		return err
 	}
 	e.mu.Lock()
@@ -192,11 +216,11 @@ func (e *Executor) abort(a *Attempt, err error) {
 }
 
 func (e *Executor) run(a *Attempt) {
-	out, err := e.resume(a.ctx, a.runID)
-	e.finish(a, out, err)
+	result, err := e.controller.Advance(a.ctx, a.runID)
+	e.finish(a, result, err)
 }
 
-func (e *Executor) finish(a *Attempt, out pysolate.Output, err error) {
+func (e *Executor) finish(a *Attempt, result AdvanceResult, err error) {
 	var starts []*Attempt
 	e.mu.Lock()
 	if a.state != attemptActive {
@@ -207,7 +231,7 @@ func (e *Executor) finish(a *Attempt, out pysolate.Output, err error) {
 	e.active--
 	delete(e.attempts, a.runID)
 	a.cancel()
-	a.complete(out, err)
+	a.complete(result, err)
 
 	for e.active < e.maxActive && len(e.queue) > 0 {
 		next := e.queue[0]
@@ -231,10 +255,10 @@ func (e *Executor) finish(a *Attempt, out pysolate.Output, err error) {
 	}
 }
 
-func (a *Attempt) complete(out pysolate.Output, err error) {
+func (a *Attempt) complete(result AdvanceResult, err error) {
 	// All terminal transitions hold the Executor mutex.
 	a.stop()
-	a.out, a.err = out, err
+	a.result, a.err = result, err
 	close(a.done)
 }
 
@@ -254,7 +278,7 @@ func (e *Executor) dropQueuedLocked(a *Attempt, err error) {
 	a.state = attemptDone
 	delete(e.attempts, a.runID)
 	a.cancel()
-	a.complete(pysolate.Output{}, err)
+	a.complete(AdvanceResult{}, err)
 }
 
 func (e *Executor) maybeDrainLocked() {

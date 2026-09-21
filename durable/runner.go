@@ -70,6 +70,7 @@ type LookupResult struct {
 // ParkError means that the Guest was stopped without changing the run's
 // terminal state. The caller may resolve a wait or retry the run later.
 type ParkError struct {
+	Kind     ParkKind
 	RunID    string
 	WaitID   string
 	Sequence uint32
@@ -550,7 +551,7 @@ func (journal *journal) lookup(ctx context.Context, logged LoggedCall, tool Tool
 	case LookupSafeToDispatch:
 		return journal.dispatchAndComplete(ctx, logged, next)
 	case LookupPending:
-		return nil, &ParkError{RunID: journal.runID, Sequence: logged.Sequence, Reason: "lookup pending"}
+		return nil, &ParkError{Kind: ParkLookup, RunID: journal.runID, Sequence: logged.Sequence, Reason: "lookup pending"}
 	case LookupDone:
 		response, err := lookupResponse(resolved)
 		if err != nil {
@@ -611,7 +612,7 @@ func (journal *journal) wait(ctx context.Context, logged LoggedCall, tool Tool) 
 		}
 	}
 	if wait.Decision == nil {
-		return nil, &ParkError{RunID: journal.runID, WaitID: wait.ID, Sequence: logged.Sequence, Reason: "waiting for decision"}
+		return nil, &ParkError{Kind: ParkWait, RunID: journal.runID, WaitID: wait.ID, Sequence: logged.Sequence, Reason: "waiting for decision"}
 	}
 	response := encodeWireOutcome(wait.Decision.Result, wait.Decision.Error)
 	return journal.complete(logged, response)

@@ -13,15 +13,63 @@ import (
 	pysolate "github.com/bkmashiro/agent-python-runtime"
 )
 
+type fakeAttemptController struct {
+	advance func(context.Context, string) (AdvanceResult, error)
+	cancel  func(context.Context, string) error
+}
+
+func (controller fakeAttemptController) Advance(ctx context.Context, runID string) (AdvanceResult, error) {
+	return controller.advance(ctx, runID)
+}
+
+func (controller fakeAttemptController) Cancel(ctx context.Context, runID string) error {
+	return controller.cancel(ctx, runID)
+}
+
 func fakeExecutor(t *testing.T, limits Limits, resume func(context.Context, string) (pysolate.Output, error)) *Executor {
 	t.Helper()
-	e, err := NewExecutor(&Runner{}, limits)
+	controller := fakeAttemptController{
+		advance: func(ctx context.Context, runID string) (AdvanceResult, error) {
+			out, err := resume(ctx, runID)
+			return AdvanceResult{State: AttemptCompleted, Output: out}, err
+		},
+		cancel: func(context.Context, string) error { return nil },
+	}
+	e, err := NewExecutor(controller, limits)
 	if err != nil {
 		t.Fatal(err)
 	}
-	e.resume = resume
-	e.cancel = func(context.Context, string) error { return nil }
 	return e
+}
+
+func TestExecutorAdmitExposesParkWithoutControlFlowError(t *testing.T) {
+	controller := fakeAttemptController{
+		advance: func(context.Context, string) (AdvanceResult, error) {
+			return AdvanceResult{
+				State: AttemptParked,
+				Park:  &Park{Kind: ParkWait, RunID: "run", WaitID: "run/wait/0", Sequence: 0, Reason: "waiting for decision"},
+			}, nil
+		},
+		cancel: func(context.Context, string) error { return nil },
+	}
+	executor, err := NewExecutor(controller, Limits{MaxActive: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt, err := executor.Admit(context.Background(), "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := attempt.Result(context.Background())
+	if err != nil || result.State != AttemptParked || result.Park == nil || result.Park.WaitID != "run/wait/0" {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	if _, err = attempt.Wait(context.Background()); !errors.Is(err, ErrParked) {
+		t.Fatalf("legacy wait error=%v", err)
+	}
+	if err = executor.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func waitStarted(t *testing.T, started <-chan string, want string) {
@@ -140,10 +188,12 @@ func TestExecutorCancelPersistsBeforeActiveLocalCancel(t *testing.T) {
 		<-ctx.Done()
 		return pysolate.Output{}, ctx.Err()
 	})
-	e.cancel = func(context.Context, string) error {
+	controller := e.controller.(fakeAttemptController)
+	controller.cancel = func(context.Context, string) error {
 		persisted <- "persisted"
 		return nil
 	}
+	e.controller = controller
 	a, err := e.Submit(context.Background(), "run")
 	if err != nil {
 		t.Fatal(err)
@@ -304,28 +354,27 @@ func TestExecutorRealGuestParkDecideResumesHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := e.Submit(context.Background(), "approval")
+	first, err := e.Admit(context.Background(), "approval")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = first.Wait(context.Background())
-	var parked *ParkError
-	if !errors.As(err, &parked) {
-		t.Fatalf("first result = %v", err)
+	parked, err := first.Result(context.Background())
+	if err != nil || parked.State != AttemptParked || parked.Park == nil || parked.Park.Kind != ParkWait {
+		t.Fatalf("first result=%+v err=%v", parked, err)
 	}
 	if reads.Load() != 1 {
 		t.Fatalf("reads before decision = %d", reads.Load())
 	}
-	if err = runner.Decide(context.Background(), parked.WaitID, Decision{Result: json.RawMessage(`true`)}); err != nil {
+	if err = runner.Decide(context.Background(), parked.Park.WaitID, Decision{Result: json.RawMessage(`true`)}); err != nil {
 		t.Fatal(err)
 	}
-	second, err := e.Submit(context.Background(), "approval")
+	second, err := e.Admit(context.Background(), parked.Park.RunID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := second.Wait(context.Background())
-	if err != nil || string(out.Value) != "7" {
-		t.Fatalf("resumed result=%s err=%v", out.Value, err)
+	completed, err := second.Result(context.Background())
+	if err != nil || completed.State != AttemptCompleted || string(completed.Output.Value) != "7" {
+		t.Fatalf("resumed result=%+v err=%v", completed, err)
 	}
 	if reads.Load() != 1 {
 		t.Fatalf("history replay called read %d times", reads.Load())

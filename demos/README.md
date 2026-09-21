@@ -23,7 +23,7 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 2. `runner.go`: Runner ownership, Guest lifecycle and `RunWorkspace`.
 3. `tool_provider.go` and `bridge.go`: provider discovery, Python paths and the single JSON tool ABI.
 4. `guest/bootstrap.py` and `guest/pysolate.py`: generated Python functions and execution convention.
-5. `prepared.go` and `cow_linux.go`: clean prepared image and Linux private COW instances.
+5. `prepared.go` and `internal/cowmem/`: clean prepared-image orchestration and Linux private COW memory.
 6. `runtime/workspace/workspace.go`: bounded workspace lifecycle and snapshots.
 7. `service/server.go`: bounded HTTP admission and persistent workspace leases.
 8. `corpus/` and `cmd/pysolate-corpus/`: strict dataset cases and exact tool replay through the real Guest.

@@ -154,10 +154,12 @@ runner.go, bridge.go       Guest lifecycle and Host calls
 tool_provider.go           provider discovery and normalized tool metadata
 mcpadapter/                narrow adapter for connected MCP clients
 future.go, prefix.go       Run-owned early reads and source streaming
-prepared.go, cow*.go       clean images and private memory
+prepared.go                clean-image orchestration
+internal/cowmem/           Linux private-memory backend and platform stub
 recording.go               deterministic attempts and journal stops
 durable/                   SQLite Store and recovery driver
 runtime/workspace/         bounded rooted private filesystems
+integration/               public-API tests against the real Guest
 guest/                     CPython bridge, execution and small AST passes
 cmd/pysolate/              CLI
 cmd/pysolate-server/       bounded local HTTP service

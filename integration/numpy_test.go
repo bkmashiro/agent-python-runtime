@@ -1,8 +1,10 @@
-package pysolate
+package integration_test
 
 import (
 	"context"
 	"testing"
+
+	pysolate "github.com/bkmashiro/agent-python-runtime"
 )
 
 func TestNumPyLegacyAndGeneratorABIs(t *testing.T) {
@@ -10,7 +12,7 @@ func TestNumPyLegacyAndGeneratorABIs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runner, err := New(context.Background(), wasm, Manifest{})
+	runner, err := pysolate.New(context.Background(), wasm, pysolate.Manifest{})
 	if err != nil {
 		t.Fatal(err)
 	}

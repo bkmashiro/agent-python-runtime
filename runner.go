@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/bkmashiro/agent-python-runtime/internal/cowmem"
 	workspacepkg "github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -29,7 +30,7 @@ type Runner struct {
 	guestManifest  []guestToolSpec
 	preparedState  *preparedRecording
 	image          []byte // Immutable full-copy baseline; COW owns its image separately.
-	cow            cowRuntime
+	cow            cowmem.Runtime
 	workspaceImage bool
 }
 
@@ -123,7 +124,7 @@ func (r *Runner) Close(ctx context.Context) error {
 	r.image = nil
 	err := r.runtime.Close(ctx)
 	if r.cow != nil {
-		err = errors.Join(err, r.cow.close())
+		err = errors.Join(err, r.cow.Close())
 		r.cow = nil
 	}
 	return err

@@ -1,4 +1,4 @@
-package pysolate
+package integration_test
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	pysolate "github.com/bkmashiro/agent-python-runtime"
 	workspacepkg "github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 )
 
@@ -52,7 +53,7 @@ func TestWorkspaceGuestReadsAndEditsPrivateFiles(t *testing.T) {
 	defer lease.Release()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	runner, err := New(ctx, wasm, nil)
+	runner, err := pysolate.New(ctx, wasm, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +109,7 @@ func TestWorkspaceIsCurrentDirectoryAndImportRoot(t *testing.T) {
 	defer lease.Release()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	runner, err := New(ctx, wasm, nil)
+	runner, err := pysolate.New(ctx, wasm, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +136,7 @@ func TestWorkspaceIsNotAmbient(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	runner, err := New(ctx, wasm, nil)
+	runner, err := pysolate.New(ctx, wasm, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,9 +153,9 @@ func TestPreparedRunnersAttachWorkspacePerRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	constructors := map[string]func(context.Context, []byte, Manifest) (*Runner, error){"copy": NewPreparedWorkspace}
+	constructors := map[string]func(context.Context, []byte, pysolate.Manifest) (*pysolate.Runner, error){"copy": pysolate.NewPreparedWorkspace}
 	if runtime.GOOS == "linux" {
-		constructors["cow"] = NewPreparedWorkspaceCOW
+		constructors["cow"] = pysolate.NewPreparedWorkspaceCOW
 	}
 	for name, construct := range constructors {
 		t.Run(name, func(t *testing.T) {
@@ -218,7 +219,7 @@ func TestFailedWorkspaceRunRemainsInspectableUntilCleanup(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	runner, err := New(ctx, wasm, nil)
+	runner, err := pysolate.New(ctx, wasm, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

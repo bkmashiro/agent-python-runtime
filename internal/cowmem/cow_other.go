@@ -1,9 +1,9 @@
 //go:build !linux
 
-package pysolate
+package cowmem
 
 import "errors"
 
-func newCOWRuntime() (cowRuntime, error) {
+func New() (Runtime, error) {
 	return nil, errors.New("prepared COW requires Linux")
 }

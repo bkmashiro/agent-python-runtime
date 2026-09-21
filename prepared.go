@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+
+	"github.com/bkmashiro/agent-python-runtime/internal/cowmem"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/experimental"
 	experimentalsysfs "github.com/tetratelabs/wazero/experimental/sysfs"
-	"os"
 )
 
 // NewPrepared captures clean initialization for private full-copy restoration.
@@ -58,7 +60,7 @@ func prepare(ctx context.Context, wasm []byte, manifest Manifest, cow, workspace
 		}
 	}()
 	if cow {
-		r.cow, err = newCOWRuntime()
+		r.cow, err = cowmem.New()
 		if err != nil {
 			return nil, err
 		}
@@ -91,7 +93,7 @@ func prepare(ctx context.Context, wasm []byte, manifest Manifest, cow, workspace
 	}
 	defer m.Close(context.Background())
 	if cow {
-		err = r.cow.capture(m.Memory())
+		err = r.cow.Capture(m.Memory())
 	} else {
 		data, ok := m.Memory().Read(0, m.Memory().Size())
 		if !ok || len(data) == 0 {
@@ -115,14 +117,14 @@ func prepare(ctx context.Context, wasm []byte, manifest Manifest, cow, workspace
 // All constructors use this lifecycle. Only CPython init vs memory restore differs.
 func (r *Runner) newGuest(ctx context.Context, stdout, stderr *boundedText) (api.Module, error) {
 	instantiateCtx := ctx
-	var mapped cowMemory
+	var mapped cowmem.Memory
 	if r.cow != nil {
 		var err error
-		mapped, err = r.cow.allocator(r.code.ExportedMemories()["memory"])
+		mapped, err = r.cow.Allocator(r.code.ExportedMemories()["memory"])
 		if err != nil {
 			return nil, err
 		}
-		instantiateCtx = experimental.WithMemoryAllocator(instantiateCtx, deferredCOWFree{mapped})
+		instantiateCtx = experimental.WithMemoryAllocator(instantiateCtx, cowmem.DeferredAllocator(mapped))
 	}
 	m, err := r.runtime.InstantiateModule(instantiateCtx, r.code, r.moduleConfig(ctx, stdout, stderr))
 	if err != nil {
@@ -132,7 +134,7 @@ func (r *Runner) newGuest(ctx context.Context, stdout, stderr *boundedText) (api
 		return nil, err
 	}
 	if mapped != nil {
-		m = &cowGuest{Module: m, memory: mapped}
+		m = cowmem.WrapModule(m, mapped)
 	}
 	failed := true
 	defer func() {
@@ -143,8 +145,8 @@ func (r *Runner) newGuest(ctx context.Context, stdout, stderr *boundedText) (api
 	if _, err = m.ExportedFunction("_initialize").Call(ctx); err != nil {
 		return nil, fmt.Errorf("initialize Guest: %w%s", err, stderr.String())
 	}
-	if r.cow != nil && r.cow.ready() {
-		if err := r.cow.attach(m.Memory()); err != nil {
+	if r.cow != nil && r.cow.Ready() {
+		if err := r.cow.Attach(m.Memory()); err != nil {
 			return nil, err
 		}
 	} else if r.image == nil {

@@ -1,6 +1,6 @@
 //go:build linux
 
-package pysolate
+package cowmem
 
 import (
 	"bufio"
@@ -15,12 +15,12 @@ import (
 )
 
 func TestLinuxCOWMappingSealsAddressAndIsolation(t *testing.T) {
-	resource, err := newCOWRuntime()
+	resource, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	cow := resource.(*linuxCOW)
-	defer cow.close()
+	defer cow.Close()
 
 	seed := testCOWMemory(t, 4*wasmPageSize)
 	baseline := seed.Reallocate(2 * wasmPageSize)
@@ -186,7 +186,7 @@ func TestLinuxCOWFreeWaitsForCallOwner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deferred := deferredCOWFree{memory}
+	deferred := deferredFree{Memory: memory}
 	linear := deferred.Allocate(wasmPageSize, 2*wasmPageSize)
 	data := linear.Reallocate(wasmPageSize)
 	linear.Free() // A Host import can logically close the module before Wasm unwinds.

@@ -1,6 +1,6 @@
 //go:build linux
 
-package pysolate
+package cowmem
 
 import (
 	"errors"
@@ -30,7 +30,7 @@ type linuxCOWMemory struct {
 	mu      sync.Mutex
 }
 
-func newCOWRuntime() (cowRuntime, error) {
+func New() (Runtime, error) {
 	fd, err := unix.MemfdCreate("pysolate-spine-cow", unix.MFD_CLOEXEC|unix.MFD_ALLOW_SEALING)
 	if err != nil {
 		return nil, fmt.Errorf("create COW image memfd: %w", err)
@@ -38,7 +38,7 @@ func newCOWRuntime() (cowRuntime, error) {
 	return &linuxCOW{fd: fd}, nil
 }
 
-func (c *linuxCOW) allocator(def api.MemoryDefinition) (cowMemory, error) {
+func (c *linuxCOW) Allocator(def api.MemoryDefinition) (Memory, error) {
 	if def == nil {
 		return nil, errors.New("COW needs an exported memory named memory")
 	}
@@ -94,7 +94,7 @@ func (m *linuxCOWMemory) release() error {
 	return nil
 }
 
-func (c *linuxCOW) capture(memory api.Memory) error {
+func (c *linuxCOW) Capture(memory api.Memory) error {
 	if memory == nil || memory.Size() == 0 {
 		return errors.New("cannot capture empty COW memory")
 	}
@@ -138,11 +138,11 @@ func (c *linuxCOW) captureBytes(data []byte) error {
 	return nil
 }
 
-func (c *linuxCOW) ready() bool {
+func (c *linuxCOW) Ready() bool {
 	return !c.closed && c.imageSize != 0
 }
 
-func (c *linuxCOW) attach(memory api.Memory) error {
+func (c *linuxCOW) Attach(memory api.Memory) error {
 	if memory == nil {
 		return errors.New("cannot attach COW image to nil memory")
 	}
@@ -184,7 +184,7 @@ func (c *linuxCOW) attachBytes(data []byte) error {
 	return nil
 }
 
-func (c *linuxCOW) close() error {
+func (c *linuxCOW) Close() error {
 	if c.closed {
 		return nil
 	}

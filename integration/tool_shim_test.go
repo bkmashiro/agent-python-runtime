@@ -1,10 +1,12 @@
-package pysolate
+package integration_test
 
 import (
 	"context"
 	"encoding/json"
 	"testing"
 	"time"
+
+	pysolate "github.com/bkmashiro/agent-python-runtime"
 )
 
 func TestDynamicToolNamespaceInRealGuest(t *testing.T) {
@@ -13,11 +15,11 @@ func TestDynamicToolNamespaceInRealGuest(t *testing.T) {
 		t.Fatal(err)
 	}
 	canonical := "mcp.market/get-price"
-	manifest := Manifest{canonical: {
+	manifest := pysolate.Manifest{canonical: {
 		PythonPath:     "stock.getprice",
 		Description:    "Read one approved price",
 		InputSchema:    json.RawMessage(`{"type":"object","properties":{"symbol":{"type":"string"}},"required":["symbol"]}`),
-		Annotations:    ToolAnnotations{ReadOnlyHint: true},
+		Annotations:    pysolate.ToolAnnotations{ReadOnlyHint: true},
 		AllowEarlyRead: true,
 		Call: func(_ context.Context, args json.RawMessage) (any, error) {
 			var input map[string]any
@@ -29,7 +31,7 @@ func TestDynamicToolNamespaceInRealGuest(t *testing.T) {
 	}}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	runner, err := New(ctx, wasm, manifest)
+	runner, err := pysolate.New(ctx, wasm, manifest)
 	if err != nil {
 		t.Fatal(err)
 	}

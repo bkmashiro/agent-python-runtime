@@ -1,10 +1,11 @@
-package pysolate
+package integration_test
 
 import (
 	"context"
 	"encoding/json"
 	"testing"
 
+	pysolate "github.com/bkmashiro/agent-python-runtime"
 	"github.com/tetratelabs/wazero"
 )
 
@@ -18,11 +19,11 @@ func TestCompilationCacheDoesNotRetainAuthorityOrGuestState(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cache.Close(context.Background())
-	ctx := WithCompilationCache(context.Background(), cache)
+	ctx := pysolate.WithCompilationCache(context.Background(), cache)
 	for _, value := range []int{1, 2} {
 		value := value
-		manifest := Manifest{"value": {Call: func(context.Context, json.RawMessage) (any, error) { return value, nil }}}
-		r, err := New(ctx, wasm, manifest)
+		manifest := pysolate.Manifest{"value": {Call: func(context.Context, json.RawMessage) (any, error) { return value, nil }}}
+		r, err := pysolate.New(ctx, wasm, manifest)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -73,7 +73,7 @@ func TestPreparedCOWRealGuestLifecycle(t *testing.T) {
 	if r.image != nil {
 		t.Fatal("COW runner retained a Go-owned full image copy")
 	}
-	if r.cow == nil || !r.cow.ready() {
+	if r.cow == nil || !r.cow.Ready() {
 		t.Fatal("COW runner did not retain a sealed prepared image")
 	}
 

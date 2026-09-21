@@ -35,6 +35,9 @@ for the execution model and build commands.
 - [`scheduling-evaluation.md`](scheduling-evaluation.md) — per-Tool timing,
   the Linux-oriented phase matrix, trace schema, deterministic policy
   simulator, controlled canonical sweep, and measured calibration replay.
+- [`mcp-workspace-scheduling-spike.md`](mcp-workspace-scheduling-spike.md) — a
+  deterministic real-MCP tool chain, inline versus live-I/O scheduling, and
+  explicit handoff into reviewable private-workspace edits.
 - [`performance-data/`](performance-data/) — checked-in raw measurements. Each
   result should be interpreted with the artifact, host, fixture, and sample
   count recorded by its corresponding document or local README.
@@ -74,12 +77,16 @@ The recent runtime work now covers:
 9. **Measured calibration replay:** phase-bench rows can be converted into
    deterministic simulator tasks and checked against bounded real 2/4/8-Run
    batches. Reports preserve the CPU-split assumptions and prediction error.
+10. **MCP-to-workspace workflow spike:** two dependent real MCP calls retain
+    the live-I/O scheduling benefit before validated JSON is handed to a
+    separate writable-workspace Guest. The split makes the current durable /
+    writable-workspace boundary explicit rather than coupling their state.
 
-The next scheduling work remains evidence-led: repeat calibrated replay on Linux,
-add matching real batches for tool chains, read-then-compute, and workspace
-edits, and introduce policy only where bounded admission and live-I/O yielding
-leave a measured gap. Do not infer arbitrary Python runtime behavior or retry
-unsafe effects.
+The next scheduling work remains evidence-led: repeat calibrated replay and the
+MCP workflow on Linux, add matching real batches for read-then-compute and any
+workspace-internal Tool calls observed in real workloads, and introduce policy
+only where bounded admission and live-I/O yielding leave a measured gap. Do not
+infer arbitrary Python runtime behavior or retry unsafe effects.
 
 ## Demonstrations
 
@@ -96,7 +103,8 @@ The scripts under [`../demos/`](../demos/) provide presentation-ready paths:
 - `09` controlled canonical scheduling sweep.
 - `10` measured phase replay versus real bounded batches.
 - `11` official MCP Go SDK over stdio into a generated Guest Python tool.
+- `12` real MCP tool-chain scheduling followed by workspace ChangeSet export.
 
 `demos/run-all.sh` runs the short product demonstrations (`01`–`05`). The
-measurement-oriented `06`–`10` scripts and dependency-oriented MCP demo `11`
+measurement-oriented `06`–`10` scripts and dependency-oriented MCP demos `11`–`12`
 remain explicit so setup time is not hidden inside the short demo suite.

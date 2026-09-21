@@ -14,6 +14,7 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 ./demos/09-canonical-scheduling-sweep.sh
 ./demos/10-calibrated-scheduling.sh
 ./demos/11-mcp-stdio.sh
+./demos/12-mcp-workspace-scheduling.sh
 ./demos/run-all.sh
 ```
 
@@ -28,10 +29,11 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 - `09-canonical-scheduling-sweep.sh` isolates running, resident, Tool-capacity and I/O-ratio effects with identical deterministic CPU-I/O-CPU tasks.
 - `10-calibrated-scheduling.sh` measures a real single-Run phase trace, deterministically replays it, and compares prediction error with real 2/4-Run Executor batches.
 - `11-mcp-stdio.sh` starts an official-SDK MCP stdio subprocess, discovers its catalog tool, injects `catalog.lookup(...)`, and executes it from the real Guest.
+- `12-mcp-workspace-scheduling.sh` compares inline and `ExternalIO` execution of a dependent real-MCP tool chain, then hands the validated data to private-workspace Guests and exports conflict-checked `ChangeSet`s.
 
 `run-all.sh` intentionally runs the short product demonstrations `01`–`05`.
-The measurement-oriented `06`–`10` scripts and dependency-oriented MCP demo
-`11` remain explicit.
+The measurement-oriented `06`–`10` scripts and dependency-oriented MCP demos
+`11`–`12` remain explicit.
 
 ## Short code-reading route
 

@@ -60,6 +60,7 @@ For presentation-ready end-to-end examples, use the scripts under [`demos/`](dem
 ./demos/09-canonical-scheduling-sweep.sh
 ./demos/10-calibrated-scheduling.sh
 ./demos/11-mcp-stdio.sh
+./demos/12-mcp-workspace-scheduling.sh
 # Or run all demos:
 ./demos/run-all.sh
 ```

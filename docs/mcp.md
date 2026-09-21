@@ -55,6 +55,12 @@ The example uses the official SDK on both sides of a real newline-delimited stdi
 
 The subprocess is the same compiled example in server mode, so the demonstration needs no Node.js, Python MCP package or external network service.
 
+For a deterministic two-call MCP chain followed by reviewable workspace edits,
+run `./demos/12-mcp-workspace-scheduling.sh`. The corresponding
+[`workflow spike`](mcp-workspace-scheduling-spike.md) records the current
+durable/workspace lifecycle boundary and the measured inline versus
+`ExternalIO` result.
+
 ## Authority and lifecycle boundaries
 
 - The command passed to `ConnectCommand` is trusted Host configuration. Guest code cannot choose or spawn it.

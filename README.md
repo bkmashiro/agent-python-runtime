@@ -42,6 +42,17 @@ go run ./cmd/pysolate -source examples/numpy.py
 
 The CLI grants only a pure `echo` demonstration tool. Applications supply their own tools through the Go API. Python stdout is forwarded to stderr; the final JSON value is printed to stdout.
 
+For presentation-ready end-to-end examples, use the scripts under [`demos/`](demos/README.md):
+
+```sh
+./demos/01-basic-python.sh
+./demos/02-namespaced-tools.sh
+./demos/03-workspace-edit.sh
+./demos/04-hot-service.sh
+# Or run all four:
+./demos/run-all.sh
+```
+
 ```go
 tools := pysolate.Manifest{
     "market/get-price": {

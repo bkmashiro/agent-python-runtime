@@ -13,6 +13,7 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 ./demos/08-scheduling-simulation.sh
 ./demos/09-canonical-scheduling-sweep.sh
 ./demos/10-calibrated-scheduling.sh
+./demos/11-mcp-stdio.sh
 ./demos/run-all.sh
 ```
 
@@ -26,15 +27,17 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 - `08-scheduling-simulation.sh` compares FIFO, ready-first, and finish-soon over fixed common-agent phase traces without running an LLM or changing runtime policy.
 - `09-canonical-scheduling-sweep.sh` isolates running, resident, Tool-capacity and I/O-ratio effects with identical deterministic CPU-I/O-CPU tasks.
 - `10-calibrated-scheduling.sh` measures a real single-Run phase trace, deterministically replays it, and compares prediction error with real 2/4-Run Executor batches.
+- `11-mcp-stdio.sh` starts an official-SDK MCP stdio subprocess, discovers its catalog tool, injects `catalog.lookup(...)`, and executes it from the real Guest.
 
 `run-all.sh` intentionally runs the short product demonstrations `01`–`05`.
-The measurement-oriented `06`–`10` scripts remain explicit.
+The measurement-oriented `06`–`10` scripts and dependency-oriented MCP demo
+`11` remain explicit.
 
 ## Short code-reading route
 
 1. `examples/agent-core-usecases/main.go`: concrete Host manifest and Python use case.
 2. `runner.go`: Runner ownership, Guest lifecycle and `RunWorkspace`.
-3. `tool_provider.go` and `bridge.go`: provider discovery, Python paths and the single JSON tool ABI.
+3. `tool_provider.go`, `mcpadapter/`, and `bridge.go`: provider discovery, official MCP SDK adaptation, Python paths and the single JSON tool ABI.
 4. `guest/bootstrap.py` and `guest/pysolate.py`: generated Python functions and execution convention.
 5. `prepared.go` and `internal/cowmem/`: clean prepared-image orchestration and Linux private COW memory.
 6. `runtime/workspace/workspace.go`, `snapshot.go`, and `export.go`: bounded workspace lifecycle, snapshots, change handoff, and conflict checks.

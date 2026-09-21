@@ -12,7 +12,10 @@ for the execution model and build commands.
 - [`common-usecases.md`](common-usecases.md) — qualified repository editing,
   structured-data processing, NumPy, and Host-enriched Python workflows.
 - [`workspace.md`](workspace.md) — bounded private filesystem lifecycle,
-  snapshots, diffs, security boundaries, and executable acceptance.
+  snapshots, diffs, reviewable change export, read-only Host conflict checks,
+  security boundaries, and executable acceptance.
+- [`mcp.md`](mcp.md) — official Go SDK integration, trusted stdio lifecycle,
+  result envelopes, authority boundaries, and real-Guest acceptance.
 - [`service.md`](service.md) — the long-running local HTTP service, hot
   prepared execution, workspace endpoints, admission behavior, and benchmark.
 - [`corpus-replay.md`](corpus-replay.md) — deterministic HumanEval/BFCL
@@ -42,7 +45,8 @@ The recent runtime work now covers:
 
 1. **Dynamic Tool ABI:** Host providers expose canonical tool identities as
    generated namespaced Python functions through one JSON Host-call bridge.
-   Tool catalogs and MCP adapters remain Host-side and do not enlarge or
+   An official-Go-SDK adapter now exercises real MCP stdio initialization,
+   discovery and calls. Tool catalogs remain Host-side and do not enlarge or
    rebuild the Guest artifact.
 2. **Private workspaces:** a bounded `/workspace` supports normal file editing,
    local imports, snapshots, deterministic diffs, bounded change export, and
@@ -91,7 +95,8 @@ The scripts under [`../demos/`](../demos/) provide presentation-ready paths:
 - `08` deterministic scheduling-policy simulation.
 - `09` controlled canonical scheduling sweep.
 - `10` measured phase replay versus real bounded batches.
+- `11` official MCP Go SDK over stdio into a generated Guest Python tool.
 
 `demos/run-all.sh` runs the short product demonstrations (`01`–`05`). The
-measurement-oriented `06`–`10` scripts remain explicit so setup time is not
-hidden inside the short demo suite.
+measurement-oriented `06`–`10` scripts and dependency-oriented MCP demo `11`
+remain explicit so setup time is not hidden inside the short demo suite.

@@ -59,6 +59,7 @@ For presentation-ready end-to-end examples, use the scripts under [`demos/`](dem
 ./demos/08-scheduling-simulation.sh
 ./demos/09-canonical-scheduling-sweep.sh
 ./demos/10-calibrated-scheduling.sh
+./demos/11-mcp-stdio.sh
 # Or run all demos:
 ./demos/run-all.sh
 ```
@@ -92,7 +93,7 @@ contents = filesystem.read_file(path="notes.txt")
 
 Every generated function still dispatches through the same narrow Host call ABI. Only canonical identity, Python path and the early-read bit enter the Guest; descriptions and schemas stay on the Host so an Agent can inspect them before generating a one-shot script. There is no runtime `describe()` round trip. Top-level paths such as `price(...)` remain supported. Metadata is descriptive: MCP `readOnlyHint` does not enable early execution. The Host must still set `AllowEarlyRead` explicitly.
 
-`ToolProvider` and `ManifestFromProviders` merge discovered catalogs while rejecting duplicate canonical identities and colliding Python paths. `mcpadapter.Provider` converts an already connected MCP client into separately configured canonical and Python namespaces. MCP transport, authentication, session lifecycle, schema enforcement and credentials stay on the Host and are never packaged into Guest Python.
+`ToolProvider` and `ManifestFromProviders` merge discovered catalogs while rejecting duplicate canonical identities and colliding Python paths. `mcpadapter.Provider` converts an already connected MCP client into separately configured canonical and Python namespaces. `mcpadapter/gosdk` connects the official MCP Go SDK, including trusted stdio subprocesses, to that narrow interface. MCP transport, authentication, session lifecycle, schema enforcement and credentials stay on the Host and are never packaged into Guest Python. See [the MCP integration contract](docs/mcp.md), or run `./demos/11-mcp-stdio.sh` for a real initialize → tools/list → Guest call → tools/call round trip.
 
 ### Private workspaces
 
@@ -161,7 +162,7 @@ Current engineering defaults are 512 MiB maximum linear memory, 1 MiB per reques
 ```text
 runner.go, bridge.go       Guest lifecycle and Host calls
 tool_provider.go           provider discovery and normalized tool metadata
-mcpadapter/                narrow adapter for connected MCP clients
+mcpadapter/                narrow MCP provider plus official Go SDK adapter
 future.go, prefix.go       Run-owned early reads and source streaming
 prepared.go                clean-image orchestration
 internal/cowmem/           Linux private-memory backend and platform stub

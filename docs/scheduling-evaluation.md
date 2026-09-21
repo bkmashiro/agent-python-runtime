@@ -145,6 +145,56 @@ The checked command above produces 1,296 points and 144 boundaries from the curr
 
 Run [`09-canonical-scheduling-sweep.sh`](../demos/09-canonical-scheduling-sweep.sh) for a smaller presentation grid. Keep this sweep as an idealized sensitivity model. It must not be treated as measured service latency or wired into production policy.
 
+## Measured calibration replay
+
+The canonical sweep controls every variable but cannot show whether its phase assumptions match the real runtime. The calibration path turns real single-Run `pysolate-phase-bench` rows into deterministic `scheduling.Task` traces, then compares simulator makespan with small real Executor batches:
+
+```sh
+PYSOLATE_CALIBRATION_OUTPUT=/tmp/pysolate-calibration \
+PYSOLATE_CALIBRATION_TASKS='2 4 8' \
+PYSOLATE_CALIBRATION_REPEATS=3 \
+./tools/run-calibrated-scheduling.sh
+```
+
+The script writes:
+
+- `phase-common.jsonl`: measured read-finish, Tool-chain, local NumPy, and read-then-NumPy samples;
+- `workload-*.json`: deterministic per-case tasks accepted directly by `pysolate-schedule-sim -input`;
+- `observed-read-finish.jsonl`: real Inline and live-I/O Executor batches;
+- `comparison.jsonl`: individual prediction errors plus summaries grouped by resource arm.
+
+The adapter deliberately exposes its approximation instead of claiming unavailable precision:
+
+1. Guest creation recorded by `runner.Create` is excluded because it happens before timed admission.
+2. Tool capacity queue and continuation-resume waits are excluded from the phase trace because the simulator regenerates those waits from its resource queues.
+3. Remaining local attempt time is split equally before, between, and after Tool calls.
+4. Aggregate Tool service is split equally across observed Tool dispatches.
+5. Samples are replayed in deterministic order when a larger population is requested.
+6. Durable park/re-admit samples are rejected; they have a different lifecycle and must not be calibrated as live-I/O.
+
+The equal split is a low-cost neutral heuristic. It is suitable for testing whether first-order running, resident, and Tool limits explain real batches. It does not recover the exact Python instruction boundary. The report records excluded nanoseconds and the split method as provenance.
+
+`pysolate-calibrate` can also be used directly:
+
+```sh
+go run ./cmd/pysolate-calibrate \
+  -phase phase.jsonl -case read-finish -tasks 8 \
+  > workload.json
+
+go run ./cmd/pysolate-schedule-sim \
+  -input workload.json -running 2 -resident 8 -tools 4 \
+  -policies fifo -live both
+
+go run ./cmd/pysolate-calibrate \
+  -phase phase.jsonl -case read-finish \
+  -observed observed.jsonl -tolerance 0.15 \
+  > comparison.jsonl
+```
+
+The default `0.15` tolerance is an engineering target for common controlled I/O cases, not a statistical guarantee or runtime contract. Use repeated observations and inspect each grouped summary. A miss means the model needs another measured cost term; it is not a reason to tune the scheduler against the simulator.
+
+Run [`10-calibrated-scheduling.sh`](../demos/10-calibrated-scheduling.sh) for a short real 2/4-Run demonstration. The full calibration script defaults to three repeats at 2, 4, and 8 tasks. This remains bounded validation, not a high-density load test.
+
 ### Built-in pilot
 
 The built-in trace contains twelve deterministic instances of read-finish, dependent Tool calls, read-then-compute, and durable wait. On macOS arm64 with the current simulator source, two running slots, eight resident slots, and four Tool slots produced:

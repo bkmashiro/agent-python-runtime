@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -110,7 +111,7 @@ func main() {
 
 func run() error {
 	guest := flag.String("guest", "dist/pysolate.wasm", "Guest artifact")
-	caseName := flag.String("case", "all", "read-finish, tool-chain, park-readmit, numpy-local, read-numpy, or all")
+	caseName := flag.String("case", "all", "comma-separated read-finish, tool-chain, park-readmit, numpy-local, read-numpy, or all")
 	iterations := flag.Int("iterations", 5, "samples per case")
 	preparationName := flag.String("preparation", "copy", "fresh, copy, or cow")
 	toolDelay := flag.Duration("tool-delay", 50*time.Millisecond, "synthetic Host tool service delay")
@@ -301,12 +302,25 @@ func selectCases(name string) ([]caseSpec, error) {
 	if name == "all" {
 		return cases, nil
 	}
+	byName := make(map[string]caseSpec, len(cases))
 	for _, spec := range cases {
-		if spec.name == name {
-			return []caseSpec{spec}, nil
-		}
+		byName[spec.name] = spec
 	}
-	return nil, fmt.Errorf("unknown case %q", name)
+	var selected []caseSpec
+	seen := map[string]bool{}
+	for _, part := range strings.Split(name, ",") {
+		part = strings.TrimSpace(part)
+		spec, ok := byName[part]
+		if !ok || part == "" {
+			return nil, fmt.Errorf("unknown case %q", part)
+		}
+		if seen[part] {
+			return nil, fmt.Errorf("duplicate case %q", part)
+		}
+		seen[part] = true
+		selected = append(selected, spec)
+	}
+	return selected, nil
 }
 
 func parsePreparation(name string) (*durable.Preparation, error) {

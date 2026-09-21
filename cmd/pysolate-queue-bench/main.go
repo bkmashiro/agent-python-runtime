@@ -18,6 +18,12 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/durable"
 )
 
+type queueCaseSpec struct {
+	name     string
+	code     string
+	wantPark bool
+}
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -26,6 +32,7 @@ func main() {
 }
 func run() error {
 	guest := flag.String("guest", "dist/pysolate.wasm", "Guest")
+	caseName := flag.String("case", "park-readmit", "park-readmit or read-finish")
 	mode := flag.String("mode", "executor", "executor/semaphore/unbounded")
 	tasks := flag.Int("tasks", 16, "logical Runs")
 	active := flag.Int("active", 2, "running Guest bound")
@@ -47,6 +54,10 @@ func run() error {
 	}
 	if *mode != "executor" && *mode != "semaphore" && *mode != "unbounded" {
 		return errors.New("unknown mode")
+	}
+	spec, err := selectQueueCase(*caseName, *heap)
+	if err != nil {
+		return err
 	}
 	wasm, err := os.ReadFile(*guest)
 	if err != nil {
@@ -84,7 +95,7 @@ func run() error {
 			defer timer.Stop()
 			select {
 			case <-timer.C:
-				return true, nil
+				return map[string]any{"value": 41}, nil
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			}
@@ -106,7 +117,7 @@ func run() error {
 	for i := range ids {
 		ids[i] = fmt.Sprintf("task-%d", i)
 		input, _ := json.Marshal(map[string]int{"id": i})
-		_, err = runner.Create(ctx, durable.Definition{ID: ids[i], Code: fmt.Sprintf("scratch = bytearray(%d)\nprobe()\napprove()\nresult = inputs['id']", *heap<<20), Inputs: input, Seed: "bench-seed", ArtifactSHA256: runner.ArtifactID(), EnvironmentVersion: "bench-v1"})
+		_, err = runner.Create(ctx, durable.Definition{ID: ids[i], Code: spec.code, Inputs: input, Seed: "bench-seed", ArtifactSHA256: runner.ArtifactID(), EnvironmentVersion: "bench-v1"})
 		if err != nil {
 			return err
 		}
@@ -177,6 +188,21 @@ func run() error {
 		}
 		return elapsed, nil
 	}
+	if !spec.wantPark {
+		batch, err := phase(false)
+		if err != nil {
+			return err
+		}
+		sample()
+		return json.NewEncoder(os.Stdout).Encode(map[string]any{
+			"case": spec.name, "mode": *mode, "tasks": *tasks,
+			"running_limit": *active, "resident_limit": *resident, "tool_limit": *toolActive,
+			"external_io": *externalIO, "heap_mib": *heap, "synthetic_hold_ns": hold.Nanoseconds(),
+			"setup_ns": setup.Nanoseconds(), "batch_ns": batch.Nanoseconds(), "request_ns": phaseLatencies[0],
+			"peak_host_waits": peak.Load(), "sampled_peak_rss_kib": nullableRSS(peakRSS.Load()), "completed": *tasks,
+		})
+	}
+
 	parked, err := phase(true)
 	if err != nil {
 		return err
@@ -204,8 +230,28 @@ func run() error {
 		peakMem = peakRSS.Load()
 		parkedMem = afterPark
 	}
-	return json.NewEncoder(os.Stdout).Encode(map[string]any{"mode": *mode, "tasks": *tasks, "running_limit": *active, "resident_limit": *resident, "tool_limit": *toolActive, "external_io": *externalIO, "heap_mib": *heap, "synthetic_hold_ns": hold.Nanoseconds(), "setup_ns": setup.Nanoseconds(), "park_batch_ns": parked.Nanoseconds(), "resume_batch_ns": resumed.Nanoseconds(), "peak_host_waits": peak.Load(), "sampled_peak_rss_kib": peakMem, "after_park_rss_kib": parkedMem, "park_request_ns": phaseLatencies[0], "resume_request_ns": phaseLatencies[1], "completed": *tasks})
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{"case": spec.name, "mode": *mode, "tasks": *tasks, "running_limit": *active, "resident_limit": *resident, "tool_limit": *toolActive, "external_io": *externalIO, "heap_mib": *heap, "synthetic_hold_ns": hold.Nanoseconds(), "setup_ns": setup.Nanoseconds(), "park_batch_ns": parked.Nanoseconds(), "resume_batch_ns": resumed.Nanoseconds(), "peak_host_waits": peak.Load(), "sampled_peak_rss_kib": peakMem, "after_park_rss_kib": parkedMem, "park_request_ns": phaseLatencies[0], "resume_request_ns": phaseLatencies[1], "completed": *tasks})
 }
+
+func selectQueueCase(name string, heapMiB int) (queueCaseSpec, error) {
+	prefix := fmt.Sprintf("scratch = bytearray(%d)\n", heapMiB<<20)
+	switch name {
+	case "park-readmit":
+		return queueCaseSpec{name: name, wantPark: true, code: prefix + "probe()\napprove()\nresult = inputs['id']"}, nil
+	case "read-finish":
+		return queueCaseSpec{name: name, code: prefix + "record = probe()\nresult = inputs['id'] if record['value'] == 41 else -1"}, nil
+	default:
+		return queueCaseSpec{}, fmt.Errorf("unknown queue case %q", name)
+	}
+}
+
+func nullableRSS(value int64) any {
+	if value <= 0 {
+		return nil
+	}
+	return value
+}
+
 func rss() int64 {
 	raw, _ := os.ReadFile("/proc/self/status")
 	for _, line := range strings.Split(string(raw), "\n") {

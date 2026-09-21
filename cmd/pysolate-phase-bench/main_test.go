@@ -33,6 +33,13 @@ func TestSelectCasesAndPreparation(t *testing.T) {
 	if _, err := selectCases("unknown"); err == nil {
 		t.Fatal("unknown case accepted")
 	}
+	selected, err = selectCases("read-finish,tool-chain,numpy-local,read-numpy")
+	if err != nil || len(selected) != 4 || selected[0].name != "read-finish" || selected[3].name != "read-numpy" {
+		t.Fatalf("selected list=%v err=%v", selected, err)
+	}
+	if _, err := selectCases("read-finish,read-finish"); err == nil {
+		t.Fatal("duplicate case list accepted")
+	}
 	fresh, err := parsePreparation("fresh")
 	if err != nil || fresh != nil {
 		t.Fatalf("fresh=%+v err=%v", fresh, err)

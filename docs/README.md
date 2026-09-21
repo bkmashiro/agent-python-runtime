@@ -31,7 +31,7 @@ for the execution model and build commands.
   park/re-admit, and bounded live-I/O slot reuse.
 - [`scheduling-evaluation.md`](scheduling-evaluation.md) — per-Tool timing,
   the Linux-oriented phase matrix, trace schema, deterministic policy
-  simulator, and controlled canonical sweep.
+  simulator, controlled canonical sweep, and measured calibration replay.
 - [`performance-data/`](performance-data/) — checked-in raw measurements. Each
   result should be interpreted with the artifact, host, fixture, and sample
   count recorded by its corresponding document or local README.
@@ -66,11 +66,15 @@ The recent runtime work now covers:
    deterministic simulator compares FIFO, ready-first, and finish-soon over
    explicit phase traces. A canonical CPU/I/O sweep isolates resident, running,
    and Tool-capacity effects without changing production scheduling.
+9. **Measured calibration replay:** phase-bench rows can be converted into
+   deterministic simulator tasks and checked against bounded real 2/4/8-Run
+   batches. Reports preserve the CPU-split assumptions and prediction error.
 
-The next scheduling work remains evidence-led: measure common deterministic
-programs, estimate population behavior from phase distributions, and add policy
-only where simple bounded admission and live-I/O yielding leave a material gap.
-Do not infer arbitrary Python runtime behavior or retry unsafe effects.
+The next scheduling work remains evidence-led: repeat calibrated replay on Linux,
+add matching real batches for tool chains, read-then-compute, and workspace
+edits, and introduce policy only where bounded admission and live-I/O yielding
+leave a measured gap. Do not infer arbitrary Python runtime behavior or retry
+unsafe effects.
 
 ## Demonstrations
 
@@ -85,7 +89,8 @@ The scripts under [`../demos/`](../demos/) provide presentation-ready paths:
 - `07` inline versus live external-I/O scheduling.
 - `08` deterministic scheduling-policy simulation.
 - `09` controlled canonical scheduling sweep.
+- `10` measured phase replay versus real bounded batches.
 
 `demos/run-all.sh` runs the short product demonstrations (`01`–`05`). The
-measurement-oriented `06`–`09` scripts remain explicit so setup time is not
+measurement-oriented `06`–`10` scripts remain explicit so setup time is not
 hidden inside the short demo suite.

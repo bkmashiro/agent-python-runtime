@@ -11,6 +11,7 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 ./demos/06-semantic-phases.sh
 ./demos/07-live-io.sh
 ./demos/08-scheduling-simulation.sh
+./demos/09-canonical-scheduling-sweep.sh
 ./demos/run-all.sh
 ```
 
@@ -22,9 +23,10 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 - `06-semantic-phases.sh` measures fixed read, chained-tool, durable park/re-admit and local NumPy phases without regenerating code.
 - `07-live-io.sh` compares an inline Host wait with an opted-in `ExternalIO` wait that retains the live Guest while releasing its running slot.
 - `08-scheduling-simulation.sh` compares FIFO, ready-first, and finish-soon over fixed common-agent phase traces without running an LLM or changing runtime policy.
+- `09-canonical-scheduling-sweep.sh` isolates running, resident, Tool-capacity and I/O-ratio effects with identical deterministic CPU-I/O-CPU tasks.
 
 `run-all.sh` intentionally runs the short product demonstrations `01`–`05`.
-The measurement-oriented `06`, `07`, and `08` scripts remain explicit.
+The measurement-oriented `06`–`09` scripts remain explicit.
 
 ## Short code-reading route
 

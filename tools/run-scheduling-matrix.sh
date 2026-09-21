@@ -73,5 +73,13 @@ for heap in $HEAPS; do
 done
 
 go run ./cmd/pysolate-schedule-sim > "$OUTPUT_DIR/simulation.jsonl"
+go run ./cmd/pysolate-schedule-sim \
+  -scenario canonical \
+  -tasks 2,8,32 \
+  -running 1,2,4 \
+  -resident-multipliers 1,2,4,8 \
+  -tools 1,2,4,8 \
+  -policies fifo \
+  > "$OUTPUT_DIR/canonical-sweep.jsonl"
 
 printf 'wrote scheduling matrix to %s\n' "$OUTPUT_DIR"

@@ -57,6 +57,7 @@ For presentation-ready end-to-end examples, use the scripts under [`demos/`](dem
 ./demos/06-semantic-phases.sh
 ./demos/07-live-io.sh
 ./demos/08-scheduling-simulation.sh
+./demos/09-canonical-scheduling-sweep.sh
 # Or run all demos:
 ./demos/run-all.sh
 ```

@@ -70,7 +70,7 @@ Defaults:
 - three phase samples per case;
 - two competing Runs with one running, two resident, and two external-tool slots.
 
-Results are written below `docs/performance-data/scheduling-matrix/local/` unless `PYSOLATE_MATRIX_OUTPUT` selects another directory. The `local` directory is intentionally not a canonical checked-in result: record the machine envelope, source revision, artifact digest, and complete raw rows before promoting a run into a named evidence directory.
+Results are written below `docs/performance-data/scheduling-matrix/local/` unless `PYSOLATE_MATRIX_OUTPUT` selects another directory. Alongside the real phase and queue rows, the script writes `simulation.jsonl` for the mixed trace and `canonical-sweep.jsonl` for the controlled FIFO grid. The `local` directory is intentionally not a canonical checked-in result: record the machine envelope, source revision, artifact digest, and complete raw rows before promoting a run into a named evidence directory.
 
 A small portable smoke is:
 
@@ -114,6 +114,36 @@ Policies are deliberately small:
 - `finish_soon`: prefer the smallest known remaining phase sum, with priority only as a tie-breaker.
 
 The output includes completion count, rejection count, mean and p95 latency, makespan, peak resource counts, running/tool slot-time, and resident MiB-seconds. `MaxQueued=0` means unlimited only in this research model; the production Executor retains its strict queue semantics.
+
+### Canonical controlled sweep
+
+Use the canonical scenario to remove runtime and workload noise before estimating population behavior:
+
+```sh
+go run ./cmd/pysolate-schedule-sim \
+  -scenario canonical \
+  -tasks 2,8,32 \
+  -cpu-before 1ms -cpu-after 1ms \
+  -io-ratios 0.1,0.25,0.5,1,2,5,10,50,100 \
+  -running 1,2,4 \
+  -resident-multipliers 1,2,4,8 \
+  -tools 1,2,4,8 \
+  -policies fifo \
+  > /tmp/pysolate-canonical.jsonl
+```
+
+Every task arrives at time zero and has exactly `CPU_before -> ExternalIO -> CPU_after`. The I/O ratio is `ExternalIO / (CPU_before + CPU_after)`. The two arms receive identical tasks: inline holds a running slot during I/O; live-I/O releases only that slot while the Guest continues to consume resident capacity. There is no Wasm construction, replay, page fault, GC, network jitter, random arrival, or measurement noise in this model.
+
+The grid varies five independent controls: population, running slots, resident capacity as a multiple of running slots, Tool slots, and I/O ratio. JSONL emits one metadata row, one `point` per combination, and a `boundary` row per combination excluding I/O ratio. A boundary reports the first sampled ratio reaching 5% and 10% speedup and the sampled maximum. `-format csv` emits the points and boundaries as a rectangular CSV. The research helper rejects more than 10,000 tasks per point or 100,000 grid points; these are process-safety guards, not runtime limits.
+
+The checked command above produces 1,296 points and 144 boundaries from the current deterministic simulator. Its useful sanity checks are:
+
+- when resident capacity equals running capacity, speedup is exactly `1.0` for every sampled point because a waiting live Guest cannot admit another task;
+- the largest sampled speedup is `7.864x` at 32 tasks, one running slot, eight resident slots, eight Tool slots, and I/O ratio 100;
+- with 32 tasks and four running slots, one Tool slot caps the sampled maximum at `1.194x`; eight Tool slots permit `1.995x` with two resident multiples and `2.526x` with four or eight;
+- homogeneous tasks keep resident byte-time close to parity at the maximum point (`1.004x`), while peak concurrent residency still rises. Real reconstruction, dirty-page, and queue costs must be measured separately.
+
+Run [`09-canonical-scheduling-sweep.sh`](../demos/09-canonical-scheduling-sweep.sh) for a smaller presentation grid. Keep this sweep as an idealized sensitivity model. It must not be treated as measured service latency or wired into production policy.
 
 ### Built-in pilot
 

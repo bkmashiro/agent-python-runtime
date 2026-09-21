@@ -30,8 +30,8 @@ for the execution model and build commands.
   scheduling direction: common workload shapes, phase measurement, durable
   park/re-admit, and bounded live-I/O slot reuse.
 - [`scheduling-evaluation.md`](scheduling-evaluation.md) — per-Tool timing,
-  the Linux-oriented phase matrix, trace schema, and deterministic policy
-  simulator.
+  the Linux-oriented phase matrix, trace schema, deterministic policy
+  simulator, and controlled canonical sweep.
 - [`performance-data/`](performance-data/) — checked-in raw measurements. Each
   result should be interpreted with the artifact, host, fixture, and sample
   count recorded by its corresponding document or local README.
@@ -64,7 +64,8 @@ The recent runtime work now covers:
 8. **Scheduling evaluation:** real Tool calls now expose queue, Host service,
    and continuation-resume durations with bounded mean/EWMA aggregation. A
    deterministic simulator compares FIFO, ready-first, and finish-soon over
-   explicit phase traces without changing production scheduling.
+   explicit phase traces. A canonical CPU/I/O sweep isolates resident, running,
+   and Tool-capacity effects without changing production scheduling.
 
 The next scheduling work remains evidence-led: measure common deterministic
 programs, estimate population behavior from phase distributions, and add policy
@@ -83,7 +84,8 @@ The scripts under [`../demos/`](../demos/) provide presentation-ready paths:
 - `06` durable semantic phases;
 - `07` inline versus live external-I/O scheduling.
 - `08` deterministic scheduling-policy simulation.
+- `09` controlled canonical scheduling sweep.
 
 `demos/run-all.sh` runs the short product demonstrations (`01`–`05`). The
-measurement-oriented `06`, `07`, and `08` scripts remain explicit so setup
-time is not hidden inside the short demo suite.
+measurement-oriented `06`–`09` scripts remain explicit so setup time is not
+hidden inside the short demo suite.

@@ -49,7 +49,8 @@ For presentation-ready end-to-end examples, use the scripts under [`demos/`](dem
 ./demos/02-namespaced-tools.sh
 ./demos/03-workspace-edit.sh
 ./demos/04-hot-service.sh
-# Or run all four:
+./demos/05-corpus-replay.sh
+# Or run all demos:
 ./demos/run-all.sh
 ```
 
@@ -98,6 +99,10 @@ go run ./examples/agent-core-usecases -guest dist/pysolate.wasm
 ```
 
 See [the qualified common-usecase boundary](docs/common-usecases.md) for repository/config editing, structured-data processing, Host-enriched scripts and deliberate exclusions.
+
+### Deterministic corpus replay
+
+`cmd/pysolate-corpus` executes frozen programs against exact Host-tool fixtures through the real Guest. The stdlib-only importer currently adapts pinned HumanEval canonical programs and BFCL ground-truth calls without putting an LLM in the measurement loop. See [the corpus schema, adapter semantics and reproducible commands](docs/corpus-replay.md), or run `./demos/05-corpus-replay.sh`.
 
 ### Long-running service
 
@@ -157,6 +162,8 @@ guest/                     CPython bridge, execution and small AST passes
 cmd/pysolate/              CLI
 cmd/pysolate-server/       bounded local HTTP service
 cmd/pysolate-service-bench/ real loopback hot-path benchmark
+cmd/pysolate-corpus/        deterministic real-Guest corpus runner
+corpus/                     strict corpus schema and replay provider
 ```
 
 ## Check

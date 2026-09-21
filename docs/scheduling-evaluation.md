@@ -85,6 +85,8 @@ PYSOLATE_MATRIX_PREPARATIONS='copy' \
 
 On non-Linux systems the queue arm defaults to copy. COW requests fail explicitly rather than falling back. The script accepts `PYSOLATE_MATRIX_CASE`, `PYSOLATE_MATRIX_DELAYS`, `PYSOLATE_MATRIX_HEAPS`, `PYSOLATE_MATRIX_PREPARATIONS`, `PYSOLATE_MATRIX_ITERATIONS`, `PYSOLATE_MATRIX_COW`, and `PYSOLATE_MATRIX_OUTPUT` as bounded experiment controls.
 
+A checked-in WSL quick run at [`performance-data/scheduling-matrix/wsl-quick-0df54dc1/`](performance-data/scheduling-matrix/wsl-quick-0df54dc1/) validates both copy and Linux COW paths at a 50 ms Tool delay. In the two-Run fixture, `ExternalIO` reduced the observed batch from 172.61 to 107.32 ms with a 0 MiB private heap, and from 169.04 to 110.92 ms with an 8 MiB heap. These are one-process queue samples. The sampled RSS deltas changed sign between heap fixtures, so the run supports no memory threshold; the directory README records the exact source, artifact, host, raw rows, and limitations.
+
 ## Offline policy simulator
 
 Run the committed common-agent trace:

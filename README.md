@@ -100,7 +100,7 @@ Every generated function still dispatches through the same narrow Host call ABI.
 
 Workspace-prepared images need the same WASI preopen shape captured at initialization. Use `NewPreparedWorkspace` or Linux `NewPreparedWorkspaceCOW`, then execute with `RunWorkspace`. Ordinary `NewPrepared` runners reject workspace attachment instead of restoring an incompatible image. Workspace state can continue across disposable Guests, but publication back to a real project remains a separate Host operation. Writable workspaces are not part of `RunRecorded` durable replay.
 
-`Lease.Snapshot` produces a path-independent revision and a bounded file manifest; `workspace.Diff` reports deterministic added, modified and deleted metadata without embedding file contents. Python errors preserve private changes for Host inspection until cleanup. See [the workspace lifecycle and executable acceptance](docs/workspace.md), or run:
+`Lease.Snapshot` produces a path-independent revision and a bounded file manifest; `workspace.Diff` reports deterministic added, modified and deleted metadata without embedding file contents. `Lease.ExportChanges` can separately materialize a caller-bounded, versioned change bundle, and `CheckDirectoryConflicts` verifies only its touched Host paths against baseline metadata without writing them. Publication, merge and authorization remain outside the runtime. Python errors preserve private changes for Host inspection until cleanup. See [the workspace lifecycle and executable acceptance](docs/workspace.md), or run:
 
 ```sh
 go run ./examples/workspace-edit -guest dist/pysolate.wasm
@@ -167,7 +167,7 @@ prepared.go                clean-image orchestration
 internal/cowmem/           Linux private-memory backend and platform stub
 recording.go               deterministic attempts and journal stops
 durable/                   SQLite Store and recovery driver
-runtime/workspace/         bounded rooted private filesystems
+runtime/workspace/         bounded private filesystems and change handoff
 integration/               public-API tests against the real Guest
 guest/                     CPython bridge, execution and small AST passes
 cmd/pysolate/              CLI

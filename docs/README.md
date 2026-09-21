@@ -45,8 +45,9 @@ The recent runtime work now covers:
    Tool catalogs and MCP adapters remain Host-side and do not enlarge or
    rebuild the Guest artifact.
 2. **Private workspaces:** a bounded `/workspace` supports normal file editing,
-   local imports, snapshots, and deterministic diffs without mounting the
-   source repository into the Guest.
+   local imports, snapshots, deterministic diffs, bounded change export, and
+   read-only touched-path conflict checks without mounting or modifying the
+   source repository from the Guest.
 3. **Agent-core artifact:** CPython, NumPy, PyYAML, common stdlib workflows,
    qualification probes, and separate native-relink/VFS-repack paths are
    documented and tested.

@@ -18,7 +18,7 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 
 - `01-basic-python.sh` shows a fresh private CPython Guest, JSON inputs, NumPy, safe YAML and a synchronous Host tool.
 - `02-namespaced-tools.sh` shows `market.get_prices(...)`, dynamic Guest namespace injection, real Host HTTP and repository/config/data processing.
-- `03-workspace-edit.sh` shows a private source copy, ordinary Python file editing, deterministic diffs, Host HTTP, parameterized SQLite and an idempotent Host write.
+- `03-workspace-edit.sh` shows a private source copy, ordinary Python file editing, deterministic diffs, bounded changed-content export, read-only Host conflict checks, Host HTTP, parameterized SQLite and an idempotent Host write.
 - `04-hot-service.sh` starts the long-running service, sends repeated hot requests, keeps a workspace across a disposable Guest, reads one output file and destroys the workspace. It chooses a free loopback port and stops the service on exit.
 - `05-corpus-replay.sh` runs frozen Python plus an exact namespaced Host-tool fixture twice through one prepared Runner and validates the output.
 - `06-semantic-phases.sh` measures fixed read, chained-tool, durable park/re-admit and local NumPy phases without regenerating code.
@@ -37,7 +37,7 @@ The measurement-oriented `06`–`10` scripts remain explicit.
 3. `tool_provider.go` and `bridge.go`: provider discovery, Python paths and the single JSON tool ABI.
 4. `guest/bootstrap.py` and `guest/pysolate.py`: generated Python functions and execution convention.
 5. `prepared.go` and `internal/cowmem/`: clean prepared-image orchestration and Linux private COW memory.
-6. `runtime/workspace/workspace.go`: bounded workspace lifecycle and snapshots.
+6. `runtime/workspace/workspace.go`, `snapshot.go`, and `export.go`: bounded workspace lifecycle, snapshots, change handoff, and conflict checks.
 7. `service/server.go`: bounded HTTP admission and persistent workspace leases.
 8. `corpus/` and `cmd/pysolate-corpus/`: strict dataset cases and exact tool replay through the real Guest.
 9. `durable/runner.go` and `durable/executor.go`: replay/effect semantics, explicit attempt states, bounded admission and live-I/O slot reuse.

@@ -10,7 +10,8 @@
 4. Take a pre-run `Snapshot` when change review is needed.
 5. Execute with `RunWorkspace` using a fresh or workspace-prepared Runner.
 6. Take a post-run snapshot and call `workspace.Diff`.
-7. Read selected files through `Lease.Files`, then release the lease and close the manager.
+7. Export a bounded `ChangeSet` when changed contents need Host review.
+8. Check its touched paths against the original Host tree, then release the lease and close the manager.
 
 A lease can persist across multiple disposable Guests. Python memory and `/tmp` do not persist. `RunWorkspace` starts user code with `/workspace` as its current directory and first import root, so relative file access and imports from the private tree work naturally. Ordinary `Run` has no `/workspace` mount and does not receive this import path.
 
@@ -40,6 +41,38 @@ Its revision is a canonical `sha256:` digest independent of the private backing 
 
 Empty directories are not part of the current file revision. Workspace limits and ordinary-entry validation are rechecked before each snapshot.
 
+## Reviewable change handoff
+
+`Lease.ExportChanges` turns a trusted pre-run snapshot and the current workspace
+into a versioned, deterministic `ChangeSet`. The bundle contains baseline and
+result revisions, before/after metadata, deletion records, and bytes only for
+added or modified regular files. The caller supplies a second aggregate byte
+cap, so exporting a small review never has to allocate the full workspace
+limit. `ChangeSet.Validate` rejects unsorted paths, malformed metadata,
+incorrect content digests, invalid kinds, and payload accounting mismatches.
+
+```go
+changes, err := lease.ExportChanges(before, 1<<20) // at most 1 MiB of payload
+if err != nil { return err }
+
+report, err := workspace.CheckDirectoryConflicts(sourceRoot, changes, limits)
+if err != nil { return err }
+if !report.Clean {
+    // Present report.Conflicts for review; do not publish stale edits.
+}
+```
+
+Conflict checking is read-only and path-granular. An added path must still be
+absent; a modified or deleted path must still match its baseline digest, size,
+and executable bit. Missing files, occupied additions, changed contents/modes,
+symlinks, hard links, special files, and filesystem-boundary crossings are
+reported conservatively. Unrelated Host files may change without blocking the
+handoff.
+
+The package deliberately does not apply the bundle. Authorization, user
+review, atomic replacement, backup policy, Git integration, and merge behavior
+remain Host responsibilities rather than Guest authority.
+
 ## Security boundary
 
 - The source directory is copied once and never mounted into the Guest.
@@ -47,10 +80,10 @@ Empty directories are not part of the current file revision. Workspace limits an
 - Symlinks, hard links, devices, non-canonical paths and filesystem-boundary crossings are rejected.
 - File count, total bytes, per-file bytes and path depth are bounded by Host-selected limits.
 - One lease permits at most one active Guest run.
-- Tools do not receive the workspace backing path.
+- Tools and exported bundles do not receive the workspace backing path.
 - Writable workspaces are excluded from durable replay.
 
-The API does not claim transactional rollback, merge or automatic conflict resolution.
+The API does not claim transactional rollback, publication, merge or automatic conflict resolution.
 
 ## Executable acceptance
 
@@ -68,4 +101,4 @@ The example uses:
 - an idempotent Host-side write behind `audit.record(...)`;
 - a fixture containing Python, JSON, Markdown and binary files.
 
-The first Guest edits Python and JSON, writes a report, and leaves the source fixture unchanged. The common-usecase example additionally imports a local workspace module, reads TOML/CSV/JSONL, safely updates YAML, parses Python with `ast`, computes NumPy statistics, calls a namespaced Host market-data tool backed by a real local HTTP request, and writes normalized CSV/JSON/Markdown results. Commands print only Guest output, opaque revisions and bounded change metadata. They do not print Host backing paths or service credentials.
+The first Guest edits Python and JSON, writes a report, leaves the source fixture unchanged, exports the three changed files, and verifies that the touched source paths remain conflict-free. The common-usecase example additionally imports a local workspace module, reads TOML/CSV/JSONL, safely updates YAML, parses Python with `ast`, computes NumPy statistics, calls a namespaced Host market-data tool backed by a real local HTTP request, and writes normalized CSV/JSON/Markdown results. Commands print only Guest output, opaque revisions and bounded change data. They do not print Host backing paths or service credentials.

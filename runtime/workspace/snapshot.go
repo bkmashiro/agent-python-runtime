@@ -66,6 +66,10 @@ func (lease *Lease) Snapshot() (Snapshot, error) {
 	if lease.running {
 		return Snapshot{}, ErrWorkspaceBusy
 	}
+	return lease.snapshotLocked()
+}
+
+func (lease *Lease) snapshotLocked() (Snapshot, error) {
 	usage, err := scanOrdinaryTree(lease.root, lease.filesystem.limits)
 	if err != nil {
 		return Snapshot{}, err

@@ -31,7 +31,7 @@ func TestWorkspaceEditAcceptanceWithRealGuest(t *testing.T) {
 	if value.Price != 123 || value.Note != "Approved local catalog record" || value.Audit != "created" {
 		t.Fatalf("unexpected result: %#v", value)
 	}
-	if result.Before == result.After || len(result.Changes.Changes) != 3 || result.ExternalWrites != 1 {
+	if result.Before == result.After || len(result.Changes.Changes) != 3 || len(result.Export.Changes) != 3 || !result.Target.Clean || result.ExternalWrites != 1 {
 		t.Fatalf("unexpected acceptance evidence: %#v", result)
 	}
 }

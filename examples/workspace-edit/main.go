@@ -41,11 +41,13 @@ result = {"price": quote["price"], "note": record["note"], "audit": effect["stat
 `
 
 type acceptanceResult struct {
-	Value          json.RawMessage            `json:"value"`
-	Before         workspacepkg.Revision      `json:"before"`
-	After          workspacepkg.Revision      `json:"after"`
-	Changes        workspacepkg.ChangeSummary `json:"changes"`
-	ExternalWrites int                        `json:"external_writes"`
+	Value          json.RawMessage             `json:"value"`
+	Before         workspacepkg.Revision       `json:"before"`
+	After          workspacepkg.Revision       `json:"after"`
+	Changes        workspacepkg.ChangeSummary  `json:"changes"`
+	Export         workspacepkg.ChangeSet      `json:"export"`
+	Target         workspacepkg.ConflictReport `json:"target"`
+	ExternalWrites int                         `json:"external_writes"`
 }
 
 func main() {
@@ -166,6 +168,14 @@ func executeAcceptance(ctx context.Context, guestPath string) (acceptanceResult,
 	}
 	result.After = after.Revision
 	result.Changes = workspacepkg.Diff(before, after)
+	result.Export, err = lease.ExportChanges(before, 1<<20)
+	if err != nil {
+		return result, err
+	}
+	result.Target, err = workspacepkg.CheckDirectoryConflicts(source, result.Export, workspacepkg.DefaultLimits())
+	if err != nil {
+		return result, err
+	}
 	result.Value = append(json.RawMessage(nil), output.Value...)
 	result.ExternalWrites = audit.count()
 
@@ -335,7 +345,9 @@ func verifyAcceptance(source string, original []byte, lease *workspacepkg.Lease,
 	if string(contents["assets/logo.bin"]) != string([]byte{0x00, 0x01, 0xfe, 0xff}) {
 		return errors.New("binary fixture changed")
 	}
-	if result.Changes.Added != 1 || result.Changes.Modified != 2 || result.Changes.Deleted != 0 || result.ExternalWrites != 1 {
+	if result.Changes.Added != 1 || result.Changes.Modified != 2 || result.Changes.Deleted != 0 ||
+		len(result.Export.Changes) != 3 || result.Export.Before != result.Before || result.Export.After != result.After ||
+		!result.Target.Clean || len(result.Target.Conflicts) != 0 || result.ExternalWrites != 1 {
 		return fmt.Errorf("unexpected acceptance summary: %#v", result)
 	}
 	return nil

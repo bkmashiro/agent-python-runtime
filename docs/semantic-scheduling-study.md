@@ -1,7 +1,7 @@
 # Semantic scheduling study: phase costs before policy
 
 Status: phase harness and bounded live-I/O scheduling implemented; broader policy remains a study.
-Implementation baseline: `51293c7b91ab6b24011fb81f7a1769b378c34e39`; live-I/O implementation and evidence are committed with this document.
+Study baseline: `51293c7b91ab6b24011fb81f7a1769b378c34e39`. The explicit attempt lifecycle landed in `6268f28c6bf08d40df358e42608b75cfd6e3621e`; live-I/O scheduling and its pilot landed in `15bf3aabed01eedec2750c1485b6eea1c7382647`.
 
 ## Question
 

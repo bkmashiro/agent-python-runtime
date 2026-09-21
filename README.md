@@ -4,6 +4,9 @@ A small Go runtime for agent-authored Python in isolated CPython/WASI Guests.
 
 The execution core is a direct evolution of Pysolate Spine (`1abc99a`, MIT), not a wrapper around the former runtime. The old APIs, experiments and evidence remain in Git at `2be7488b`.
 
+See the [`docs/` index](docs/README.md) for supported workflows, performance
+evidence, the current scheduling study, and a summary of recent deliveries.
+
 ## Execution model
 
 ```text
@@ -50,6 +53,9 @@ For presentation-ready end-to-end examples, use the scripts under [`demos/`](dem
 ./demos/03-workspace-edit.sh
 ./demos/04-hot-service.sh
 ./demos/05-corpus-replay.sh
+# Measurement-oriented demos:
+./demos/06-semantic-phases.sh
+./demos/07-live-io.sh
 # Or run all demos:
 ./demos/run-all.sh
 ```

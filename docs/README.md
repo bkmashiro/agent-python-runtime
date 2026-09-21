@@ -1,0 +1,81 @@
+# Documentation index
+
+This directory separates supported behavior, reproducible evaluation, and
+forward-looking research. Start with the repository [`README`](../README.md)
+for the execution model and build commands.
+
+## Supported workflows
+
+- [`artifact-profiles.md`](artifact-profiles.md) — the supported `agent-core`
+  Guest contents, qualification probes, native relink versus VFS repack, and
+  artifact manifests.
+- [`common-usecases.md`](common-usecases.md) — qualified repository editing,
+  structured-data processing, NumPy, and Host-enriched Python workflows.
+- [`workspace.md`](workspace.md) — bounded private filesystem lifecycle,
+  snapshots, diffs, security boundaries, and executable acceptance.
+- [`service.md`](service.md) — the long-running local HTTP service, hot
+  prepared execution, workspace endpoints, admission behavior, and benchmark.
+- [`corpus-replay.md`](corpus-replay.md) — deterministic HumanEval/BFCL
+  adapters and exact Tool-result replay without an LLM in the timed loop.
+
+## Performance and scheduling
+
+- [`performance-results.md`](performance-results.md) — measured prepared/COW,
+  compilation-cache, prefix/PLM, admission, and service results with scope and
+  trade-offs.
+- [`performance-goal.md`](performance-goal.md) — the completed performance
+  goal and its original acceptance boundaries. Keep this as a historical
+  implementation record rather than the current roadmap.
+- [`semantic-scheduling-study.md`](semantic-scheduling-study.md) — the active
+  scheduling direction: common workload shapes, phase measurement, durable
+  park/re-admit, and bounded live-I/O slot reuse.
+- [`performance-data/`](performance-data/) — checked-in raw measurements. Each
+  result should be interpreted with the artifact, host, fixture, and sample
+  count recorded by its corresponding document or local README.
+
+## Current delivery snapshot
+
+The recent runtime work now covers:
+
+1. **Dynamic Tool ABI:** Host providers expose canonical tool identities as
+   generated namespaced Python functions through one JSON Host-call bridge.
+   Tool catalogs and MCP adapters remain Host-side and do not enlarge or
+   rebuild the Guest artifact.
+2. **Private workspaces:** a bounded `/workspace` supports normal file editing,
+   local imports, snapshots, and deterministic diffs without mounting the
+   source repository into the Guest.
+3. **Agent-core artifact:** CPython, NumPy, PyYAML, common stdlib workflows,
+   qualification probes, and separate native-relink/VFS-repack paths are
+   documented and tested.
+4. **Hot service:** compiled code and clean prepared images stay warm behind a
+   bounded local HTTP service with explicit 429 admission behavior.
+5. **Deterministic corpus replay:** frozen HumanEval programs and BFCL calls can
+   test runtime and Tool ABI compatibility without repeatedly generating code.
+6. **Durable attempt lifecycle:** park and completion are explicit control
+   states; a durable park destroys the Guest, then re-admission reconstructs
+   and replays persisted observations.
+7. **Live external-I/O scheduling:** an opted-in `ExternalIO` Tool releases its
+   running slot while retaining the live Guest. Running, resident, external
+   Tool, and queued limits are independent. The initial two-Run pilot reduced
+   the controlled 100 ms-wait batch median from 238.16 ms to 125.91 ms.
+
+The next scheduling work remains evidence-led: measure common deterministic
+programs, estimate population behavior from phase distributions, and add policy
+only where simple bounded admission and live-I/O yielding leave a material gap.
+Do not infer arbitrary Python runtime behavior or retry unsafe effects.
+
+## Demonstrations
+
+The scripts under [`../demos/`](../demos/) provide presentation-ready paths:
+
+- `01` basic Python and artifact contents;
+- `02` dynamic namespaced Host tools;
+- `03` private workspace editing;
+- `04` hot local service;
+- `05` deterministic corpus replay;
+- `06` durable semantic phases;
+- `07` inline versus live external-I/O scheduling.
+
+`demos/run-all.sh` runs the short product demonstrations (`01`–`05`). The
+measurement-oriented `06` and `07` scripts remain explicit so benchmark setup
+time is not hidden inside the short demo suite.

@@ -45,6 +45,7 @@ type metadata struct {
 	ToolDelayNS    int64  `json:"synthetic_tool_delay_ns"`
 	ParkDelayNS    int64  `json:"synthetic_park_delay_ns"`
 	RunnerSetupNS  int64  `json:"runner_setup_ns"`
+	ExternalIO     bool   `json:"external_io"`
 }
 
 type sample struct {
@@ -57,6 +58,9 @@ type sample struct {
 	DecideNS          int64   `json:"decide_ns,omitempty"`
 	ReadmitAttemptNS  int64   `json:"readmit_attempt_ns,omitempty"`
 	ToolServiceNS     int64   `json:"tool_service_ns"`
+	ToolQueueNS       int64   `json:"tool_queue_ns"`
+	ToolResumeNS      int64   `json:"tool_resume_ns"`
+	ToolFailures      int64   `json:"tool_failures"`
 	RuntimeOverheadNS int64   `json:"attempt_minus_tool_ns"`
 	ToolDispatches    int64   `json:"tool_dispatches"`
 	Result            float64 `json:"result"`
@@ -65,15 +69,13 @@ type sample struct {
 
 type toolMetrics struct {
 	calls     atomic.Int64
+	queueNS   atomic.Int64
 	serviceNS atomic.Int64
+	resumeNS  atomic.Int64
+	failures  atomic.Int64
 }
 
 func (m *toolMetrics) call(ctx context.Context, delay time.Duration, result any) (any, error) {
-	started := time.Now()
-	defer func() {
-		m.calls.Add(1)
-		m.serviceNS.Add(time.Since(started).Nanoseconds())
-	}()
 	if delay > 0 {
 		timer := time.NewTimer(delay)
 		defer timer.Stop()
@@ -86,6 +88,19 @@ func (m *toolMetrics) call(ctx context.Context, delay time.Duration, result any)
 	return result, nil
 }
 
+func (m *toolMetrics) ObserveTool(observation durable.ToolObservation) {
+	if observation.Operation != durable.ToolCall {
+		return
+	}
+	m.calls.Add(1)
+	m.queueNS.Add(observation.QueueDuration.Nanoseconds())
+	m.serviceNS.Add(observation.ServiceDuration.Nanoseconds())
+	m.resumeNS.Add(observation.ResumeDuration.Nanoseconds())
+	if observation.Outcome != durable.ToolSucceeded {
+		m.failures.Add(1)
+	}
+}
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -95,11 +110,12 @@ func main() {
 
 func run() error {
 	guest := flag.String("guest", "dist/pysolate.wasm", "Guest artifact")
-	caseName := flag.String("case", "all", "read-finish, tool-chain, park-readmit, numpy-local, or all")
+	caseName := flag.String("case", "all", "read-finish, tool-chain, park-readmit, numpy-local, read-numpy, or all")
 	iterations := flag.Int("iterations", 5, "samples per case")
 	preparationName := flag.String("preparation", "copy", "fresh, copy, or cow")
 	toolDelay := flag.Duration("tool-delay", 50*time.Millisecond, "synthetic Host tool service delay")
 	parkDelay := flag.Duration("park-delay", 200*time.Millisecond, "synthetic time outside a Guest before a decision")
+	externalIO := flag.Bool("external-io", false, "classify synthetic Host reads as ExternalIO")
 	flag.Parse()
 	if *iterations < 1 || *iterations > 1000 || *toolDelay < 0 || *parkDelay < 0 {
 		return errors.New("invalid benchmark bounds")
@@ -129,11 +145,15 @@ func run() error {
 	defer store.Close()
 
 	var metrics toolMetrics
+	scheduling := durable.Inline
+	if *externalIO {
+		scheduling = durable.ExternalIO
+	}
 	tools := []durable.Tool{
-		{Name: "remote_read", Version: "bench-v1", Recovery: durable.RetrySafe, Call: func(ctx context.Context, _ json.RawMessage) (any, error) {
+		{Name: "remote_read", Version: "bench-v1", Recovery: durable.RetrySafe, Scheduling: scheduling, Observer: &metrics, Call: func(ctx context.Context, _ json.RawMessage) (any, error) {
 			return metrics.call(ctx, *toolDelay, map[string]any{"id": "item-1", "value": 41})
 		}},
-		{Name: "remote_detail", Version: "bench-v1", Recovery: durable.RetrySafe, Call: func(ctx context.Context, _ json.RawMessage) (any, error) {
+		{Name: "remote_detail", Version: "bench-v1", Recovery: durable.RetrySafe, Scheduling: scheduling, Observer: &metrics, Call: func(ctx context.Context, _ json.RawMessage) (any, error) {
 			return metrics.call(ctx, *toolDelay, map[string]any{"value": 42})
 		}},
 		{Name: "approval", Version: "bench-v1", Recovery: durable.WaitMode, Wait: func(context.Context, json.RawMessage) (durable.WaitSpec, error) {
@@ -166,7 +186,7 @@ func run() error {
 	if err := encoder.Encode(metadata{
 		Type: "metadata", Artifact: *guest, ArtifactSHA256: hex.EncodeToString(digest[:]), ArtifactBytes: len(wasm),
 		GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, GoVersion: runtime.Version(), SourceRevision: revision, SourceModified: modified,
-		Preparation: *preparationName, Cases: *caseName, Iterations: *iterations, ToolDelayNS: toolDelay.Nanoseconds(), ParkDelayNS: parkDelay.Nanoseconds(), RunnerSetupNS: setupNS,
+		Preparation: *preparationName, Cases: *caseName, Iterations: *iterations, ToolDelayNS: toolDelay.Nanoseconds(), ParkDelayNS: parkDelay.Nanoseconds(), RunnerSetupNS: setupNS, ExternalIO: *externalIO,
 	}); err != nil {
 		return err
 	}
@@ -188,7 +208,10 @@ func runSample(ctx context.Context, runner *durable.Runner, executor *durable.Ex
 	row := sample{Type: "sample", Case: spec.name, Iteration: iteration}
 	totalStarted := time.Now()
 	callsBefore := metrics.calls.Load()
+	queueBefore := metrics.queueNS.Load()
 	serviceBefore := metrics.serviceNS.Load()
+	resumeBefore := metrics.resumeNS.Load()
+	failuresBefore := metrics.failures.Load()
 	runID := fmt.Sprintf("%s-%d", spec.name, iteration)
 	createStarted := time.Now()
 	_, err := runner.Create(ctx, durable.Definition{
@@ -244,7 +267,10 @@ func runSample(ctx context.Context, runner *durable.Runner, executor *durable.Ex
 		return row, fmt.Errorf("result=%v want=%v", row.Result, spec.want)
 	}
 	row.ToolDispatches = metrics.calls.Load() - callsBefore
+	row.ToolQueueNS = metrics.queueNS.Load() - queueBefore
 	row.ToolServiceNS = metrics.serviceNS.Load() - serviceBefore
+	row.ToolResumeNS = metrics.resumeNS.Load() - resumeBefore
+	row.ToolFailures = metrics.failures.Load() - failuresBefore
 	row.RuntimeOverheadNS = row.FirstAttemptNS + row.ReadmitAttemptNS - row.ToolServiceNS
 	row.TotalNS = time.Since(totalStarted).Nanoseconds()
 	return row, nil
@@ -263,6 +289,10 @@ result = record["value"] if approved else None`, inputs: json.RawMessage(`{"key"
 		{name: "numpy-local", code: `import numpy as np
 values = np.arange(inputs["size"], dtype=np.float64)
 result = float((values * values).sum())`, inputs: json.RawMessage(`{"size":10000}`), want: 333283335000},
+		{name: "read-numpy", code: `import numpy as np
+record = remote_read(key=inputs["key"])
+values = np.arange(inputs["size"], dtype=np.float64)
+result = float(values.sum()) + record["value"]`, inputs: json.RawMessage(`{"key":"item-1","size":10000}`), want: 49995041},
 	}
 }
 

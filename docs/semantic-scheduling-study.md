@@ -114,7 +114,7 @@ The checked-in pilot data under `docs/performance-data/semantic-phases/` used th
 - With the same 50 ms tool delay and a controlled 200 ms parked interval, park/re-admit used **72.80 ms** for the first attempt and **30.91 ms** for re-admission. The parked interval does not retain a live Guest.
 - The local NumPy case took **3.44–3.45 s**. It is a useful negative control: import/computation dominates these millisecond lifecycle costs, so park policy should not target this shape without another explicit wait.
 
-The pilot establishes measurement separation and workload correctness. It does not establish a population-level scheduling gain; that requires Linux memory measurements and controlled competing arrivals after a decision boundary is found.
+The pilot establishes measurement separation and workload correctness. It does not establish a population-level scheduling gain; that requires Linux memory measurements and controlled competing arrivals after a decision boundary is found. The executable matrix and offline model are documented in `docs/scheduling-evaluation.md`.
 
 ### Live-I/O slot reuse pilot
 
@@ -146,7 +146,7 @@ release_cost = journal + teardown + reconstruction + replay + page_faults
 
 A release decision also depends on active-slot pressure and CPU pressure. A long wait with a small Guest may not repay reconstruction. A large waiting Guest may be worth releasing when memory limits admission, while the same reconstruction may be harmful when CPU is saturated.
 
-Tool estimates should keep queue time separate from provider service time. Process-local bounded observations keyed by canonical tool identity, provider version, cost class, and payload-size bucket are sufficient for an initial study. Successful latency samples, errors, timeouts, and cancellations must remain distinguishable; an arithmetic mean alone is not a scheduling contract.
+Tool estimates should keep queue time separate from provider service time. The implementation now provides process-local bounded observations keyed by canonical tool identity, version, operation, scheduling class, and payload-size bucket. It separates external-capacity queue, provider service, and running-slot reacquisition time, and keeps successful calls, errors, deadlines, and cancellations distinguishable. The aggregate includes a mean and an EWMA; neither is a scheduling contract.
 
 ## Legal actions before scoring
 

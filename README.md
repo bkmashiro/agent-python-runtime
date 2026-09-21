@@ -56,6 +56,7 @@ For presentation-ready end-to-end examples, use the scripts under [`demos/`](dem
 # Measurement-oriented demos:
 ./demos/06-semantic-phases.sh
 ./demos/07-live-io.sh
+./demos/08-scheduling-simulation.sh
 # Or run all demos:
 ./demos/run-all.sh
 ```
@@ -228,7 +229,9 @@ Embedders can create a `wazero.CompilationCache` (in memory or with a directory)
 
 Prefer `Admit(ctx, runID)` and `Attempt.Result(ctx)`: completion and durable parking are explicit `AdvanceResult` states, while execution/control failures remain errors. Repeated admission of an already queued or resident Run returns `ErrBusy`, and a full admission queue returns `ErrQueueFull`. `Submit`/`Wait` remain compatibility aliases; `Wait` converts a parked result back to `ErrParked`/`ParkError`.
 
-Host tools are `durable.Inline` by default and keep the running slot. A tool explicitly declared with `Scheduling: durable.ExternalIO` lets the Executor reuse its running slot for another resident attempt while the live Guest and Wasm stack wait. When the call returns, its continuation enters the ready queue and reacquires a running slot before Python continues; ready continuations are preferred with a bounded burst so new admissions cannot starve. This policy is Host-local and is not part of the persisted Tool semantic snapshot. Use it only for cooperative, context-aware external I/O, not local CPU work. `Executor.Stats()` reports running, resident, in-flight Tool, live-waiting, ready and queued counts.
+Host tools are `durable.Inline` by default and keep the running slot. A tool explicitly declared with `Scheduling: durable.ExternalIO` lets the Executor reuse its running slot for another resident attempt while the live Guest and Wasm stack wait. When the call returns, its continuation enters the ready queue and reacquires a running slot before Python continues; ready continuations are preferred with a bounded burst so new admissions cannot starve. This policy is Host-local and is not part of the persisted Tool semantic snapshot. Use it only for cooperative, context-aware external I/O, not local CPU work. `Executor.Stats()` exposes running, resident, in-flight Tool, live-waiting, ready and queued counts.
+
+Attach a shared `durable.ToolLatencyStats` as a Tool `Observer` to measure external-capacity queue time, Host service time, and continuation resume time separately. Snapshots provide deterministic means and EWMAs by tool, version, operation, scheduling class, and payload bucket. See [Scheduling evaluation](docs/scheduling-evaluation.md) for the real phase matrix and offline simulator; observations do not alter replay or effect safety.
 
 A durable park is different: the Guest is destroyed and the logical Run can outlive it without resident capacity. Persist a decision through `Runner.Decide`, then explicitly `Admit` the same Run again to reconstruct and replay. Admission and scheduling stay outside `Runner`; the Runner continues to own journals, replay, effects, and Guest construction.
 

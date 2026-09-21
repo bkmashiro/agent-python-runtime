@@ -10,6 +10,7 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 ./demos/05-corpus-replay.sh
 ./demos/06-semantic-phases.sh
 ./demos/07-live-io.sh
+./demos/08-scheduling-simulation.sh
 ./demos/run-all.sh
 ```
 
@@ -20,9 +21,10 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 - `05-corpus-replay.sh` runs frozen Python plus an exact namespaced Host-tool fixture twice through one prepared Runner and validates the output.
 - `06-semantic-phases.sh` measures fixed read, chained-tool, durable park/re-admit and local NumPy phases without regenerating code.
 - `07-live-io.sh` compares an inline Host wait with an opted-in `ExternalIO` wait that retains the live Guest while releasing its running slot.
+- `08-scheduling-simulation.sh` compares FIFO, ready-first, and finish-soon over fixed common-agent phase traces without running an LLM or changing runtime policy.
 
 `run-all.sh` intentionally runs the short product demonstrations `01`–`05`.
-The measurement-oriented `06` and `07` scripts remain explicit.
+The measurement-oriented `06`, `07`, and `08` scripts remain explicit.
 
 ## Short code-reading route
 
@@ -36,5 +38,6 @@ The measurement-oriented `06` and `07` scripts remain explicit.
 8. `corpus/` and `cmd/pysolate-corpus/`: strict dataset cases and exact tool replay through the real Guest.
 9. `durable/runner.go` and `durable/executor.go`: replay/effect semantics, explicit attempt states, bounded admission and live-I/O slot reuse.
 10. `cmd/pysolate-phase-bench/` and `cmd/pysolate-queue-bench/`: fixed phase and scheduling measurements.
+11. `scheduling/` and `cmd/pysolate-schedule-sim/`: deterministic population-policy evaluation over explicit traces.
 
 This branch is a direct continuation of the interview `spine/` implementation, not a wrapper around the old large runtime. The same short `Runner -> Wasm CPython -> Host bridge` path remains, while prepared/COW execution, PLM/prefix, dynamic tool providers, durable replay, workspaces and the HTTP service have been added around it.

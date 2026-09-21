@@ -188,8 +188,12 @@ func TestCancelDuringResumeReturnsCancelledAfterCoreStops(t *testing.T) {
 
 func TestJournalLookupErrorOnlyAndCompletedReplay(t *testing.T) {
 	store, _ := openTestStore(t)
+	var observations []ToolObservation
 	runner := journalOnlyRunner(store, Tool{
 		Name: "lookup", Version: "v1", Recovery: Lookup,
+		Observer: ToolObserverFunc(func(observation ToolObservation) {
+			observations = append(observations, observation)
+		}),
 		Call: func(context.Context, json.RawMessage) (any, error) { return "live", nil },
 		Lookup: func(context.Context, json.RawMessage) (LookupResult, error) {
 			return LookupResult{State: LookupDone, Error: "already failed"}, nil
@@ -217,6 +221,9 @@ func TestJournalLookupErrorOnlyAndCompletedReplay(t *testing.T) {
 	})
 	if err != nil || !bytes.Equal(replayed, response) {
 		t.Fatalf("replayed=%s err=%v", replayed, err)
+	}
+	if len(observations) != 1 || observations[0].Operation != ToolLookup || observations[0].Outcome != ToolSucceeded {
+		t.Fatalf("lookup observations=%+v", observations)
 	}
 }
 

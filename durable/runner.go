@@ -55,6 +55,9 @@ type Tool struct {
 	Lookup     LookupFunc
 	Wait       WaitFunc
 	Scheduling SchedulingClass
+	// Observer receives Host-local timing data and is not persisted with the
+	// durable declaration. It should return quickly.
+	Observer ToolObserver
 }
 
 // LookupFunc resolves a previously reserved external call. Done may contain a
@@ -194,7 +197,7 @@ func NewRunner(ctx context.Context, store *Store, artifact []byte, environmentVe
 	manifest := make(pysolate.Manifest, len(toolMap))
 	for _, tool := range toolMap {
 		snapshot = append(snapshot, toolDeclaration{Name: tool.Name, Version: tool.Version, Recovery: tool.Recovery})
-		manifest[tool.Name] = pysolate.ToolSpec{Call: scheduledTool(tool.Scheduling, tool.Call)}
+		manifest[tool.Name] = pysolate.ToolSpec{Call: scheduledTool(tool)}
 	}
 	sort.Slice(snapshot, func(left, right int) bool { return snapshot[left].Name < snapshot[right].Name })
 	encoded, err := json.Marshal(snapshot)
@@ -229,25 +232,58 @@ func NewRunner(ctx context.Context, store *Store, artifact []byte, environmentVe
 	}, nil
 }
 
-func scheduledTool(class SchedulingClass, call pysolate.Tool) pysolate.Tool {
-	if class != ExternalIO {
-		return call
-	}
-	return func(ctx context.Context, args json.RawMessage) (result any, err error) {
-		err = executeExternalIO(ctx, func() error {
-			result, err = call(ctx, args)
-			return err
+func scheduledTool(tool Tool) pysolate.Tool {
+	return func(ctx context.Context, args json.RawMessage) (any, error) {
+		return executeScheduled(ctx, tool, ToolCall, args, func() (any, error) {
+			return tool.Call(ctx, args)
 		})
-		return result, err
 	}
 }
 
-func executeExternalIO(ctx context.Context, call func() error) error {
-	if err := yieldExecution(ctx); err != nil {
-		return err
+func executeScheduled[T any](ctx context.Context, tool Tool, operation ToolOperation, args json.RawMessage, call func() (T, error)) (result T, err error) {
+	observation := ToolObservation{
+		Name: tool.Name, Version: tool.Version, Operation: operation,
+		Scheduling: tool.Scheduling, ArgumentBytes: len(args),
 	}
-	callErr := call()
-	return errors.Join(callErr, reacquireExecution(ctx))
+	observation.OperationKey, _ = OperationKey(ctx)
+	defer func() {
+		observation.Outcome = classifyToolOutcome(err)
+		if tool.Observer != nil {
+			tool.Observer.ObserveTool(observation)
+		}
+	}()
+
+	if tool.Scheduling == ExternalIO {
+		started := time.Now()
+		if err = yieldExecution(ctx); err != nil {
+			observation.QueueDuration = time.Since(started)
+			return result, err
+		}
+		observation.QueueDuration = time.Since(started)
+	}
+
+	started := time.Now()
+	result, err = call()
+	observation.ServiceDuration = time.Since(started)
+	if tool.Scheduling == ExternalIO {
+		started = time.Now()
+		err = errors.Join(err, reacquireExecution(ctx))
+		observation.ResumeDuration = time.Since(started)
+	}
+	return result, err
+}
+
+func classifyToolOutcome(err error) ToolOutcome {
+	switch {
+	case err == nil:
+		return ToolSucceeded
+	case errors.Is(err, context.DeadlineExceeded):
+		return ToolDeadline
+	case errors.Is(err, context.Canceled):
+		return ToolCancelled
+	default:
+		return ToolFailed
+	}
 }
 
 func waitToolPlaceholder(context.Context, json.RawMessage) (any, error) {
@@ -588,17 +624,9 @@ func (journal *journal) complete(logged LoggedCall, response []byte) ([]byte, er
 }
 
 func (journal *journal) lookup(ctx context.Context, logged LoggedCall, tool Tool, next func(context.Context) []byte) ([]byte, error) {
-	var resolved LookupResult
-	var err error
-	lookup := func() error {
-		resolved, err = tool.Lookup(ctx, logged.Arguments)
-		return err
-	}
-	if tool.Scheduling == ExternalIO {
-		err = executeExternalIO(ctx, lookup)
-	} else {
-		err = lookup()
-	}
+	resolved, err := executeScheduled(ctx, tool, ToolLookup, logged.Arguments, func() (LookupResult, error) {
+		return tool.Lookup(ctx, logged.Arguments)
+	})
 	if err != nil {
 		return nil, err
 	}

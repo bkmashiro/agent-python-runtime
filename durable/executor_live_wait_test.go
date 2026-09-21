@@ -260,9 +260,13 @@ func TestExecutorExternalIOLimitBoundsHostCallbacks(t *testing.T) {
 func TestExecutorRealGuestExternalIOReusesRunningSlot(t *testing.T) {
 	release := make(chan struct{})
 	entered := make(chan struct{})
+	observed := make(chan ToolObservation, 1)
 	var calls atomic.Int32
 	runner, store := realExecutorRunner(t, []Tool{{
 		Name: "remote_read", Version: "v1", Recovery: RetrySafe, Scheduling: ExternalIO,
+		Observer: ToolObserverFunc(func(observation ToolObservation) {
+			observed <- observation
+		}),
 		Call: func(ctx context.Context, _ json.RawMessage) (any, error) {
 			calls.Add(1)
 			close(entered)
@@ -299,6 +303,13 @@ func TestExecutorRealGuestExternalIOReusesRunningSlot(t *testing.T) {
 	completed, err = waiting.Result(context.Background())
 	if err != nil || string(completed.Output.Value) != "7" || calls.Load() != 1 {
 		t.Fatalf("waiting result=%s calls=%d err=%v", completed.Output.Value, calls.Load(), err)
+	}
+	observation := <-observed
+	if observation.Operation != ToolCall || observation.Outcome != ToolSucceeded || observation.OperationKey == "" {
+		t.Fatalf("observation=%+v", observation)
+	}
+	if observation.QueueDuration <= 0 || observation.ServiceDuration <= 0 || observation.ResumeDuration <= 0 {
+		t.Fatalf("missing ExternalIO phase timing: %+v", observation)
 	}
 	if err = executor.Close(context.Background()); err != nil {
 		t.Fatal(err)

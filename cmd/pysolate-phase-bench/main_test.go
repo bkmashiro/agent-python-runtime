@@ -4,7 +4,7 @@ import "testing"
 
 func TestBenchmarkCasesAreFixedAndCoverExpectedShapes(t *testing.T) {
 	cases := benchmarkCases()
-	if len(cases) != 4 {
+	if len(cases) != 5 {
 		t.Fatalf("case count=%d", len(cases))
 	}
 	seen := map[string]bool{}
@@ -17,7 +17,7 @@ func TestBenchmarkCasesAreFixedAndCoverExpectedShapes(t *testing.T) {
 		}
 		seen[spec.name] = true
 	}
-	if !seen["read-finish"] || !seen["tool-chain"] || !seen["park-readmit"] || !seen["numpy-local"] {
+	if !seen["read-finish"] || !seen["tool-chain"] || !seen["park-readmit"] || !seen["numpy-local"] || !seen["read-numpy"] {
 		t.Fatalf("unexpected cases: %v", seen)
 	}
 	if !cases[2].park {

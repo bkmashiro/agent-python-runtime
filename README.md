@@ -174,6 +174,7 @@ For presentation-ready end-to-end examples, use the scripts under [`demos/`](dem
 ./demos/12-mcp-workspace-scheduling.sh
 ./demos/13-durable-restart.sh
 ./demos/14-agent-workloads.sh
+./demos/15-deterministic-replay.sh
 # Or run all demos:
 ./demos/run-all.sh
 ```
@@ -215,6 +216,11 @@ See [the qualified common-usecase boundary](docs/common-usecases.md) for reposit
 `make workloads` runs the maintained 20-case common Agent workload lane plus
 real workspace, MCP stdio and durable process-restart acceptance. See the
 [workload pack scope and interpretation](docs/workload-pack.md).
+
+`make replay-check` verifies seeded entropy and logical clocks across separate
+processes, then checks completed Tool-outcome replay and prepared seed state.
+The [determinism contract and next replay features](docs/deterministic-execution-and-replay.md)
+separate program-visible replay guarantees from real scheduling variance.
 
 ### Long-running service
 

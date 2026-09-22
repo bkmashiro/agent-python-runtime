@@ -1,4 +1,4 @@
-.PHONY: bootstrap guest repack verify-artifact artifact-bundle artifact-install workloads check build
+.PHONY: bootstrap guest repack verify-artifact artifact-bundle artifact-install workloads replay-check check build
 
 GUEST ?= dist/pysolate.wasm
 MANIFEST ?= dist/pysolate.manifest.json
@@ -30,6 +30,9 @@ artifact-install:
 
 workloads: verify-artifact
 	PYSOLATE_GUEST="$(abspath $(GUEST))" ./demos/14-agent-workloads.sh
+
+replay-check: verify-artifact
+	PYSOLATE_GUEST="$(abspath $(GUEST))" ./demos/15-deterministic-replay.sh
 
 check: verify-artifact
 	PYSOLATE_GUEST="$(abspath $(GUEST))" go test ./... -count=1

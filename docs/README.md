@@ -20,6 +20,9 @@ for the execution model and build commands.
   ordinary Python does not need a workflow DSL, how Tool declarations define
   reusable effect boundaries, the Temporal comparison, and the limits of
   automatic recovery.
+- [`deterministic-execution-and-replay.md`](deterministic-execution-and-replay.md)
+  — the exact controlled-input contract, current evidence and prioritized
+  replay-observability work.
 - [`runtime-harness-boundary.md`](runtime-harness-boundary.md) — the ownership
   split between isolated execution, replay and local resource lifecycle in
   Pysolate versus goals, model turns, events and global policy in the harness.
@@ -133,7 +136,8 @@ The scripts under [`../demos/`](../demos/) provide presentation-ready paths:
 - `12` real MCP tool-chain scheduling followed by workspace ChangeSet export.
 - `13` process-kill durable recovery with an idempotent Host effect.
 - `14` the complete fixed Agent workload pack.
+- `15` deterministic randomness/clock/Tool replay conformance.
 
 `demos/run-all.sh` runs the short product demonstrations (`01`–`05`). The
-measurement-oriented `06`–`10` scripts and dependency-oriented demos `11`–`14`
+measurement-oriented `06`–`10` scripts and dependency-oriented demos `11`–`15`
 remain explicit so setup time is not hidden inside the short demo suite.

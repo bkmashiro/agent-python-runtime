@@ -13,9 +13,17 @@ import (
 type Runtime interface {
 	Allocator(api.MemoryDefinition) (Memory, error)
 	Capture(api.Memory) error
+	CaptureSegments(size uint64, segments []Segment) error
 	Attach(api.Memory) error
 	Ready() bool
 	Close() error
+}
+
+// Segment is one ordered initialization write used to create a sparse seed.
+// Later segments intentionally overwrite earlier ones, matching Wasm order.
+type Segment struct {
+	Offset uint64
+	Data   []byte
 }
 
 // Memory is one privately mapped Guest linear-memory allocation.

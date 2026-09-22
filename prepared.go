@@ -16,41 +16,81 @@ import (
 // NewPrepared captures clean initialization for private full-copy restoration.
 // This is not a checkpoint of user execution or Host resources.
 func NewPrepared(ctx context.Context, wasm []byte, manifest Manifest) (*Runner, error) {
-	return prepare(ctx, wasm, manifest, false, false, nil)
+	return prepare(ctx, wasm, manifest, false, false, nil, false)
+}
+
+// COWOptions controls opt-in COW-only optimizations. Defaults preserve the
+// original full-artifact COW path.
+type COWOptions struct {
+	DataImage bool
 }
 
 // NewPreparedCOW shares the clean image through private Linux mappings.
 // Globals, tables and Host resources are still created independently for each attempt.
-func NewPreparedCOW(ctx context.Context, wasm []byte, manifest Manifest) (*Runner, error) {
-	return prepare(ctx, wasm, manifest, true, false, nil)
+func NewPreparedCOW(ctx context.Context, wasm []byte, manifest Manifest, options ...COWOptions) (*Runner, error) {
+	dataImage, err := cowDataImageOption(options)
+	if err != nil {
+		return nil, err
+	}
+	return prepare(ctx, wasm, manifest, true, false, nil, dataImage)
 }
 
 // NewPreparedWorkspace captures an image whose WASI preopen shape includes a
 // private /workspace mount. Use the resulting Runner only with RunWorkspace.
 func NewPreparedWorkspace(ctx context.Context, wasm []byte, manifest Manifest) (*Runner, error) {
-	return prepare(ctx, wasm, manifest, false, true, nil)
+	return prepare(ctx, wasm, manifest, false, true, nil, false)
 }
 
 // NewPreparedWorkspaceCOW is the Linux COW variant of NewPreparedWorkspace.
 func NewPreparedWorkspaceCOW(ctx context.Context, wasm []byte, manifest Manifest) (*Runner, error) {
-	return prepare(ctx, wasm, manifest, true, true, nil)
+	return prepare(ctx, wasm, manifest, true, true, nil, false)
+}
+
+// NewPreparedWorkspaceCOWWithOptions is the opt-in variant for workspace images.
+func NewPreparedWorkspaceCOWWithOptions(ctx context.Context, wasm []byte, manifest Manifest, options ...COWOptions) (*Runner, error) {
+	dataImage, err := cowDataImageOption(options)
+	if err != nil {
+		return nil, err
+	}
+	return prepare(ctx, wasm, manifest, true, true, nil, dataImage)
 }
 
 // NewPreparedRecorded captures one seed for deterministic full-copy attempts.
 func NewPreparedRecorded(ctx context.Context, wasm []byte, manifest Manifest, seed string) (*Runner, error) {
-	return prepare(ctx, wasm, manifest, false, false, []string{seed})
+	return prepare(ctx, wasm, manifest, false, false, []string{seed}, false)
 }
 
 // NewPreparedRecordedCOW captures one seed for deterministic private COW attempts.
-func NewPreparedRecordedCOW(ctx context.Context, wasm []byte, manifest Manifest, seed string) (*Runner, error) {
-	return prepare(ctx, wasm, manifest, true, false, []string{seed})
+func NewPreparedRecordedCOW(ctx context.Context, wasm []byte, manifest Manifest, seed string, options ...COWOptions) (*Runner, error) {
+	dataImage, err := cowDataImageOption(options)
+	if err != nil {
+		return nil, err
+	}
+	return prepare(ctx, wasm, manifest, true, false, []string{seed}, dataImage)
 }
 
-func prepare(ctx context.Context, wasm []byte, manifest Manifest, cow, workspace bool, seed []string) (*Runner, error) {
+func cowDataImageOption(options []COWOptions) (bool, error) {
+	if len(options) > 1 {
+		return false, errors.New("COW accepts at most one options value")
+	}
+	return len(options) == 1 && options[0].DataImage, nil
+}
+
+func prepare(ctx context.Context, wasm []byte, manifest Manifest, cow, workspace bool, seed []string, dataImage bool) (*Runner, error) {
 	if len(seed) > 1 || (len(seed) == 1 && seed[0] == "") {
 		return nil, errors.New("preparation accepts one nonempty recording seed")
 	}
-	r, err := New(ctx, wasm, manifest)
+	originalWasm := wasm
+	var transformed *cowDataImage
+	if cow && dataImage {
+		image, transformErr := transformCOWDataImage(wasm)
+		if transformErr != nil {
+			return nil, transformErr
+		}
+		transformed = &image
+		wasm = image.shell
+	}
+	r, err := newRunner(ctx, wasm, originalWasm, manifest)
 	if err != nil {
 		return nil, err
 	}
@@ -60,10 +100,24 @@ func prepare(ctx context.Context, wasm []byte, manifest Manifest, cow, workspace
 			_ = r.Close(context.Background())
 		}
 	}()
+	var seedSegments []cowmem.Segment
 	if cow {
 		r.cow, err = cowmem.New()
 		if err != nil {
 			return nil, err
+		}
+		if transformed != nil {
+			r.cowSeed, err = cowmem.New()
+			if err != nil {
+				return nil, err
+			}
+			seedSegments = make([]cowmem.Segment, len(transformed.active))
+			for i, segment := range transformed.active {
+				seedSegments[i] = cowmem.Segment{Offset: segment.offset, Data: segment.data}
+			}
+			if err := r.cowSeed.CaptureSegments(transformed.memorySize, seedSegments); err != nil {
+				return nil, err
+			}
 		}
 	}
 	r.workspaceImage = workspace
@@ -105,6 +159,24 @@ func prepare(ctx context.Context, wasm []byte, manifest Manifest, cow, workspace
 	if err != nil {
 		return nil, err
 	}
+	if transformed != nil {
+		// Capturing the final image reads every seed page, materializing sparse
+		// memfd holes. Retire that mapping and reseal only the original segments
+		// so replacement Guests do not retain those zero pages per Runner.
+		if err := m.Close(context.Background()); err != nil {
+			return nil, err
+		}
+		if err := r.cowSeed.Close(); err != nil {
+			return nil, err
+		}
+		r.cowSeed, err = cowmem.New()
+		if err != nil {
+			return nil, err
+		}
+		if err := r.cowSeed.CaptureSegments(transformed.memorySize, seedSegments); err != nil {
+			return nil, err
+		}
+	}
 	if rec != nil {
 		r.preparedState, err = rec.capture()
 		if err != nil {
@@ -123,7 +195,11 @@ func (r *Runner) newGuest(ctx context.Context, stdout, stderr *boundedText) (api
 	var mapped cowmem.Memory
 	if r.cow != nil {
 		var err error
-		mapped, err = r.cow.Allocator(r.code.ExportedMemories()["memory"])
+		allocator := r.cow
+		if r.cowSeed != nil {
+			allocator = r.cowSeed
+		}
+		mapped, err = allocator.Allocator(r.code.ExportedMemories()["memory"])
 		if err != nil {
 			return nil, err
 		}
@@ -145,6 +221,11 @@ func (r *Runner) newGuest(ctx context.Context, stdout, stderr *boundedText) (api
 			m.Close(context.Background())
 		}
 	}()
+	if r.cowSeed != nil {
+		if err := r.cowSeed.Attach(m.Memory()); err != nil {
+			return nil, err
+		}
+	}
 	if _, err = m.ExportedFunction("_initialize").Call(ctx); err != nil {
 		return nil, fmt.Errorf("initialize Guest: %w%s", err, stderr.String())
 	}

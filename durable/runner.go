@@ -127,8 +127,9 @@ type toolDeclaration struct {
 // Preparation is an optional immutable image for one recorded seed.
 // COW requires Linux; no per-seed cache or silent fallback is created.
 type Preparation struct {
-	Seed string
-	COW  bool
+	Seed         string
+	COW          bool
+	COWDataImage bool
 }
 
 type Runner struct {
@@ -152,7 +153,7 @@ func NewRunner(ctx context.Context, store *Store, artifact []byte, environmentVe
 		return nil, ErrInvalidRunner
 	}
 
-	if len(preparation) > 1 || (len(preparation) == 1 && preparation[0].Seed == "") {
+	if len(preparation) > 1 || (len(preparation) == 1 && (preparation[0].Seed == "" || (preparation[0].COWDataImage && !preparation[0].COW))) {
 		return nil, ErrInvalidRunner
 	}
 	toolMap := make(map[string]Tool, len(tools))
@@ -233,7 +234,11 @@ func NewRunner(ctx context.Context, store *Store, artifact []byte, environmentVe
 	} else {
 		preparedSeed = preparation[0].Seed
 		if preparation[0].COW {
-			core, err = pysolate.NewPreparedRecordedCOW(ctx, artifact, manifest, preparedSeed)
+			if preparation[0].COWDataImage {
+				core, err = pysolate.NewPreparedRecordedCOW(ctx, artifact, manifest, preparedSeed, pysolate.COWOptions{DataImage: true})
+			} else {
+				core, err = pysolate.NewPreparedRecordedCOW(ctx, artifact, manifest, preparedSeed)
+			}
 		} else {
 			core, err = pysolate.NewPreparedRecorded(ctx, artifact, manifest, preparedSeed)
 		}

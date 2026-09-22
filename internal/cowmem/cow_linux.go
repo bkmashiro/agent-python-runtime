@@ -105,6 +105,45 @@ func (c *linuxCOW) Capture(memory api.Memory) error {
 	return c.captureBytes(data)
 }
 
+func (c *linuxCOW) CaptureSegments(size uint64, segments []Segment) error {
+	if size == 0 || size%wasmPageSize != 0 || size%uint64(cowPageSize) != 0 {
+		return fmt.Errorf("COW image size must be page aligned: %d", size)
+	}
+	if c.closed {
+		return errors.New("COW image is closed")
+	}
+	if c.imageSize != 0 {
+		return errors.New("COW image already captured")
+	}
+	if size > uint64(maxInt()) {
+		return errors.New("COW image is too large")
+	}
+	if err := unix.Ftruncate(c.fd, int64(size)); err != nil {
+		return fmt.Errorf("size COW image: %w", err)
+	}
+	for _, segment := range segments {
+		if segment.Offset > size || uint64(len(segment.Data)) > size-segment.Offset {
+			return errors.New("COW seed segment is out of bounds")
+		}
+		for offset := 0; offset < len(segment.Data); {
+			n, err := unix.Pwrite(c.fd, segment.Data[offset:], int64(segment.Offset)+int64(offset))
+			if err != nil {
+				return fmt.Errorf("write COW seed: %w", err)
+			}
+			if n == 0 {
+				return errors.New("short write while creating COW seed")
+			}
+			offset += n
+		}
+	}
+	seals := unix.F_SEAL_SHRINK | unix.F_SEAL_GROW | unix.F_SEAL_WRITE | unix.F_SEAL_SEAL
+	if _, err := unix.FcntlInt(uintptr(c.fd), unix.F_ADD_SEALS, seals); err != nil {
+		return fmt.Errorf("seal COW seed: %w", err)
+	}
+	c.imageSize = size
+	return nil
+}
+
 // captureBytes writes directly from the allocator-backed mapping into the
 // sealed memfd. It deliberately does not retain a Go-owned image copy.
 func (c *linuxCOW) captureBytes(data []byte) error {

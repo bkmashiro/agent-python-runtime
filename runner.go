@@ -32,6 +32,7 @@ type Runner struct {
 	preparedState  *preparedRecording
 	image          []byte // Immutable full-copy baseline; COW owns its image separately.
 	cow            cowmem.Runtime
+	cowSeed        cowmem.Runtime // Optional pre-_initialize seed for a data-image shell.
 	workspaceImage bool
 }
 
@@ -68,13 +69,17 @@ func WithCompilationCache(ctx context.Context, cache wazero.CompilationCache) co
 type compilationCacheKey struct{}
 
 func New(ctx context.Context, wasm []byte, manifest Manifest) (*Runner, error) {
+	return newRunner(ctx, wasm, wasm, manifest)
+}
+
+func newRunner(ctx context.Context, compileWasm, artifactWasm []byte, manifest Manifest) (*Runner, error) {
 	config := wazero.NewRuntimeConfig().WithCloseOnContextDone(true).WithMemoryLimitPages(8192)
 	if cache, ok := ctx.Value(compilationCacheKey{}).(wazero.CompilationCache); ok {
 		config = config.WithCompilationCache(cache)
 	}
 
 	r := &Runner{
-		artifactID:    fmt.Sprintf("sha256:%x", sha256.Sum256(wasm)),
+		artifactID:    fmt.Sprintf("sha256:%x", sha256.Sum256(artifactWasm)),
 		runtime:       wazero.NewRuntimeWithConfig(ctx, config),
 		manifest:      make(Manifest, len(manifest)),
 		guestManifest: make([]guestToolSpec, 0, len(manifest)),
@@ -95,7 +100,7 @@ func New(ctx context.Context, wasm []byte, manifest Manifest) (*Runner, error) {
 		r.Close(ctx)
 		return nil, err
 	}
-	r.code, err = r.runtime.CompileModule(ctx, wasm)
+	r.code, err = r.runtime.CompileModule(ctx, compileWasm)
 	if err != nil {
 		r.Close(ctx)
 		return nil, err
@@ -127,6 +132,10 @@ func (r *Runner) Close(ctx context.Context) error {
 	if r.cow != nil {
 		err = errors.Join(err, r.cow.Close())
 		r.cow = nil
+	}
+	if r.cowSeed != nil {
+		err = errors.Join(err, r.cowSeed.Close())
+		r.cowSeed = nil
 	}
 	return err
 }

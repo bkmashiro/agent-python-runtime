@@ -1,0 +1,74 @@
+=== RUN   TestDataImageCodeAdmission
+=== RUN   TestDataImageCodeAdmission/active_init
+=== RUN   TestDataImageCodeAdmission/active_drop
+=== RUN   TestDataImageCodeAdmission/passive_init
+=== RUN   TestDataImageCodeAdmission/passive_drop
+=== RUN   TestDataImageCodeAdmission/index_out_of_range
+=== RUN   TestDataImageCodeAdmission/bytes_inside_float_are_not_instructions
+=== RUN   TestDataImageCodeAdmission/truncated_immediate
+=== RUN   TestDataImageCodeAdmission/unsupported_SIMD
+--- PASS: TestDataImageCodeAdmission (0.00s)
+    --- PASS: TestDataImageCodeAdmission/active_init (0.00s)
+    --- PASS: TestDataImageCodeAdmission/active_drop (0.00s)
+    --- PASS: TestDataImageCodeAdmission/passive_init (0.00s)
+    --- PASS: TestDataImageCodeAdmission/passive_drop (0.00s)
+    --- PASS: TestDataImageCodeAdmission/index_out_of_range (0.00s)
+    --- PASS: TestDataImageCodeAdmission/bytes_inside_float_are_not_instructions (0.00s)
+    --- PASS: TestDataImageCodeAdmission/truncated_immediate (0.00s)
+    --- PASS: TestDataImageCodeAdmission/unsupported_SIMD (0.00s)
+=== RUN   TestDataImageLEBWidth
+--- PASS: TestDataImageLEBWidth (0.00s)
+=== RUN   TestTransformCOWDataImagePreservesSectionsAndSemantics
+--- PASS: TestTransformCOWDataImagePreservesSectionsAndSemantics (0.00s)
+=== RUN   TestTransformCOWDataImageRefusesUnsupportedModules
+=== RUN   TestTransformCOWDataImageRefusesUnsupportedModules/start
+=== RUN   TestTransformCOWDataImageRefusesUnsupportedModules/unbounded
+=== RUN   TestTransformCOWDataImageRefusesUnsupportedModules/imported_memory
+=== RUN   TestTransformCOWDataImageRefusesUnsupportedModules/nonconstant_offset
+=== RUN   TestTransformCOWDataImageRefusesUnsupportedModules/out_of_bounds
+--- PASS: TestTransformCOWDataImageRefusesUnsupportedModules (0.00s)
+    --- PASS: TestTransformCOWDataImageRefusesUnsupportedModules/start (0.00s)
+    --- PASS: TestTransformCOWDataImageRefusesUnsupportedModules/unbounded (0.00s)
+    --- PASS: TestTransformCOWDataImageRefusesUnsupportedModules/imported_memory (0.00s)
+    --- PASS: TestTransformCOWDataImageRefusesUnsupportedModules/nonconstant_offset (0.00s)
+    --- PASS: TestTransformCOWDataImageRefusesUnsupportedModules/out_of_bounds (0.00s)
+=== RUN   TestPreparedCOWDataImageRealGuestLifecycle
+--- PASS: TestPreparedCOWDataImageRealGuestLifecycle (9.13s)
+=== RUN   TestPreparedRecordedMatchesFresh
+=== RUN   TestPreparedRecordedMatchesFresh/copy
+=== RUN   TestPreparedRecordedMatchesFresh/cow
+=== RUN   TestPreparedRecordedMatchesFresh/cow-data-image
+--- PASS: TestPreparedRecordedMatchesFresh (88.23s)
+    --- PASS: TestPreparedRecordedMatchesFresh/copy (25.07s)
+    --- PASS: TestPreparedRecordedMatchesFresh/cow (24.70s)
+    --- PASS: TestPreparedRecordedMatchesFresh/cow-data-image (24.69s)
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/bkmashiro/agent-python-runtime
+cpu: Intel(R) Xeon(R) Gold 6254 CPU @ 3.10GHz
+BenchmarkCOWDataImagePreparation/instruction-check-2         	       5	  45795367 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCOWDataImagePreparation/instruction-check-2         	       5	  45604733 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCOWDataImagePreparation/instruction-check-2         	       5	  45650546 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCOWDataImagePreparation/full-transform-2            	       5	  59900348 ns/op	46064400 B/op	      27 allocs/op
+BenchmarkCOWDataImagePreparation/full-transform-2            	       5	  60697122 ns/op	46064377 B/op	      27 allocs/op
+BenchmarkCOWDataImagePreparation/full-transform-2            	       5	  63973788 ns/op	46064380 B/op	      27 allocs/op
+PASS
+{'case': 'python', 'repeat': 0, 'enabled': False, 'median_ns': 17705570.0, 'setup_ns': 7478021681, 'max_batch_pss_kib': 461380, 'memfd_allocated_bytes': 134217728, 'memfd_count': 1}
+{'case': 'python', 'repeat': 0, 'enabled': True, 'median_ns': 2896666.5, 'setup_ns': 6948542179, 'max_batch_pss_kib': 602984, 'memfd_allocated_bytes': 158765056, 'memfd_count': 2}
+{'case': 'tool', 'repeat': 0, 'enabled': False, 'median_ns': 17319587.5, 'setup_ns': 6885012332, 'max_batch_pss_kib': 529960, 'memfd_allocated_bytes': 134217728, 'memfd_count': 1}
+{'case': 'tool', 'repeat': 0, 'enabled': True, 'median_ns': 2294639.5, 'setup_ns': 6991282405, 'max_batch_pss_kib': 453608, 'memfd_allocated_bytes': 158765056, 'memfd_count': 2}
+{'case': 'durable', 'repeat': 0, 'enabled': False, 'median_ns': 19055238.0, 'setup_ns': 7889741275, 'max_batch_pss_kib': 497616, 'memfd_allocated_bytes': 134217728, 'memfd_count': 1}
+{'case': 'durable', 'repeat': 0, 'enabled': True, 'median_ns': 4190264.5, 'setup_ns': 7862188586, 'max_batch_pss_kib': 608428, 'memfd_allocated_bytes': 158765056, 'memfd_count': 2}
+{'case': 'python', 'repeat': 1, 'enabled': True, 'median_ns': 2901168.5, 'setup_ns': 6979418181, 'max_batch_pss_kib': 603960, 'memfd_allocated_bytes': 158765056, 'memfd_count': 2}
+{'case': 'python', 'repeat': 1, 'enabled': False, 'median_ns': 17826700.5, 'setup_ns': 6914904655, 'max_batch_pss_kib': 462268, 'memfd_allocated_bytes': 134217728, 'memfd_count': 1}
+{'case': 'tool', 'repeat': 1, 'enabled': True, 'median_ns': 2313702.5, 'setup_ns': 7075890629, 'max_batch_pss_kib': 604112, 'memfd_allocated_bytes': 158765056, 'memfd_count': 2}
+{'case': 'tool', 'repeat': 1, 'enabled': False, 'median_ns': 17229616.0, 'setup_ns': 7040912307, 'max_batch_pss_kib': 488904, 'memfd_allocated_bytes': 134217728, 'memfd_count': 1}
+{'case': 'durable', 'repeat': 1, 'enabled': True, 'median_ns': 4035320.5, 'setup_ns': 7955944327, 'max_batch_pss_kib': 578920, 'memfd_allocated_bytes': 158765056, 'memfd_count': 2}
+{'case': 'durable', 'repeat': 1, 'enabled': False, 'median_ns': 19032130.0, 'setup_ns': 7826790085, 'max_batch_pss_kib': 469292, 'memfd_allocated_bytes': 134217728, 'memfd_count': 1}
+{'case': 'python', 'repeat': 2, 'enabled': False, 'median_ns': 17823091.0, 'setup_ns': 6948603727, 'max_batch_pss_kib': 460956, 'memfd_allocated_bytes': 134217728, 'memfd_count': 1}
+{'case': 'python', 'repeat': 2, 'enabled': True, 'median_ns': 2886382.5, 'setup_ns': 6983015605, 'max_batch_pss_kib': 603632, 'memfd_allocated_bytes': 158765056, 'memfd_count': 2}
+{'case': 'tool', 'repeat': 2, 'enabled': False, 'median_ns': 17184752.5, 'setup_ns': 7023183780, 'max_batch_pss_kib': 463052, 'memfd_allocated_bytes': 134217728, 'memfd_count': 1}
+{'case': 'tool', 'repeat': 2, 'enabled': True, 'median_ns': 2313033.0, 'setup_ns': 7156014960, 'max_batch_pss_kib': 604828, 'memfd_allocated_bytes': 158765056, 'memfd_count': 2}
+{'case': 'durable', 'repeat': 2, 'enabled': False, 'median_ns': 19005839.0, 'setup_ns': 7849891717, 'max_batch_pss_kib': 477388, 'memfd_allocated_bytes': 134217728, 'memfd_count': 1}
+{'case': 'durable', 'repeat': 2, 'enabled': True, 'median_ns': 4071007.5, 'setup_ns': 7962471947, 'max_batch_pss_kib': 590536, 'memfd_allocated_bytes': 158765056, 'memfd_count': 2}

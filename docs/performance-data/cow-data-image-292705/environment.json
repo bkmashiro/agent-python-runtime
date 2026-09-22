@@ -1,0 +1,15 @@
+{
+  "cpu_affinity": [
+    0,
+    1
+  ],
+  "gomaxprocs": 2,
+  "memory_limits": {
+    "/sys/fs/cgroup/system.slice/slurmstepd.scope/job_292705/step_batch/user/task_0/memory.max": "max",
+    "/sys/fs/cgroup/system.slice/slurmstepd.scope/job_292705/step_batch/user/memory.max": "2147483648",
+    "/sys/fs/cgroup/system.slice/slurmstepd.scope/job_292705/step_batch/memory.max": "max",
+    "/sys/fs/cgroup/system.slice/slurmstepd.scope/job_292705/memory.max": "2147483648",
+    "/sys/fs/cgroup/system.slice/slurmstepd.scope/memory.max": "max",
+    "/sys/fs/cgroup/system.slice/memory.max": "max"
+  }
+}

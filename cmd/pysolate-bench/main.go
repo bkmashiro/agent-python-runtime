@@ -46,6 +46,7 @@ func run() error {
 	guest := flag.String("guest", "dist/pysolate.wasm", "Guest artifact")
 	prepared := flag.String("prepare", "fresh", "recorded/durable image: fresh/copy/cow")
 	mode := flag.String("mode", "fresh", "fresh/copy/cow/recorded/durable-live/durable-replay")
+	cowDataImage := flag.Bool("cow-data-image", false, "opt in to the COW raw-data shell (requires COW mode/preparation)")
 	durableCase := flag.String("durable-case", "park", "durable-live/replay case: park or finish")
 	work := flag.String("work", "python", "python/numpy/tools/early-reads")
 	n := flag.Int("n", 5, "measured rounds")
@@ -71,6 +72,9 @@ func run() error {
 	}
 	if *durableCase != "park" && *durableCase != "finish" {
 		return errors.New("unknown durable case")
+	}
+	if *cowDataImage && !(*mode == "cow" || ((*mode == "recorded" || *mode == "durable-live" || *mode == "durable-replay") && *prepared == "cow")) {
+		return errors.New("-cow-data-image requires -mode cow or a cow -prepare")
 	}
 	fullProfile, err := perfdiag.StartProfiles(*profile, "")
 	if err != nil {
@@ -143,13 +147,13 @@ func run() error {
 		case "copy":
 			core, err = pysolate.NewPrepared(ctx, wasm, manifest)
 		case "cow":
-			core, err = pysolate.NewPreparedCOW(ctx, wasm, manifest)
+			core, err = pysolate.NewPreparedCOW(ctx, wasm, manifest, pysolate.COWOptions{DataImage: *cowDataImage})
 		default:
 			if *mode == "recorded" && *prepared != "fresh" {
 				if *prepared == "copy" {
 					core, err = pysolate.NewPreparedRecorded(ctx, wasm, manifest, "bench-seed")
 				} else if *prepared == "cow" {
-					core, err = pysolate.NewPreparedRecordedCOW(ctx, wasm, manifest, "bench-seed")
+					core, err = pysolate.NewPreparedRecordedCOW(ctx, wasm, manifest, "bench-seed", pysolate.COWOptions{DataImage: *cowDataImage})
 				} else {
 					return errors.New("unknown preparation")
 				}
@@ -194,7 +198,7 @@ func run() error {
 			if *prepared != "copy" && *prepared != "cow" {
 				return errors.New("unknown preparation")
 			}
-			preparation = []durable.Preparation{{Seed: "bench-seed", COW: *prepared == "cow"}}
+			preparation = []durable.Preparation{{Seed: "bench-seed", COW: *prepared == "cow", COWDataImage: *cowDataImage}}
 		}
 		dr, e := durable.NewRunner(ctx, store, wasm, "bench-v1", []durable.Tool{
 			{Name: "read", Version: "v1", Recovery: durable.RetrySafe, Call: tool, Observer: toolObserver},
@@ -255,7 +259,7 @@ func run() error {
 	setupNS := time.Since(setup).Nanoseconds()
 	defer func() { _ = closeRunner() }()
 	enc := json.NewEncoder(os.Stdout)
-	if err := enc.Encode(map[string]any{"kind": "environment", "mode": *mode, "work": *work, "durable_case": *durableCase, "go": runtime.Version(), "os": runtime.GOOS, "arch": runtime.GOARCH, "concurrency": *concurrency, "rounds": *n, "calls": *calls, "payload": *payload, "synthetic_delay_ns": delay.Nanoseconds(), "prepare": *prepared, "setup_ns": setupNS - historySeedNS, "history_seed_ns": historySeedNS, "profiled": *profile != "" || *measuredCPU != "" || *tracePath != "" || *allocPath != "" || *phasePath != "", "profile_scope": map[bool]string{true: "measured", false: "none"}[*measuredCPU != "" || *tracePath != "" || *allocPath != "" || *phasePath != ""]}); err != nil {
+	if err := enc.Encode(map[string]any{"kind": "environment", "mode": *mode, "work": *work, "durable_case": *durableCase, "go": runtime.Version(), "os": runtime.GOOS, "arch": runtime.GOARCH, "concurrency": *concurrency, "rounds": *n, "calls": *calls, "payload": *payload, "synthetic_delay_ns": delay.Nanoseconds(), "prepare": *prepared, "cow_data_image": *cowDataImage, "setup_ns": setupNS - historySeedNS, "history_seed_ns": historySeedNS, "profiled": *profile != "" || *measuredCPU != "" || *tracePath != "" || *allocPath != "" || *phasePath != "", "profile_scope": map[bool]string{true: "measured", false: "none"}[*measuredCPU != "" || *tracePath != "" || *allocPath != "" || *phasePath != ""]}); err != nil {
 		return err
 	}
 	// One excluded warm-up per worker. Durable replay histories were seeded above.
@@ -266,6 +270,15 @@ func run() error {
 		}
 		if !strings.HasPrefix(*mode, "durable-") && string(out.Value) != expected {
 			return fmt.Errorf("warm-up result=%s want=%s", out.Value, expected)
+		}
+	}
+	if *mode == "cow" || *prepared == "cow" {
+		count, allocated, err := perfdiag.COWStorage()
+		if err != nil {
+			return err
+		}
+		if err := enc.Encode(map[string]any{"kind": "cow_storage", "image_files": count, "allocated_bytes": allocated}); err != nil {
+			return err
 		}
 	}
 	if *allocPath != "" {

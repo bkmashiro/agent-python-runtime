@@ -156,6 +156,9 @@ func TestPreparedRunnersAttachWorkspacePerRun(t *testing.T) {
 	constructors := map[string]func(context.Context, []byte, pysolate.Manifest) (*pysolate.Runner, error){"copy": pysolate.NewPreparedWorkspace}
 	if runtime.GOOS == "linux" {
 		constructors["cow"] = pysolate.NewPreparedWorkspaceCOW
+		constructors["cow-data-image"] = func(ctx context.Context, wasm []byte, manifest pysolate.Manifest) (*pysolate.Runner, error) {
+			return pysolate.NewPreparedWorkspaceCOWWithOptions(ctx, wasm, manifest, pysolate.COWOptions{DataImage: true})
+		}
 	}
 	for name, construct := range constructors {
 		t.Run(name, func(t *testing.T) {

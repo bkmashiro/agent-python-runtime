@@ -12,6 +12,11 @@ import (
 )
 
 func TestPreparedCOWRealGuestLifecycle(t *testing.T) {
+	t.Run("baseline", func(t *testing.T) { testPreparedCOWLifecycle(t, false) })
+	t.Run("data-image", func(t *testing.T) { testPreparedCOWLifecycle(t, true) })
+}
+
+func testPreparedCOWLifecycle(t *testing.T, dataImage bool) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Linux COW is intentionally unsupported on this platform")
 	}
@@ -39,7 +44,7 @@ func TestPreparedCOWRealGuestLifecycle(t *testing.T) {
 			return nil, errors.New("missing key: " + request.Key)
 		}
 	}, AllowEarlyRead: true}}
-	r, err := NewPreparedCOW(ctx, wasm, manifest)
+	r, err := NewPreparedCOW(ctx, wasm, manifest, COWOptions{DataImage: dataImage})
 	if err != nil {
 		t.Fatal(err)
 	}

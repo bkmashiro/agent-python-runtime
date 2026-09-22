@@ -36,7 +36,7 @@ result = {"bytes":os.urandom(17).hex(), "random":random.Random().getrandbits(64)
 	fresh.Close(ctx)
 	modes := []string{"copy"}
 	if runtime.GOOS == "linux" {
-		modes = append(modes, "cow")
+		modes = append(modes, "cow", "cow-data-image")
 	}
 	for _, mode := range modes {
 		t.Run(mode, func(t *testing.T) {
@@ -45,7 +45,7 @@ result = {"bytes":os.urandom(17).hex(), "random":random.Random().getrandbits(64)
 			if mode == "copy" {
 				r, err = NewPreparedRecorded(ctx, wasm, manifest, seed)
 			} else {
-				r, err = NewPreparedRecordedCOW(ctx, wasm, manifest, seed)
+				r, err = NewPreparedRecordedCOW(ctx, wasm, manifest, seed, COWOptions{DataImage: mode == "cow-data-image"})
 			}
 			if err != nil {
 				t.Fatal(err)

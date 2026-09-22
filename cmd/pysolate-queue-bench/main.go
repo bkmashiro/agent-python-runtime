@@ -175,6 +175,7 @@ func run() error {
 	heap := flag.Int("heap", 8, "private allocation MiB per Guest")
 	hold := flag.Duration("hold", 200*time.Millisecond, "synthetic Host wait")
 	cow := flag.Bool("cow", true, "use seeded COW, false selects copy")
+	cowDataImage := flag.Bool("cow-data-image", false, "opt in to the COW raw-data shell (requires -cow=true)")
 	warmup := flag.Int("warmup", 0, "completed unmeasured Runs before measured Run creation")
 	profile := flag.String("cpuprofile", "", "diagnostic CPU profile, includes construction")
 	measuredCPU := flag.String("measured-cpuprofile", "", "CPU profile scoped to measured phase(s) only")
@@ -193,6 +194,9 @@ func run() error {
 	}
 	if *mode != "executor" && *mode != "semaphore" && *mode != "unbounded" {
 		return errors.New("unknown mode")
+	}
+	if *cowDataImage && !*cow {
+		return errors.New("-cow-data-image requires -cow=true")
 	}
 	if *profile != "" && *measuredCPU != "" {
 		return errors.New("choose legacy -cpuprofile or -measured-cpuprofile, not both")
@@ -277,7 +281,7 @@ func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	started := time.Now()
-	runner, err := durable.NewRunner(ctx, store, wasm, "bench-v1", tools, durable.Preparation{Seed: "bench-seed", COW: *cow})
+	runner, err := durable.NewRunner(ctx, store, wasm, "bench-v1", tools, durable.Preparation{Seed: "bench-seed", COW: *cow, COWDataImage: *cowDataImage})
 	if err != nil {
 		return err
 	}
@@ -454,7 +458,7 @@ func run() error {
 			"case": spec.name, "mode": *mode, "tasks": *tasks,
 			"running_limit": *active, "resident_limit": *resident, "tool_limit": *toolActive,
 			"external_io": *externalIO, "heap_mib": *heap, "synthetic_hold_ns": hold.Nanoseconds(),
-			"cow": *cow, "preparation": map[bool]string{true: "cow", false: "copy"}[*cow],
+			"cow": *cow, "cow_data_image": *cowDataImage, "preparation": map[bool]string{true: "cow", false: "copy"}[*cow],
 			"gomaxprocs": runtime.GOMAXPROCS(0), "gomaxprocs_source": "runtime.GOMAXPROCS(0)", "num_cpu": runtime.NumCPU(),
 			"warmup": *warmup, "warmup_ns": warmupNS.Nanoseconds(), "setup_ns": setup.Nanoseconds(), "batch_ns": batch.elapsed.Nanoseconds(), "request_ns": phaseLatencies[0],
 			"startup_memory": nullableMemory(startupMemory), "sampled_setup_peak_memory": nullableMemory(setupPeakMemory), "pre_measured_batch_memory": nullableMemory(preMeasuredBatchMemory), "after_batch_memory": nullableMemory(afterBatchMemory),
@@ -492,7 +496,7 @@ func run() error {
 		return err
 	}
 	measuredPeakMemory := memory.snapshot()
-	return json.NewEncoder(os.Stdout).Encode(map[string]any{"case": spec.name, "mode": *mode, "tasks": *tasks, "running_limit": *active, "resident_limit": *resident, "tool_limit": *toolActive, "external_io": *externalIO, "heap_mib": *heap, "synthetic_hold_ns": hold.Nanoseconds(), "cow": *cow, "preparation": map[bool]string{true: "cow", false: "copy"}[*cow], "gomaxprocs": runtime.GOMAXPROCS(0), "gomaxprocs_source": "runtime.GOMAXPROCS(0)", "num_cpu": runtime.NumCPU(), "warmup": *warmup, "warmup_ns": warmupNS.Nanoseconds(), "setup_ns": setup.Nanoseconds(), "park_batch_ns": parked.elapsed.Nanoseconds(), "resume_batch_ns": resumed.elapsed.Nanoseconds(), "peak_host_waits": peak.Load(), "peak_executor_running": peakRunning.Load(), "peak_executor_resident": peakResident.Load(), "peak_executor_inflight_tools": peakInflightTools.Load(), "sampled_peak_rss_kib": nullableMetric(measuredPeakMemory.RSSKB), "sampled_peak_pss_kib": nullableMetric(measuredPeakMemory.PSSKB), "sampled_peak_private_dirty_kib": nullableMetric(measuredPeakMemory.PrivateDirtyKB), "sampled_peak_memory": nullableMemory(measuredPeakMemory), "sampled_peak_scope": "measured_batch_and_readmit", "memory_sample_interval_ns": int64(10 * time.Millisecond), "startup_memory": nullableMemory(startupMemory), "sampled_setup_peak_memory": nullableMemory(setupPeakMemory), "pre_measured_batch_memory": nullableMemory(preMeasuredBatchMemory), "after_park_memory": nullableMemory(afterPark), "after_park_rss_kib": nullableMetric(afterPark.RSSKB), "park_request_ns": phaseLatencies[0], "resume_request_ns": phaseLatencies[1], "park_completed": parked.completed, "resume_completed": resumed.completed, "completed": resumed.completed, "errors": parked.errors + resumed.errors, "result_count": resumed.resultCount, "tool_dispatches": resumed.dispatches, "park_tool_dispatches": parked.dispatches, "resume_tool_dispatches": resumed.dispatches - parked.dispatches})
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{"case": spec.name, "mode": *mode, "tasks": *tasks, "running_limit": *active, "resident_limit": *resident, "tool_limit": *toolActive, "external_io": *externalIO, "heap_mib": *heap, "synthetic_hold_ns": hold.Nanoseconds(), "cow": *cow, "cow_data_image": *cowDataImage, "preparation": map[bool]string{true: "cow", false: "copy"}[*cow], "gomaxprocs": runtime.GOMAXPROCS(0), "gomaxprocs_source": "runtime.GOMAXPROCS(0)", "num_cpu": runtime.NumCPU(), "warmup": *warmup, "warmup_ns": warmupNS.Nanoseconds(), "setup_ns": setup.Nanoseconds(), "park_batch_ns": parked.elapsed.Nanoseconds(), "resume_batch_ns": resumed.elapsed.Nanoseconds(), "peak_host_waits": peak.Load(), "peak_executor_running": peakRunning.Load(), "peak_executor_resident": peakResident.Load(), "peak_executor_inflight_tools": peakInflightTools.Load(), "sampled_peak_rss_kib": nullableMetric(measuredPeakMemory.RSSKB), "sampled_peak_pss_kib": nullableMetric(measuredPeakMemory.PSSKB), "sampled_peak_private_dirty_kib": nullableMetric(measuredPeakMemory.PrivateDirtyKB), "sampled_peak_memory": nullableMemory(measuredPeakMemory), "sampled_peak_scope": "measured_batch_and_readmit", "memory_sample_interval_ns": int64(10 * time.Millisecond), "startup_memory": nullableMemory(startupMemory), "sampled_setup_peak_memory": nullableMemory(setupPeakMemory), "pre_measured_batch_memory": nullableMemory(preMeasuredBatchMemory), "after_park_memory": nullableMemory(afterPark), "after_park_rss_kib": nullableMetric(afterPark.RSSKB), "park_request_ns": phaseLatencies[0], "resume_request_ns": phaseLatencies[1], "park_completed": parked.completed, "resume_completed": resumed.completed, "completed": resumed.completed, "errors": parked.errors + resumed.errors, "result_count": resumed.resultCount, "tool_dispatches": resumed.dispatches, "park_tool_dispatches": parked.dispatches, "resume_tool_dispatches": resumed.dispatches - parked.dispatches})
 }
 
 func selectQueueCase(name string, heapMiB int) (queueCaseSpec, error) {

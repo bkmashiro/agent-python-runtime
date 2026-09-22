@@ -176,6 +176,7 @@ For presentation-ready end-to-end examples, use the scripts under [`demos/`](dem
 ./demos/14-agent-workloads.sh
 ./demos/15-deterministic-replay.sh
 ./demos/16-fullcode-overlap.sh
+./demos/17-workspace-continuation.sh
 # Or run all demos:
 ./demos/run-all.sh
 ```

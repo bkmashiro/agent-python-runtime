@@ -141,7 +141,8 @@ The scripts under [`../demos/`](../demos/) provide presentation-ready paths:
 - `14` the complete fixed Agent workload pack.
 - `15` deterministic randomness/clock/Tool replay conformance.
 - `16` full-code overlap of independent read-only Host calls.
+- `17` Host-owned workspace continuation across disposable Guests.
 
 `demos/run-all.sh` runs the short product demonstrations (`01`–`05`). The
-measurement-oriented `06`–`10` scripts and dependency-oriented demos `11`–`16`
+measurement-oriented `06`–`10` scripts and dependency-oriented demos `11`–`17`
 remain explicit so setup time is not hidden inside the short demo suite.

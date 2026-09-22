@@ -19,6 +19,7 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 ./demos/14-agent-workloads.sh
 ./demos/15-deterministic-replay.sh
 ./demos/16-fullcode-overlap.sh
+./demos/17-workspace-continuation.sh
 ./demos/run-all.sh
 ```
 
@@ -36,12 +37,13 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 - `12-mcp-workspace-scheduling.sh` compares inline and `ExternalIO` execution of a dependent real-MCP tool chain, then hands the validated data to private-workspace Guests and exports conflict-checked `ChangeSet`s.
 - `13-durable-restart.sh` commits an idempotent Host effect, kills the service process before completion, restarts from SQLite and proves replay does not duplicate the effect.
 - `14-agent-workloads.sh` runs 20 fixed common Python/Tool cases with phase timings, then real workspace, MCP stdio and durable process-restart lanes.
-- `15-deterministic-replay.sh` first prints a concrete seeded-randomness and Tool-outcome replay, then shows Host-owned workspace continuation across disposable Guests before running the conformance tests. Writable workspaces are not represented as `RunRecorded` replay.
+- `15-deterministic-replay.sh` prints a concrete seeded-randomness and Tool-outcome replay, then runs the deterministic and durable replay conformance tests.
 - `16-fullcode-overlap.sh` compares ordinary execution with complete-source preparation for two independent, explicitly opted-in Host reads under a controlled delay.
+- `17-workspace-continuation.sh` has one disposable Guest write progress and a second Guest read and extend it through the same Host-owned workspace. It does not use `RunRecorded` replay.
 
 `run-all.sh` intentionally runs the short product demonstrations `01`–`05`.
 The measurement-oriented `06`–`10` scripts and dependency-oriented MCP demos
-`11`–`16` remain explicit.
+`11`–`17` remain explicit.
 
 ## Short code-reading route
 

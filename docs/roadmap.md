@@ -9,7 +9,7 @@ Approved goal: make existing execution capabilities easy to explain and use; fin
 ## Outcomes
 
 - [x] P0: COW data-image opt-in, admission checks, Linux isolation/replay/workspace validation, paired performance results and explicit memory tradeoff. See [cow-data-image.md](cow-data-image.md). Runtime API median gains: 6.14× short Python, 7.45× immediate Tool, 4.67× durable completion. Default unchanged; process memory still warrants investigation.
-- [ ] P1: README leads with practical Python and clear safety, warm execution, early-read and deterministic replay benefits. Keep workspace and replay examples separate. Three to five core demo entries; claims link to evidence.
+- [x] P1: README now leads with practical Python and four clear capability groups plus measured evidence. Five existing core demos include safe early reads; workspace and replay remain separate. Real `run-core.sh` passed.
 - [ ] P2a: explicit data-image flag across ordinary/workspace/durable service constructors and CLIs; invalid combinations reject. Linux HTTP acceptance and limited service A/B.
 - [ ] P2b: read-only `/v1/durable/runs/{id}/history`, reusing pagination. Exclude payloads and operation keys, preserve not-found/error handling and service trust boundary.
 - [x] P3: profiled optimized Python/Tool/durable execution and diagnosed elevated PSS as reclaimable Go heap, not an observed mapping leak. No additional runtime change justified: per-request GC rejected; instance-bound engine-object sharing deferred. See the follow-up in `cow-data-image.md`.

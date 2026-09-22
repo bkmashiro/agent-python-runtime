@@ -4,6 +4,7 @@ set -euo pipefail
 source "$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 banner "Deterministic randomness and Tool outcome replay"
+printf '%s\n' 'Observe: the same seeded program returns identical controlled inputs; the second run reuses the completed Tool outcome.'
 go run ./examples/replay-tool-random -guest "$GUEST" | pretty_json
 
 if [[ "${PYSOLATE_REPLAY_CONFORMANCE:-1}" == "0" ]]; then

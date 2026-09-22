@@ -7,7 +7,7 @@ source "$SCRIPT_DIR/common.sh"
 require_command curl
 
 banner "Long-running hot service: repeated runs and persistent workspace"
-
+printf '%s\n' 'Observe: the local service reuses prepared execution for repeated HTTP Runs, then keeps workspace state across one edit/read lifecycle.'
 PORT="${PYSOLATE_DEMO_PORT:-$(python3 - <<'PY'
 import socket
 with socket.socket() as sock:

@@ -6,5 +6,5 @@ SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 banner "Ordinary Python + dynamic namespaced Host tool"
-printf '%s\n' 'Guest Python calls market.get_price(...); the Host grants one allowlisted capability.'
+printf '%s\n' 'Observe: Guest Python calls one allowlisted market.get_price(...) capability; the output reports the Host-call count.'
 go run ./examples/python-tools -guest "$GUEST" | pretty_json

@@ -1,25 +1,29 @@
 # Pysolate
 
-**Run ordinary agent-authored Python in an isolated CPython/WASI Guest, then
-give it only the Host tools and private workspace it needs.**
+**Safe, fast Python execution for AI agents, with controlled tools and recoverable runs.**
 
-Pysolate keeps the Python artifact small and moves changing capabilities to the
-Host. A Go application can discover local or MCP tools, expose them as natural
-Python functions such as `market.get_price(...)`, and execute each submission in
-private memory. Changing Python source or the Tool catalog does not rebuild the
-Guest.
+Let an agent write ordinary Python to process files and call your APIs. Pysolate
+runs each script in a fresh isolated environment. Your application grants its
+tools and workspace, while keeping credentials and the rest of the machine out
+of reach. Implemented in Go with CPython and WebAssembly/WASI.
 
-- **Normal Python, narrow authority:** no ambient Host network, filesystem,
-  environment, credentials or subprocess access.
-- **Dynamic Tool ABI:** Host and MCP capabilities become generated, namespaced
-  Python functions over one bounded JSON call bridge.
-- **Agent workspaces:** edit a private copy, inspect deterministic diffs, and
-  export bounded changes for Host-side review.
-- **Execution-derived durability:** replay completed Tool outcomes and resolve
-  or safely block ambiguous effects using provider-owned contracts, without
-  rewriting scripts as a workflow DSL.
-- **Warm execution:** reuse compiled code and prepared clean images behind a
-  bounded local service.
+## The product in one minute
+
+- **Isolation and explicit tool permissions.** Python has no ambient Host
+  network, filesystem, environment, credentials, or subprocess access. It can
+  call only the capabilities the Host grants.
+- **High-density warm execution.** A long-lived Runner reuses compiled code and
+  prepared clean state while bounded admission limits live Guests and external
+  waits. Tasks waiting on approved external I/O can release a running slot so
+  other tasks can progress, while retaining their own Python state.
+- **Safe early reads.** A script can overlap independent, explicitly approved
+  read-only calls. Pysolate does not run arbitrary writes ahead of their Python
+  call sites, and the early-read path is optional.
+- **Deterministic replay and crash recovery.** Recorded runs can reproduce
+  controlled Python inputs and reuse completed Tool outcomes; durable runs keep
+  journal state so a process restart can resume without duplicating an
+  idempotent effect. A Host-owned workspace is a separate lifecycle: it can
+  carry files from one disposable Guest to the next, but it is not replay.
 
 The execution core directly evolves Pysolate Spine (`1abc99a`, MIT). It is not a
 wrapper around the former runtime. The old APIs, experiments and evidence remain
@@ -94,13 +98,51 @@ go run ./examples/python-tools -guest dist/pysolate.wasm
 ```
 
 It returns the Python value together with the observed Host-call count. The same
-boundary can be backed by an HTTP client, database, internal service or an MCP
+boundary can be backed by an HTTP client, database, internal service, or an MCP
 server without packaging that dependency into Python.
+
+## Start with the core path
+
+With a verified `dist/pysolate.wasm`, run:
+
+```sh
+./demos/run-core.sh
+```
+
+Set `PYSOLATE_GUEST=/path/to/pysolate.wasm` when the Guest artifact lives
+elsewhere. The five steps show approved
+Host Tools, files carried across isolated executions, repeated execution
+through the local HTTP service, safe early reads, and deterministic replay. The
+workspace step is file continuity; the replay step reconstructs a recorded Run.
+
+Measured examples:
+
+- **17.82 → 2.90 ms warm execution** for short Python with the opt-in Linux COW
+  data-image path. Runtime API measurement; startup and memory costs are reported
+  [alongside the result](docs/cow-data-image.md).
+- **3.51× batch throughput** under the same two-CPU, 2 GiB limit when Tool waits
+  release running slots. The [controlled 200 ms I/O experiment](docs/linux-density-study.md)
+  also records the extra resident memory.
+- **Recovery after a real process kill:** the external fixture receives two
+  requests with the same operation key and applies one effect.
+  [Run the restart demo](demos/13-durable-restart.sh); provider idempotency remains
+  part of the recovery contract.
 
 See the [`docs/` index](docs/README.md) for supported workflows, measured
 performance, scheduling studies and recent deliveries. See
 [Execution-derived durability](docs/execution-derived-durability.md) for the
 precise comparison with workflow-first systems such as Temporal.
+
+## Host responsibilities and boundaries
+
+Pysolate controls the Guest lifecycle and the narrow boundary between Python and
+Host capabilities. The embedding Host supplies tools, validates their inputs,
+keeps credentials, network clients and MCP sessions outside the Guest, owns
+workspace publication, and declares recovery behavior for durable effects.
+
+Pysolate does not provide arbitrary Python compatibility, exactly-once behavior
+for an external provider, tenant authentication, a workflow engine, or mounts
+of arbitrary Host paths. These limits are part of the integration contract.
 
 ## Execution model
 
@@ -121,7 +163,7 @@ There are four responsibilities:
 
 No Broker/Plan hierarchy, plugin catalog, receipts, source certificates, workspace transaction framework, generic workflow engine, native backend or cross-run result cache is required.
 
-## Run
+## Build and run
 
 Requires Go 1.25+ and a verified `dist/pysolate.wasm`. The quickest path is an
 explicit qualified bundle from your release/internal distribution channel:

@@ -8,15 +8,27 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 ./demos/run-core.sh
 ```
 
-This recommended presentation path runs:
+Run this path first. It presents the same product boundary in five steps:
 
-1. `02-namespaced-tools.sh` — ordinary Python calling a dynamically injected Host capability.
-2. `17-workspace-continuation.sh` — one Host-owned workspace used by two disposable Guests.
-3. `04-hot-service.sh` — repeated hot HTTP Runs and a complete workspace lifecycle.
-4. The visible part of `15-deterministic-replay.sh` — identical seeded execution with one real Tool dispatch and one replayed outcome.
+1. `02-namespaced-tools.sh` — **approved capability:** ordinary Guest Python
+   calls `market.get_price(...)`, a namespaced function that the Host injected
+   from one allowlisted Tool.
+2. `17-workspace-continuation.sh` — **file continuity:** the first disposable
+   Guest writes progress and the second reads and extends it through one
+   Host-owned workspace. This is not `RunRecorded` replay.
+3. `04-hot-service.sh` — **warm local service:** repeated HTTP Runs use the
+   bounded service, then a workspace is created, edited, read back, and
+   destroyed through the HTTP API.
+4. `16-fullcode-overlap.sh` — **safe early reads:** two approved independent
+   reads overlap, with identical output and measured timing.
+5. `15-deterministic-replay.sh` (visible portion) — **replay:** the same seeded
+   program produces the same result while a completed Tool outcome is used once
+   live and once from the journal.
 
-It skips the longer replay conformance tests. Run `15-deterministic-replay.sh`
-directly when those tests are wanted.
+The output labels what to observe at each boundary. The core path skips the
+longer replay conformance tests; run `15-deterministic-replay.sh` directly when
+those checks are wanted. The process-kill recovery story is separate in
+`13-durable-restart.sh` so workspace continuity and durable replay stay distinct.
 
 ## Complete index
 

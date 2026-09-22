@@ -30,6 +30,13 @@ Run the compact conformance path:
 ./demos/15-deterministic-replay.sh
 ```
 
+The script first prints a concrete replay tour: two executions with the same
+seed produce identical randomness, logical time and result, while the Host Tool
+dispatches once and its recorded outcome is consumed once. It then shows the
+separate workspace boundary by having one disposable Guest write a file and a
+second Guest read it from the same Host-owned workspace. This is workspace
+continuation, not `RunRecorded` filesystem replay.
+
 ## What is intentionally not deterministic
 
 The contract does not make the whole service schedule deterministic:

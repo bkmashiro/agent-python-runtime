@@ -36,7 +36,7 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 - `12-mcp-workspace-scheduling.sh` compares inline and `ExternalIO` execution of a dependent real-MCP tool chain, then hands the validated data to private-workspace Guests and exports conflict-checked `ChangeSet`s.
 - `13-durable-restart.sh` commits an idempotent Host effect, kills the service process before completion, restarts from SQLite and proves replay does not duplicate the effect.
 - `14-agent-workloads.sh` runs 20 fixed common Python/Tool cases with phase timings, then real workspace, MCP stdio and durable process-restart lanes.
-- `15-deterministic-replay.sh` checks seeded entropy/logical clocks across processes and verifies durable Tool outcome replay and prepared seed state.
+- `15-deterministic-replay.sh` first prints a concrete seeded-randomness and Tool-outcome replay, then shows Host-owned workspace continuation across disposable Guests before running the conformance tests. Writable workspaces are not represented as `RunRecorded` replay.
 - `16-fullcode-overlap.sh` compares ordinary execution with complete-source preparation for two independent, explicitly opted-in Host reads under a controlled delay.
 
 `run-all.sh` intentionally runs the short product demonstrations `01`–`05`.

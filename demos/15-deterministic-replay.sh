@@ -3,6 +3,9 @@ set -euo pipefail
 
 source "$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
+banner "Replay tour: random inputs, Tool outcomes, and workspace boundary"
+go run ./examples/replay-tour -guest "$GUEST" | pretty_json
+
 banner "Deterministic Guest inputs across separate processes"
 PYSOLATE_GUEST="$GUEST" go test . \
   -run '^(TestRecordedDeterminismAcrossProcesses|TestRecordedToolOutcomeAndPythonFailure|TestPreparedRecordedMatchesFresh)$' \

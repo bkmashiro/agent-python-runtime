@@ -16,6 +16,10 @@ for the execution model and build commands.
   security boundaries, and executable acceptance.
 - [`mcp.md`](mcp.md) — official Go SDK integration, trusted stdio lifecycle,
   result envelopes, authority boundaries, and real-Guest acceptance.
+- [`execution-derived-durability.md`](execution-derived-durability.md) — why
+  ordinary Python does not need a workflow DSL, how Tool declarations define
+  reusable effect boundaries, the Temporal comparison, and the limits of
+  automatic recovery.
 - [`service.md`](service.md) — the long-running local HTTP service, hot
   prepared execution, workspace endpoints, admission behavior, and benchmark.
 - [`corpus-replay.md`](corpus-replay.md) — deterministic HumanEval/BFCL
@@ -62,9 +66,11 @@ The recent runtime work now covers:
    bounded local HTTP service with explicit 429 admission behavior.
 5. **Deterministic corpus replay:** frozen HumanEval programs and BFCL calls can
    test runtime and Tool ABI compatibility without repeatedly generating code.
-6. **Durable attempt lifecycle:** park and completion are explicit control
-   states; a durable park destroys the Guest, then re-admission reconstructs
-   and replays persisted observations.
+6. **Execution-derived durability:** ordinary Python calls Host-declared Tools;
+   the runtime records those calls as effect boundaries and replays persisted
+   outcomes. Provider-owned recovery contracts handle unresolved effects. Park
+   and completion are explicit control states; a durable park destroys the
+   Guest, then re-admission reconstructs the attempt.
 7. **Live external-I/O scheduling:** an opted-in `ExternalIO` Tool releases its
    running slot while retaining the live Guest. Running, resident, external
    Tool, and queued limits are independent. The initial two-Run pilot reduced
@@ -93,7 +99,7 @@ infer arbitrary Python runtime behavior or retry unsafe effects.
 The scripts under [`../demos/`](../demos/) provide presentation-ready paths:
 
 - `01` basic Python and artifact contents;
-- `02` dynamic namespaced Host tools;
+- `02` ordinary Python calling one dynamically injected namespaced Host tool;
 - `03` private workspace editing;
 - `04` hot local service;
 - `05` deterministic corpus replay;

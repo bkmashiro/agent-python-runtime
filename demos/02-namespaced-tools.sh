@@ -5,6 +5,6 @@ SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 # shellcheck source=demos/common.sh
 source "$SCRIPT_DIR/common.sh"
 
-banner "Dynamic namespaced tool + repository/config/data workflow"
-printf '%s\n' 'Guest code calls market.get_prices(...); the Host forwards it to a real local HTTP endpoint.'
-go run ./examples/agent-core-usecases -guest "$GUEST" | pretty_json
+banner "Ordinary Python + dynamic namespaced Host tool"
+printf '%s\n' 'Guest Python calls market.get_price(...); the Host grants one allowlisted capability.'
+go run ./examples/python-tools -guest "$GUEST" | pretty_json

@@ -1,11 +1,106 @@
 # Pysolate
 
-A small Go runtime for agent-authored Python in isolated CPython/WASI Guests.
+**Run ordinary agent-authored Python in an isolated CPython/WASI Guest, then
+give it only the Host tools and private workspace it needs.**
 
-The execution core is a direct evolution of Pysolate Spine (`1abc99a`, MIT), not a wrapper around the former runtime. The old APIs, experiments and evidence remain in Git at `2be7488b`.
+Pysolate keeps the Python artifact small and moves changing capabilities to the
+Host. A Go application can discover local or MCP tools, expose them as natural
+Python functions such as `market.get_price(...)`, and execute each submission in
+private memory. Changing Python source or the Tool catalog does not rebuild the
+Guest.
 
-See the [`docs/` index](docs/README.md) for supported workflows, performance
-evidence, the current scheduling study, and a summary of recent deliveries.
+- **Normal Python, narrow authority:** no ambient Host network, filesystem,
+  environment, credentials or subprocess access.
+- **Dynamic Tool ABI:** Host and MCP capabilities become generated, namespaced
+  Python functions over one bounded JSON call bridge.
+- **Agent workspaces:** edit a private copy, inspect deterministic diffs, and
+  export bounded changes for Host-side review.
+- **Execution-derived durability:** replay completed Tool outcomes and resolve
+  or safely block ambiguous effects using provider-owned contracts, without
+  rewriting scripts as a workflow DSL.
+- **Warm execution:** reuse compiled code and prepared clean images behind a
+  bounded local service.
+
+The execution core directly evolves Pysolate Spine (`1abc99a`, MIT). It is not a
+wrapper around the former runtime. The old APIs, experiments and evidence remain
+in Git at `2be7488b`.
+
+## A Python + Tool demo
+
+The Python is an ordinary one-shot script. `inputs` and the `market` namespace
+are injected for this Run; the Guest receives no credentials or network access:
+
+```python
+# examples/python-tools/strategy.py
+symbols = inputs["symbols"]
+quantities = inputs["quantities"]
+
+quotes = [market.get_price(symbol=symbol) for symbol in symbols]
+leader = max(quotes, key=lambda quote: quote["price"])
+portfolio_value = sum(
+    quote["price"] * quantities[quote["symbol"]]
+    for quote in quotes
+)
+
+result = {
+    "leader": leader,
+    "portfolio_value": round(portfolio_value, 2),
+    "quotes": quotes,
+}
+```
+
+The Host grants exactly one capability. Its canonical identity remains stable,
+while `PythonPath` controls the natural API presented to generated code:
+
+```go
+prices := map[string]float64{"AAPL": 225.50, "MSFT": 418.20, "NVDA": 176.40}
+manifest := pysolate.Manifest{
+    "market/get-price": {
+        PythonPath:     "market.get_price",
+        Description:    "Return the current price for an allowlisted symbol",
+        InputSchema:    json.RawMessage(`{"type":"object","required":["symbol"]}`),
+        AllowEarlyRead: true,
+        Call: func(ctx context.Context, raw json.RawMessage) (any, error) {
+            var request struct { Symbol string `json:"symbol"` }
+            if err := json.Unmarshal(raw, &request); err != nil { return nil, err }
+            price, ok := prices[request.Symbol]
+            if !ok { return nil, errors.New("symbol is not allowlisted") }
+            return map[string]any{"symbol": request.Symbol, "price": price}, nil
+        },
+    },
+}
+
+runner, err := pysolate.New(ctx, wasm, manifest)
+if err != nil { return err }
+defer runner.Close(context.Background())
+output, err := runner.Run(ctx, source, inputs)
+```
+
+Run the complete checked-in example against the real Guest:
+
+```sh
+go run ./examples/python-tools -guest dist/pysolate.wasm
+```
+
+```json
+{
+  "result": {
+    "leader": {"price": 418.2, "symbol": "MSFT"},
+    "portfolio_value": 1574.8,
+    "quotes": ["..."]
+  },
+  "host_tool_calls": 3
+}
+```
+
+It returns the Python value together with the observed Host-call count. The same
+boundary can be backed by an HTTP client, database, internal service or an MCP
+server without packaging that dependency into Python.
+
+See the [`docs/` index](docs/README.md) for supported workflows, measured
+performance, scheduling studies and recent deliveries. See
+[Execution-derived durability](docs/execution-derived-durability.md) for the
+precise comparison with workflow-first systems such as Temporal.
 
 ## Execution model
 
@@ -63,22 +158,6 @@ For presentation-ready end-to-end examples, use the scripts under [`demos/`](dem
 ./demos/12-mcp-workspace-scheduling.sh
 # Or run all demos:
 ./demos/run-all.sh
-```
-
-```go
-tools := pysolate.Manifest{
-    "market/get-price": {
-        PythonPath: "stock.getprice",
-        Call: func(ctx context.Context, args json.RawMessage) (any, error) {
-            return 21, nil // Application-owned authorization and argument validation go here.
-        },
-        AllowEarlyRead: true,
-    },
-}
-runner, err := pysolate.New(ctx, wasm, tools)
-if err != nil { return err }
-defer runner.Close(context.Background())
-out, err := runner.Run(ctx, `result = stock.getprice(item="book") * inputs["quantity"]`, map[string]int{"quantity": 2})
 ```
 
 A Runner compiles once and may serve independent Runs. Each Run owns its Python state and tool workers. Tools must be concurrency-safe and honor their context. Call `Close` after all Runs have returned.

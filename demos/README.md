@@ -19,7 +19,7 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 ```
 
 - `01-basic-python.sh` shows a fresh private CPython Guest, JSON inputs, NumPy, safe YAML and a synchronous Host tool.
-- `02-namespaced-tools.sh` shows `market.get_prices(...)`, dynamic Guest namespace injection, real Host HTTP and repository/config/data processing.
+- `02-namespaced-tools.sh` runs the README's compact `strategy.py` example and shows `market.get_price(...)` injected from one Host-owned capability.
 - `03-workspace-edit.sh` shows a private source copy, ordinary Python file editing, deterministic diffs, bounded changed-content export, read-only Host conflict checks, Host HTTP, parameterized SQLite and an idempotent Host write.
 - `04-hot-service.sh` starts the long-running service, sends repeated hot requests, keeps a workspace across a disposable Guest, reads one output file and destroys the workspace. It chooses a free loopback port and stops the service on exit.
 - `05-corpus-replay.sh` runs frozen Python plus an exact namespaced Host-tool fixture twice through one prepared Runner and validates the output.
@@ -37,16 +37,17 @@ The measurement-oriented `06`–`10` scripts and dependency-oriented MCP demos
 
 ## Short code-reading route
 
-1. `examples/agent-core-usecases/main.go`: concrete Host manifest and Python use case.
-2. `runner.go`: Runner ownership, Guest lifecycle and `RunWorkspace`.
-3. `tool_provider.go`, `mcpadapter/`, and `bridge.go`: provider discovery, official MCP SDK adaptation, Python paths and the single JSON tool ABI.
-4. `guest/bootstrap.py` and `guest/pysolate.py`: generated Python functions and execution convention.
-5. `prepared.go` and `internal/cowmem/`: clean prepared-image orchestration and Linux private COW memory.
-6. `runtime/workspace/workspace.go`, `snapshot.go`, and `export.go`: bounded workspace lifecycle, snapshots, change handoff, and conflict checks.
-7. `service/server.go`: bounded HTTP admission and persistent workspace leases.
-8. `corpus/` and `cmd/pysolate-corpus/`: strict dataset cases and exact tool replay through the real Guest.
-9. `durable/runner.go` and `durable/executor.go`: replay/effect semantics, explicit attempt states, bounded admission and live-I/O slot reuse.
-10. `cmd/pysolate-phase-bench/` and `cmd/pysolate-queue-bench/`: fixed phase and scheduling measurements.
-11. `scheduling/`, `cmd/pysolate-schedule-sim/`, and `cmd/pysolate-calibrate/`: deterministic population-policy evaluation and measured-trace calibration.
+1. `examples/python-tools/strategy.py` and `main.go`: the smallest complete ordinary-Python plus dynamic-Tool path.
+2. `examples/agent-core-usecases/main.go`: a richer Host manifest and repository/config/data use case.
+3. `runner.go`: Runner ownership, Guest lifecycle and `RunWorkspace`.
+4. `tool_provider.go`, `mcpadapter/`, and `bridge.go`: provider discovery, official MCP SDK adaptation, Python paths and the single JSON tool ABI.
+5. `guest/bootstrap.py` and `guest/pysolate.py`: generated Python functions and execution convention.
+6. `prepared.go` and `internal/cowmem/`: clean prepared-image orchestration and Linux private COW memory.
+7. `runtime/workspace/workspace.go`, `snapshot.go`, and `export.go`: bounded workspace lifecycle, snapshots, change handoff, and conflict checks.
+8. `service/server.go`: bounded HTTP admission and persistent workspace leases.
+9. `corpus/` and `cmd/pysolate-corpus/`: strict dataset cases and exact tool replay through the real Guest.
+10. `durable/runner.go` and `durable/executor.go`: replay/effect semantics, explicit attempt states, bounded admission and live-I/O slot reuse.
+11. `cmd/pysolate-phase-bench/` and `cmd/pysolate-queue-bench/`: fixed phase and scheduling measurements.
+12. `scheduling/`, `cmd/pysolate-schedule-sim/`, and `cmd/pysolate-calibrate/`: deterministic population-policy evaluation and measured-trace calibration.
 
 This branch is a direct continuation of the interview `spine/` implementation, not a wrapper around the old large runtime. The same short `Runner -> Wasm CPython -> Host bridge` path remains, while prepared/COW execution, PLM/prefix, dynamic tool providers, durable replay, workspaces and the HTTP service have been added around it.

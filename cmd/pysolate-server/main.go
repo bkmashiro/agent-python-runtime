@@ -29,6 +29,7 @@ func run() error {
 	address := flag.String("listen", "127.0.0.1:8080", "trusted local control-plane address")
 	workspaceRoot := flag.String("workspace-root", "", "private 0700 workspace root; empty uses a temporary root")
 	maxActive := flag.Int("max-active", 2, "maximum active Guest executions")
+	maxRunDuration := flag.Duration("max-run-duration", 0, "maximum execution duration; zero disables the service cap")
 	cowDataImage := flag.Bool("cow-data-image", false, "opt in to the Linux COW data-image preparation path")
 	flag.Parse()
 
@@ -62,7 +63,7 @@ func run() error {
 	}
 	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancelStartup()
-	handler, err := service.New(startupCtx, wasm, pysolate.Manifest{}, manager, *maxActive, service.Options{COWDataImage: *cowDataImage})
+	handler, err := service.New(startupCtx, wasm, pysolate.Manifest{}, manager, *maxActive, service.Options{COWDataImage: *cowDataImage, MaxRunDuration: *maxRunDuration})
 	if err != nil {
 		_ = manager.Close()
 		return err

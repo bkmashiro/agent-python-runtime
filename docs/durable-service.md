@@ -15,7 +15,8 @@ make verify-artifact
 go run ./cmd/pysolate-durable-server \
   -guest dist/pysolate.wasm \
   -db /tmp/pysolate-runs.db \
-  -listen 127.0.0.1:8081
+  -listen 127.0.0.1:8081 \
+  -max-run-duration 30s
 ```
 
 The standalone command intentionally grants no Host tools. It is suitable for
@@ -31,6 +32,8 @@ Start with `-cow-data-image -cow-data-image-seed demo-seed` to opt in to a prepa
 Existing Runs also need matching artifact/environment and seed. Reopening a database does not migrate seeds. Choose the original seed for recovery or use the unprepared default. Non-Linux hosts, empty preparation seeds and unsupported artifacts are rejected.
 
 Embedding applications use `durable.Preparation{Seed: seed, COW: true, COWDataImage: true}` for the Runner and `durableservice.Options{PreparationSeed: seed}` for the HTTP service. The HTTP seed check gives an early error; the Runner's own deterministic-state check remains authoritative.
+
+`-max-run-duration` and `durableservice.Options{MaxRunDuration: ...}` optionally cap one HTTP attempt. Zero preserves the uncapped behavior. An attempt may set a smaller positive `timeout_ms` in milliseconds, but cannot exceed the service cap. The deadline starts before admission and therefore includes queue time; it applies to this attempt only, not the durable Run lifetime. Cancellation is cooperative, while durable journal persistence remains owned by the durable Runner. Durable attempts do not support ordinary `early_reads`.
 
 See [COW data-image tradeoffs](cow-data-image.md), including extra retained memory. No arbitrary provider gains exactly-once semantics from this option.
 
@@ -51,6 +54,8 @@ Execute one fresh bounded attempt and inspect the Run:
 curl -sS -X POST http://127.0.0.1:8081/v1/durable/runs/demo-1/attempts
 curl -sS http://127.0.0.1:8081/v1/durable/runs/demo-1
 ```
+
+Pass `{"timeout_ms":5000}` to the attempts endpoint to shorten the configured cap. Non-positive and over-cap values are rejected with HTTP 400; a cooperative attempt deadline returns HTTP 408 and leaves the Run resumable when no terminal outcome was persisted.
 
 Other endpoints are:
 

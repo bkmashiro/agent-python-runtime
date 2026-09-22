@@ -35,6 +35,7 @@ func run() error {
 	maxResident := flag.Int("max-resident", 4, "maximum live Guests including external I/O waits")
 	maxInflightTools := flag.Int("max-inflight-tools", 4, "maximum opted-in external Tool calls")
 	maxQueued := flag.Int("max-queued", 16, "maximum queued attempts")
+	maxRunDuration := flag.Duration("max-run-duration", 0, "maximum duration of one attempt, including queue time; zero disables the service cap")
 	cowDataImage := flag.Bool("cow-data-image", false, "opt in to the Linux COW data-image preparation path")
 	preparationSeed := flag.String("cow-data-image-seed", durableServicePreparationSeed, "seed required by runs when COW data-image is enabled")
 	flag.Parse()
@@ -64,7 +65,9 @@ func run() error {
 	var serviceOptions []durableservice.Options
 	if *cowDataImage {
 		preparation = []durable.Preparation{{Seed: *preparationSeed, COW: true, COWDataImage: true}}
-		serviceOptions = []durableservice.Options{{PreparationSeed: *preparationSeed}}
+		serviceOptions = []durableservice.Options{{PreparationSeed: *preparationSeed, MaxRunDuration: *maxRunDuration}}
+	} else if *maxRunDuration != 0 {
+		serviceOptions = []durableservice.Options{{MaxRunDuration: *maxRunDuration}}
 	}
 	runner, err := durable.NewRunner(startupCtx, store, wasm, *environment, nil, preparation...)
 	if err != nil {

@@ -8,7 +8,8 @@
 go run ./cmd/pysolate-server \
   -guest dist/pysolate.wasm \
   -listen 127.0.0.1:8080 \
-  -max-active 4
+  -max-active 4 \
+  -max-run-duration 30s
 ```
 
 The default workspace root is a private temporary `0700` directory removed at shutdown. `-workspace-root` selects a persistent Host-owned root, which must itself be a clean `0700` directory. Do not expose this server directly to an untrusted network.
@@ -23,6 +24,8 @@ Add `-cow-data-image` to `pysolate-server` to skip redundant initial-data copyin
 
 Embedding applications pass `service.Options{COWDataImage: true}` as the optional final argument to `service.New`. The service still supplies a fresh Guest per Run. Read [the measured setup, latency and memory tradeoffs](cow-data-image.md) before enabling it; lower latency does not imply lower peak process memory.
 
+`-max-run-duration` and `service.Options{MaxRunDuration: ...}` are optional execution caps. Zero preserves the uncapped behavior. A request may set a smaller positive `timeout_ms` in milliseconds, but a request cannot exceed the configured cap; an earlier HTTP caller deadline still wins. The deadline is cooperative: Guest execution and Host callbacks must honor their context. A timed-out ordinary Run releases its execution slot. A timed-out workspace Run releases only the per-attempt busy ownership; the persistent workspace remains available until its explicit `DELETE`.
+
 The HTTP benchmark accepts the same `-cow-data-image` flag and records it in metadata. Omit the flag to measure the unchanged baseline.
 
 ## HTTP API
@@ -32,14 +35,16 @@ All request and response bodies are JSON. Request bodies are capped at 1 MiB. `[
 - `GET /healthz`
   - Returns `{"ready":true}` while the service accepts work.
 - `POST /v1/run`
-  - Body: `{"source":"result=inputs['value']+1","inputs":{"value":41}}`
+  - Body: `{"source":"result=inputs['value']+1","inputs":{"value":41},"timeout_ms":5000,"early_reads":true}`
   - Executes without a workspace.
+  - `early_reads` is false by default and is the only HTTP switch for `RunWithEarlyReads`; the trusted Host manifest's `AllowEarlyRead` bit remains authoritative.
 - `POST /v1/workspaces`
   - Body: `{"files":[{"path":"notes.txt","data":"YmVmb3Jl"}]}`
   - Creates and exclusively leases a bounded private workspace.
 - `POST /v1/workspaces/{ref}/run`
   - Same body as `/v1/run`; `/workspace` is mounted read/write.
   - The response includes before/after revisions and an added/modified/deleted summary.
+  - `early_reads:true` is rejected; workspace execution has no early-read mode.
 - `GET /v1/workspaces/{ref}/snapshot`
   - Returns deterministic path, mode, size, and content-digest metadata. File contents are not included.
 - `GET /v1/workspaces/{ref}/files?path=notes.txt`
@@ -49,7 +54,7 @@ All request and response bodies are JSON. Request bodies are capped at 1 MiB. `[
 
 Successful Runs return the Python value, captured stdout, transformed source when applicable, `run_ns`, and `total_ns`. `run_ns` covers the Runner call. `total_ns` also covers service-side workspace snapshots and diffing, but not HTTP transport or JSON decoding before the handler timer starts.
 
-Python failures return HTTP 422 and preserve any private workspace changes in the response's after-revision and diff. Invalid requests return 400. An unknown workspace returns 404. When all execution slots are occupied, admission is non-blocking and returns 429 instead of growing an unbounded queue.
+Python failures return HTTP 422 and preserve any private workspace changes in the response's after-revision and diff. Cooperative execution deadlines return HTTP 408. Invalid requests, including non-positive or over-cap `timeout_ms`, return 400. An unknown workspace returns 404. When all execution slots are occupied, admission is non-blocking and returns 429 instead of growing an unbounded queue.
 
 Workspace publication remains a Host decision. The service never accepts an arbitrary Host source or destination path and never writes changes back into a project tree.
 

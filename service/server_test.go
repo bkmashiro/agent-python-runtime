@@ -184,6 +184,152 @@ func TestServiceRejectsInvalidCOWDataImageArtifact(t *testing.T) {
 	}
 }
 
+func TestHTTPPlainRunEarlyReadsRequiresRequestOptIn(t *testing.T) {
+	manifest := pysolate.Manifest{"lookup": {
+		AllowEarlyRead: true,
+		Call:           func(context.Context, json.RawMessage) (any, error) { return 21, nil },
+	}}
+	_, httpServer := newGuestHTTPService(t, manifest, 1, Options{})
+	client := httpServer.Client()
+
+	status, ordinary := requestJSON(t, client, http.MethodPost, httpServer.URL+"/v1/run", map[string]any{
+		"source": `result=lookup(key="book")`, "inputs": map[string]any{},
+	})
+	if status != http.StatusOK || ordinary["value"] != float64(21) {
+		t.Fatalf("ordinary status=%d body=%#v", status, ordinary)
+	}
+	if _, present := ordinary["transformed"]; present {
+		t.Fatalf("ordinary request unexpectedly used early reads: %#v", ordinary)
+	}
+
+	status, early := requestJSON(t, client, http.MethodPost, httpServer.URL+"/v1/run", map[string]any{
+		"source": `result=lookup(key="book")`, "inputs": map[string]any{}, "early_reads": true,
+	})
+	if status != http.StatusOK || early["value"] != float64(21) || early["transformed"] == "" {
+		t.Fatalf("early-read status=%d body=%#v", status, early)
+	}
+
+	_, deniedServer := newGuestHTTPService(t, pysolate.Manifest{"lookup": {
+		Call: func(context.Context, json.RawMessage) (any, error) { return 21, nil },
+	}}, 1, Options{})
+	status, denied := requestJSON(t, deniedServer.Client(), http.MethodPost, deniedServer.URL+"/v1/run", map[string]any{
+		"source": `result=lookup(key="book")`, "early_reads": true,
+	})
+	if status != http.StatusOK || denied["value"] != float64(21) {
+		t.Fatalf("request early_reads bypassed Host permission status=%d body=%#v", status, denied)
+	}
+	if _, transformed := denied["transformed"]; transformed {
+		t.Fatalf("Host-denied early read unexpectedly transformed source: %#v", denied)
+	}
+}
+
+func TestHTTPRunTimeoutReleasesSlotAndWorkspaceLease(t *testing.T) {
+	_, httpServer := newGuestHTTPService(t, pysolate.Manifest{}, 1, Options{MaxRunDuration: 2 * time.Second})
+	client := httpServer.Client()
+	client.Timeout = 5 * time.Second
+	// Prove the short request fits the cap even under race instrumentation.
+	status, body := requestJSON(t, client, http.MethodPost, httpServer.URL+"/v1/run", map[string]any{"source": "result=7"})
+	if status != http.StatusOK {
+		t.Fatalf("positive control: %d %#v", status, body)
+	}
+	infinite := `while True:
+ pass`
+
+	status, body = requestJSON(t, client, http.MethodPost, httpServer.URL+"/v1/run", map[string]any{
+		"source": infinite,
+	})
+	if status != http.StatusRequestTimeout || !strings.Contains(body["error"].(string), "deadline") {
+		t.Fatalf("timed ordinary run status=%d body=%#v", status, body)
+	}
+	status, body = requestJSON(t, client, http.MethodPost, httpServer.URL+"/v1/run", map[string]any{"source": "result=7"})
+	if status != http.StatusOK || body["value"] != float64(7) {
+		t.Fatalf("slot was not released status=%d body=%#v", status, body)
+	}
+
+	status, created := requestJSON(t, client, http.MethodPost, httpServer.URL+"/v1/workspaces", map[string]any{
+		"files": []map[string]any{{"path": "value.txt", "data": []byte("before")}},
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("workspace create status=%d body=%#v", status, created)
+	}
+	ref := created["workspace"].(string)
+	status, body = requestJSON(t, client, http.MethodPost, httpServer.URL+"/v1/workspaces/"+ref+"/run", map[string]any{
+		"source": infinite, "timeout_ms": 10,
+	})
+	if status != http.StatusRequestTimeout {
+		t.Fatalf("timed workspace run status=%d body=%#v", status, body)
+	}
+	status, body = requestJSON(t, client, http.MethodPost, httpServer.URL+"/v1/workspaces/"+ref+"/run", map[string]any{
+		"source": `result=open('/workspace/value.txt').read()`,
+	})
+	if status != http.StatusOK || body["value"] != "before" {
+		t.Fatalf("workspace lease was not released status=%d body=%#v", status, body)
+	}
+	status, body = requestJSON(t, client, http.MethodDelete, httpServer.URL+"/v1/workspaces/"+ref, nil)
+	if status != http.StatusOK || body["destroyed"] != true {
+		t.Fatalf("workspace destroy status=%d body=%#v", status, body)
+	}
+}
+
+func TestHTTPRunTimeoutValidationAndWorkspaceEarlyReadRejection(t *testing.T) {
+	_, httpServer := newGuestHTTPService(t, pysolate.Manifest{}, 1, Options{MaxRunDuration: time.Second})
+	client := httpServer.Client()
+	for _, timeout := range []any{0, 1001} {
+		status, body := requestJSON(t, client, http.MethodPost, httpServer.URL+"/v1/run", map[string]any{
+			"source": "result=1", "timeout_ms": timeout,
+		})
+		if status != http.StatusBadRequest {
+			t.Fatalf("timeout=%v status=%d body=%#v", timeout, status, body)
+		}
+	}
+	status, created := requestJSON(t, client, http.MethodPost, httpServer.URL+"/v1/workspaces", map[string]any{})
+	if status != http.StatusCreated {
+		t.Fatalf("workspace create status=%d body=%#v", status, created)
+	}
+	ref := created["workspace"].(string)
+	status, body := requestJSON(t, client, http.MethodPost, httpServer.URL+"/v1/workspaces/"+ref+"/run", map[string]any{
+		"source": "result=1", "early_reads": true,
+	})
+	if status != http.StatusBadRequest || !strings.Contains(body["error"].(string), "unsupported") {
+		t.Fatalf("workspace early-read status=%d body=%#v", status, body)
+	}
+}
+
+func newGuestHTTPService(t *testing.T, manifest pysolate.Manifest, maxActive int, options Options) (*Server, *httptest.Server) {
+	t.Helper()
+	guest := os.Getenv("PYSOLATE_GUEST")
+	if guest == "" {
+		guest = filepath.Join("..", "dist", "pysolate.wasm")
+	}
+	wasm, err := os.ReadFile(guest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := filepath.Join(t.TempDir(), "workspaces")
+	if err := os.Mkdir(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := workspacepkg.NewManager(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	service, err := New(ctx, wasm, manifest, manager, maxActive, options)
+	if err != nil {
+		_ = manager.Close()
+		t.Fatal(err)
+	}
+	httpServer := httptest.NewServer(service)
+	t.Cleanup(func() {
+		httpServer.Close()
+		if err := service.Close(context.Background()); err != nil {
+			t.Errorf("close service: %v", err)
+		}
+	})
+	return service, httpServer
+}
+
 func requestJSON(t *testing.T, client *http.Client, method, url string, value any) (int, map[string]any) {
 	t.Helper()
 	var body bytes.Buffer

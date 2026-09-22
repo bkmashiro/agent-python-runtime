@@ -7,8 +7,11 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	pysolate "github.com/bkmashiro/agent-python-runtime"
 	"github.com/bkmashiro/agent-python-runtime/durable"
@@ -261,6 +264,90 @@ func TestDurableHTTPEnforcesPreparedSeed(t *testing.T) {
 	}
 	if status := request("prepared-seed"); status != http.StatusCreated {
 		t.Fatalf("prepared seed status=%d", status)
+	}
+}
+
+func TestDurableHTTPAttemptTimeoutValidation(t *testing.T) {
+	runtime := newFakeRuntime()
+	server, err := New(runtime, "env-v1", durable.Limits{MaxRunning: 1, MaxResident: 1, MaxInflightTools: 1, MaxQueued: 1}, Options{MaxRunDuration: 50 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close(context.Background())
+	httpServer := httptest.NewServer(server)
+	defer httpServer.Close()
+
+	status, _ := durableRequest(t, httpServer.Client(), http.MethodPost, httpServer.URL+"/v1/durable/runs", map[string]any{
+		"id": "timeout-run", "source": "result=1", "seed": "seed",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("create status=%d", status)
+	}
+	for _, body := range []map[string]any{
+		{"timeout_ms": 0}, {"timeout_ms": 51}, {"timeout_ms": 1, "early_reads": true},
+	} {
+		status, response := durableRequest(t, httpServer.Client(), http.MethodPost, httpServer.URL+"/v1/durable/runs/timeout-run/attempts", body)
+		if status != http.StatusBadRequest {
+			t.Fatalf("body=%#v status=%d response=%#v", body, status, response)
+		}
+	}
+}
+
+func TestDurableHTTPRealGuestTimeoutReleasesSlot(t *testing.T) {
+	guest := os.Getenv("PYSOLATE_GUEST")
+	if guest == "" {
+		guest = filepath.Join("..", "..", "dist", "pysolate.wasm")
+	}
+	wasm, err := os.ReadFile(guest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := durable.Open(filepath.Join(t.TempDir(), "runs.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	startup, cancelStartup := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancelStartup()
+	runner, err := durable.NewRunner(startup, store, wasm, "env-v1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	server, err := New(runner, "env-v1", durable.Limits{MaxRunning: 1, MaxResident: 1, MaxInflightTools: 1, MaxQueued: 1}, Options{MaxRunDuration: 2 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close(context.Background())
+	httpServer := httptest.NewServer(server)
+	defer httpServer.Close()
+
+	create := func(id, source string) {
+		t.Helper()
+		status, body := durableRequest(t, httpServer.Client(), http.MethodPost, httpServer.URL+"/v1/durable/runs", map[string]any{
+			"id": id, "source": source, "seed": "seed",
+		})
+		if status != http.StatusCreated {
+			t.Fatalf("create %s status=%d body=%#v", id, status, body)
+		}
+	}
+	// Cold Guest setup is included in the attempt budget. First prove a short
+	// request fits this host's budget; the cancellation case still gets 10 ms.
+	create("positive-control", "result=7")
+	status, body := durableRequest(t, httpServer.Client(), http.MethodPost, httpServer.URL+"/v1/durable/runs/positive-control/attempts", nil)
+	if status != http.StatusOK {
+		t.Fatalf("positive control failed: %d %#v", status, body)
+	}
+	create("timed", "while True:\n pass")
+	status, body = durableRequest(t, httpServer.Client(), http.MethodPost, httpServer.URL+"/v1/durable/runs/timed/attempts", map[string]any{"timeout_ms": 10})
+	if status != http.StatusRequestTimeout {
+		t.Fatalf("timed attempt status=%d body=%#v", status, body)
+	}
+
+	create("after-timeout", "result=7")
+	status, body = durableRequest(t, httpServer.Client(), http.MethodPost, httpServer.URL+"/v1/durable/runs/after-timeout/attempts", nil)
+	if status != http.StatusOK || body["state"] != string(durable.StateCompleted) || body["value"] != float64(7) {
+		t.Fatalf("slot was not released status=%d body=%#v", status, body)
 	}
 }
 

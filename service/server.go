@@ -24,11 +24,12 @@ const maxHTTPBody = 1 << 20
 var errRequestTooLarge = errors.New("request body exceeds 1 MiB limit")
 
 type Server struct {
-	plain     *pysolate.Runner
-	workspace *pysolate.Runner
-	manager   *workspacepkg.Manager
-	slots     chan struct{}
-	cache     wazero.CompilationCache
+	plain          *pysolate.Runner
+	workspace      *pysolate.Runner
+	manager        *workspacepkg.Manager
+	slots          chan struct{}
+	cache          wazero.CompilationCache
+	maxRunDuration time.Duration
 
 	mu     sync.Mutex
 	leases map[workspacepkg.Ref]*workspacepkg.Lease
@@ -38,7 +39,8 @@ type Server struct {
 // Options controls service-level execution choices. The zero value preserves
 // the existing prepared COW path; data-image sharing is deliberately opt-in.
 type Options struct {
-	COWDataImage bool
+	COWDataImage   bool
+	MaxRunDuration time.Duration
 }
 
 type createRequest struct {
@@ -46,8 +48,10 @@ type createRequest struct {
 }
 
 type runRequest struct {
-	Source string          `json:"source"`
-	Inputs json.RawMessage `json:"inputs"`
+	Source     string          `json:"source"`
+	Inputs     json.RawMessage `json:"inputs"`
+	TimeoutMS  *int64          `json:"timeout_ms"`
+	EarlyReads bool            `json:"early_reads,omitempty"`
 }
 
 type runResponse struct {
@@ -68,6 +72,9 @@ func New(ctx context.Context, wasm []byte, manifest pysolate.Manifest, manager *
 	}
 	if len(options) > 1 {
 		return nil, errors.New("service accepts at most one options value")
+	}
+	if len(options) == 1 && options[0].MaxRunDuration < 0 {
+		return nil, errors.New("invalid service max run duration")
 	}
 	dataImage := len(options) == 1 && options[0].COWDataImage
 	if dataImage && runtime.GOOS != "linux" {
@@ -104,7 +111,11 @@ func New(ctx context.Context, wasm []byte, manifest pysolate.Manifest, manager *
 		_ = cache.Close(context.Background())
 		return nil, err
 	}
-	return &Server{plain: plain, workspace: withWorkspace, manager: manager, slots: make(chan struct{}, maxActive), cache: cache, leases: make(map[workspacepkg.Ref]*workspacepkg.Lease)}, nil
+	maxRunDuration := time.Duration(0)
+	if len(options) == 1 {
+		maxRunDuration = options[0].MaxRunDuration
+	}
+	return &Server{plain: plain, workspace: withWorkspace, manager: manager, slots: make(chan struct{}, maxActive), cache: cache, maxRunDuration: maxRunDuration, leases: make(map[workspacepkg.Ref]*workspacepkg.Lease)}, nil
 }
 
 func (server *Server) Close(ctx context.Context) error {
@@ -215,6 +226,12 @@ func (server *Server) handlePlainRun(w http.ResponseWriter, request *http.Reques
 		writeError(w, http.StatusBadRequest, "invalid run request")
 		return
 	}
+	runContext, cancel, err := server.executionContext(request.Context(), body.TimeoutMS)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	defer cancel()
 	if !server.admit() {
 		writeError(w, http.StatusTooManyRequests, "execution capacity exhausted")
 		return
@@ -222,11 +239,16 @@ func (server *Server) handlePlainRun(w http.ResponseWriter, request *http.Reques
 	defer server.release()
 	started := time.Now()
 	runStarted := time.Now()
-	out, err := server.plain.Run(request.Context(), body.Source, decodeInputs(body.Inputs))
+	var out pysolate.Output
+	if body.EarlyReads {
+		out, err = server.plain.RunWithEarlyReads(runContext, body.Source, decodeInputs(body.Inputs))
+	} else {
+		out, err = server.plain.Run(runContext, body.Source, decodeInputs(body.Inputs))
+	}
 	response := runResponse{Value: out.Value, Stdout: out.Stdout, Transformed: out.Transformed, RunNS: time.Since(runStarted).Nanoseconds(), TotalNS: time.Since(started).Nanoseconds()}
 	if err != nil {
 		response.Error = err.Error()
-		writeJSON(w, http.StatusUnprocessableEntity, response)
+		writeJSON(w, runErrorStatus(err), response)
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
@@ -246,6 +268,16 @@ func (server *Server) handleWorkspaceRun(w http.ResponseWriter, request *http.Re
 		writeError(w, http.StatusBadRequest, "invalid run request")
 		return
 	}
+	if body.EarlyReads {
+		writeError(w, http.StatusBadRequest, "early_reads is unsupported for workspace runs")
+		return
+	}
+	runContext, cancel, err := server.executionContext(request.Context(), body.TimeoutMS)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	defer cancel()
 	lease := server.lease(ref)
 	if lease == nil {
 		writeError(w, http.StatusNotFound, "workspace not found")
@@ -263,7 +295,7 @@ func (server *Server) handleWorkspaceRun(w http.ResponseWriter, request *http.Re
 		return
 	}
 	runStarted := time.Now()
-	out, runErr := server.workspace.RunWorkspace(request.Context(), body.Source, decodeInputs(body.Inputs), lease)
+	out, runErr := server.workspace.RunWorkspace(runContext, body.Source, decodeInputs(body.Inputs), lease)
 	runNS := time.Since(runStarted).Nanoseconds()
 	after, snapshotErr := lease.Snapshot()
 	if snapshotErr != nil {
@@ -274,7 +306,7 @@ func (server *Server) handleWorkspaceRun(w http.ResponseWriter, request *http.Re
 	response := runResponse{Value: out.Value, Stdout: out.Stdout, Transformed: out.Transformed, Before: before.Revision, After: after.Revision, Changes: &changes, RunNS: runNS, TotalNS: time.Since(started).Nanoseconds()}
 	if runErr != nil {
 		response.Error = runErr.Error()
-		writeJSON(w, http.StatusUnprocessableEntity, response)
+		writeJSON(w, runErrorStatus(runErr), response)
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
@@ -362,6 +394,36 @@ func (server *Server) admit() bool {
 }
 func (server *Server) release() { <-server.slots }
 
+func (server *Server) executionContext(parent context.Context, timeoutMS *int64) (context.Context, context.CancelFunc, error) {
+	duration, err := runDuration(timeoutMS, server.maxRunDuration)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	if duration == 0 {
+		return parent, func() {}, nil
+	}
+	ctx, cancel := context.WithTimeout(parent, duration)
+	return ctx, cancel, nil
+}
+
+func runDuration(timeoutMS *int64, maximum time.Duration) (time.Duration, error) {
+	if timeoutMS == nil {
+		return maximum, nil
+	}
+	if *timeoutMS <= 0 {
+		return 0, errors.New("timeout_ms must be positive")
+	}
+	const maxTimeoutMS = (1<<63 - 1) / int64(time.Millisecond)
+	if *timeoutMS > maxTimeoutMS {
+		return 0, errors.New("timeout_ms is too large")
+	}
+	duration := time.Duration(*timeoutMS) * time.Millisecond
+	if maximum > 0 && duration > maximum {
+		return 0, errors.New("timeout_ms exceeds service max run duration")
+	}
+	return duration, nil
+}
+
 func decodeBody(request *http.Request, target any) error {
 	defer request.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(request.Body, maxHTTPBody+1))
@@ -417,6 +479,13 @@ func statusFor(err error) int {
 	default:
 		return http.StatusInternalServerError
 	}
+}
+
+func runErrorStatus(err error) int {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return statusFor(err)
+	}
+	return http.StatusUnprocessableEntity
 }
 
 var _ http.Handler = (*Server)(nil)

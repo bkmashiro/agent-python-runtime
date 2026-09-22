@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/durable"
 )
@@ -37,6 +38,7 @@ type historyReader interface {
 // accept a run that it will reject only after an attempt starts.
 type Options struct {
 	PreparationSeed string
+	MaxRunDuration  time.Duration
 }
 
 type Server struct {
@@ -45,8 +47,9 @@ type Server struct {
 	environmentVersion string
 	preparationSeed    string
 
-	mu     sync.Mutex
-	closed bool
+	mu             sync.Mutex
+	closed         bool
+	maxRunDuration time.Duration
 }
 
 type createRequest struct {
@@ -60,6 +63,10 @@ type resolveRequest struct {
 	WaitID string          `json:"wait_id"`
 	Result json.RawMessage `json:"result,omitempty"`
 	Error  string          `json:"error,omitempty"`
+}
+
+type attemptRequest struct {
+	TimeoutMS *int64 `json:"timeout_ms"`
 }
 
 type runResponse struct {
@@ -96,7 +103,7 @@ func New(runtime Runtime, environmentVersion string, limits durable.Limits, opti
 	if runtime == nil || runtime.ArtifactID() == "" || environmentVersion == "" {
 		return nil, errors.New("invalid durable service configuration")
 	}
-	if len(options) > 1 || (len(options) == 1 && options[0].PreparationSeed == "") {
+	if len(options) > 1 || (len(options) == 1 && options[0].MaxRunDuration < 0) {
 		return nil, errors.New("invalid durable service options")
 	}
 	executor, err := durable.NewExecutor(runtime, limits)
@@ -104,10 +111,12 @@ func New(runtime Runtime, environmentVersion string, limits durable.Limits, opti
 		return nil, err
 	}
 	preparationSeed := ""
+	maxRunDuration := time.Duration(0)
 	if len(options) == 1 {
 		preparationSeed = options[0].PreparationSeed
+		maxRunDuration = options[0].MaxRunDuration
 	}
-	return &Server{runtime: runtime, executor: executor, environmentVersion: environmentVersion, preparationSeed: preparationSeed}, nil
+	return &Server{runtime: runtime, executor: executor, environmentVersion: environmentVersion, preparationSeed: preparationSeed, maxRunDuration: maxRunDuration}, nil
 }
 
 func (server *Server) Close(ctx context.Context) error {
@@ -281,12 +290,23 @@ func (server *Server) handleAttempt(writer http.ResponseWriter, request *http.Re
 		writeError(writer, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	attempt, err := server.executor.Admit(request.Context(), id)
+	var body attemptRequest
+	if err := decodeOptionalBody(request, &body); err != nil {
+		writeError(writer, requestErrorStatus(err), err.Error())
+		return
+	}
+	attemptContext, cancel, err := server.executionContext(request.Context(), body.TimeoutMS)
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
+	defer cancel()
+	attempt, err := server.executor.Admit(attemptContext, id)
 	if err != nil {
 		writeError(writer, statusFor(err), err.Error())
 		return
 	}
-	result, err := attempt.Result(request.Context())
+	result, err := attempt.Result(attemptContext)
 	if err != nil {
 		writeError(writer, statusFor(err), err.Error())
 		return
@@ -340,6 +360,59 @@ func (server *Server) isClosed() bool {
 	server.mu.Lock()
 	defer server.mu.Unlock()
 	return server.closed
+}
+
+func (server *Server) executionContext(parent context.Context, timeoutMS *int64) (context.Context, context.CancelFunc, error) {
+	duration, err := runDuration(timeoutMS, server.maxRunDuration)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	if duration == 0 {
+		return parent, func() {}, nil
+	}
+	ctx, cancel := context.WithTimeout(parent, duration)
+	return ctx, cancel, nil
+}
+
+func runDuration(timeoutMS *int64, maximum time.Duration) (time.Duration, error) {
+	if timeoutMS == nil {
+		return maximum, nil
+	}
+	if *timeoutMS <= 0 {
+		return 0, errors.New("timeout_ms must be positive")
+	}
+	const maxTimeoutMS = (1<<63 - 1) / int64(time.Millisecond)
+	if *timeoutMS > maxTimeoutMS {
+		return 0, errors.New("timeout_ms is too large")
+	}
+	duration := time.Duration(*timeoutMS) * time.Millisecond
+	if maximum > 0 && duration > maximum {
+		return 0, errors.New("timeout_ms exceeds service max run duration")
+	}
+	return duration, nil
+}
+
+func decodeOptionalBody(request *http.Request, target any) error {
+	defer request.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(request.Body, maxHTTPBody+1))
+	if err != nil {
+		return err
+	}
+	if len(data) > maxHTTPBody {
+		return errRequestTooLarge
+	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		return nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	if decoder.Decode(&struct{}{}) != io.EOF {
+		return errors.New("multiple JSON values")
+	}
+	return nil
 }
 
 func decodeBody(request *http.Request, target any) error {

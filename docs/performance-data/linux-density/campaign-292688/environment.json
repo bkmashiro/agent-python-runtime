@@ -1,0 +1,31 @@
+{
+  "allocated_cpu_affinity": [
+    0,
+    1,
+    36,
+    37
+  ],
+  "platform": "Linux-6.17.0-35-generic-x86_64-with-glibc2.39",
+  "machine": "x86_64",
+  "cpu_affinity": [
+    0,
+    1
+  ],
+  "page_size": 4096,
+  "cgroup_memory_limits": {
+    "/sys/fs/cgroup/system.slice/slurmstepd.scope/job_292688/step_batch/user/task_0/memory.max": "max",
+    "/sys/fs/cgroup/system.slice/slurmstepd.scope/job_292688/step_batch/user/memory.max": "2147483648",
+    "/sys/fs/cgroup/system.slice/slurmstepd.scope/job_292688/step_batch/memory.max": "max",
+    "/sys/fs/cgroup/system.slice/slurmstepd.scope/job_292688/memory.max": "2147483648",
+    "/sys/fs/cgroup/system.slice/slurmstepd.scope/memory.max": "max",
+    "/sys/fs/cgroup/system.slice/memory.max": "max"
+  },
+  "effective_memory_limit_bytes": 2147483648,
+  "slurm_job_id": "292688",
+  "gomaxprocs": 2,
+  "guest_sha256": "2c63ce407eae626c89fcd1dd918c713b1f8b75a35a6cf6ca6861466168d0faf8",
+  "binary_sha256": "1461e1c6448cd4a61626809a593dcfca7b360cb29eb445be544045913e3c2d62",
+  "repeats": 5,
+  "smoke": false,
+  "lifecycle": "fresh process per arm; two warmup runs; batch excludes setup and task creation; request latency includes queue"
+}

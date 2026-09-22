@@ -1,0 +1,427 @@
+{
+  "process_runs": 50,
+  "completed_tasks": 1600,
+  "statistics": "median across independent process runs; p95 nearest-rank within each run; speedup paired by repetition",
+  "cells": [
+    {
+      "resident_limit": 8,
+      "delay": "0s",
+      "repeats": 5,
+      "inline": {
+        "throughput_tasks_s": {
+          "median": 55.173381515189924,
+          "min": 51.547937194276834,
+          "max": 60.19539508011674
+        },
+        "batch_ms": {
+          "median": 579.989827,
+          "min": 531.602126,
+          "max": 620.781388
+        },
+        "request_p95_ms": {
+          "median": 554.175102,
+          "min": 522.133012,
+          "max": 608.821765
+        },
+        "sampled_peak_pss_mib": {
+          "median": 465.50390625,
+          "min": 460.8671875,
+          "max": 477.07421875
+        },
+        "sampled_peak_rss_mib": {
+          "median": 465.51171875,
+          "min": 460.875,
+          "max": 477.08203125
+        },
+        "sampled_peak_private_dirty_mib": {
+          "median": 458.08203125,
+          "min": 453.4453125,
+          "max": 469.58984375
+        },
+        "observed_resident_peak": {
+          "median": 2,
+          "min": 2,
+          "max": 2
+        }
+      },
+      "external_io": {
+        "throughput_tasks_s": {
+          "median": 57.86600247924356,
+          "min": 50.996165145751725,
+          "max": 60.687047010545825
+        },
+        "batch_ms": {
+          "median": 553.001739,
+          "min": 527.295388,
+          "max": 627.498164
+        },
+        "request_p95_ms": {
+          "median": 544.501991,
+          "min": 497.982587,
+          "max": 601.223235
+        },
+        "sampled_peak_pss_mib": {
+          "median": 481.80078125,
+          "min": 471.0859375,
+          "max": 495.72265625
+        },
+        "sampled_peak_rss_mib": {
+          "median": 484.4765625,
+          "min": 474.2265625,
+          "max": 498.86328125
+        },
+        "sampled_peak_private_dirty_mib": {
+          "median": 471.4765625,
+          "min": 462.00390625,
+          "max": 485.16796875
+        },
+        "observed_resident_peak": {
+          "median": 4,
+          "min": 4,
+          "max": 4
+        }
+      },
+      "paired_throughput_ratio": {
+        "median": 1.0081676003583782,
+        "min": 0.9242892812671242,
+        "max": 1.122566791783633
+      }
+    },
+    {
+      "resident_limit": 8,
+      "delay": "50ms",
+      "repeats": 5,
+      "inline": {
+        "throughput_tasks_s": {
+          "median": 18.349907136710968,
+          "min": 18.31031209741006,
+          "max": 18.52052446923561
+        },
+        "batch_ms": {
+          "median": 1743.878035,
+          "min": 1727.812841,
+          "max": 1747.649075
+        },
+        "request_p95_ms": {
+          "median": 1731.970591,
+          "min": 1694.029696,
+          "max": 1739.824114
+        },
+        "sampled_peak_pss_mib": {
+          "median": 464.59375,
+          "min": 463.49609375,
+          "max": 477.77734375
+        },
+        "sampled_peak_rss_mib": {
+          "median": 464.6015625,
+          "min": 463.50390625,
+          "max": 477.78515625
+        },
+        "sampled_peak_private_dirty_mib": {
+          "median": 457.171875,
+          "min": 456.07421875,
+          "max": 470.23046875
+        },
+        "observed_resident_peak": {
+          "median": 2,
+          "min": 2,
+          "max": 2
+        }
+      },
+      "external_io": {
+        "throughput_tasks_s": {
+          "median": 49.59648347541109,
+          "min": 46.49490764887217,
+          "max": 51.674597861577894
+        },
+        "batch_ms": {
+          "median": 645.207034,
+          "min": 619.259778,
+          "max": 688.247415
+        },
+        "request_p95_ms": {
+          "median": 614.511758,
+          "min": 604.189335,
+          "max": 675.037149
+        },
+        "sampled_peak_pss_mib": {
+          "median": 511.8046875,
+          "min": 507.8984375,
+          "max": 517.140625
+        },
+        "sampled_peak_rss_mib": {
+          "median": 525.1640625,
+          "min": 520.97265625,
+          "max": 532.8125
+        },
+        "sampled_peak_private_dirty_mib": {
+          "median": 501.25,
+          "min": 497.40625,
+          "max": 506.5859375
+        },
+        "observed_resident_peak": {
+          "median": 8,
+          "min": 7,
+          "max": 8
+        }
+      },
+      "paired_throughput_ratio": {
+        "median": 2.6965215338926387,
+        "min": 2.5232498240671366,
+        "max": 2.818058217241424
+      }
+    },
+    {
+      "resident_limit": 8,
+      "delay": "200ms",
+      "repeats": 5,
+      "inline": {
+        "throughput_tasks_s": {
+          "median": 7.699279224925706,
+          "min": 7.658970973560059,
+          "max": 7.735603650233718
+        },
+        "batch_ms": {
+          "median": 4156.233209,
+          "min": 4136.716596,
+          "max": 4178.106969
+        },
+        "request_p95_ms": {
+          "median": 4142.158395,
+          "min": 4123.621608,
+          "max": 4162.594944
+        },
+        "sampled_peak_pss_mib": {
+          "median": 465.984375,
+          "min": 461.1953125,
+          "max": 473.39453125
+        },
+        "sampled_peak_rss_mib": {
+          "median": 465.9921875,
+          "min": 461.203125,
+          "max": 473.40234375
+        },
+        "sampled_peak_private_dirty_mib": {
+          "median": 458.5625,
+          "min": 453.7734375,
+          "max": 465.97265625
+        },
+        "observed_resident_peak": {
+          "median": 2,
+          "min": 2,
+          "max": 2
+        }
+      },
+      "external_io": {
+        "throughput_tasks_s": {
+          "median": 26.98576506290085,
+          "min": 25.22459160507272,
+          "max": 27.26018465267057
+        },
+        "batch_ms": {
+          "median": 1185.810368,
+          "min": 1173.873193,
+          "max": 1268.603294
+        },
+        "request_p95_ms": {
+          "median": 1167.171343,
+          "min": 1135.049673,
+          "max": 1232.733555
+        },
+        "sampled_peak_pss_mib": {
+          "median": 517.34375,
+          "min": 515.4765625,
+          "max": 517.89453125
+        },
+        "sampled_peak_rss_mib": {
+          "median": 536.1484375,
+          "min": 531.1484375,
+          "max": 536.3515625
+        },
+        "sampled_peak_private_dirty_mib": {
+          "median": 506.7265625,
+          "min": 504.921875,
+          "max": 507.33984375
+        },
+        "observed_resident_peak": {
+          "median": 8,
+          "min": 8,
+          "max": 8
+        }
+      },
+      "paired_throughput_ratio": {
+        "median": 3.5069677791983556,
+        "min": 3.275538649200449,
+        "max": 3.5406151480281736
+      }
+    },
+    {
+      "resident_limit": 2,
+      "delay": "200ms",
+      "repeats": 5,
+      "inline": {
+        "throughput_tasks_s": {
+          "median": 7.81123346456068,
+          "min": 7.658045724597191,
+          "max": 8.00083577930676
+        },
+        "batch_ms": {
+          "median": 4096.664137,
+          "min": 3999.582154,
+          "max": 4178.61177
+        },
+        "request_p95_ms": {
+          "median": 4074.417306,
+          "min": 3985.029379,
+          "max": 4163.863548
+        },
+        "sampled_peak_pss_mib": {
+          "median": 467.85546875,
+          "min": 467.33203125,
+          "max": 478.20703125
+        },
+        "sampled_peak_rss_mib": {
+          "median": 467.86328125,
+          "min": 467.33984375,
+          "max": 478.21484375
+        },
+        "sampled_peak_private_dirty_mib": {
+          "median": 460.37109375,
+          "min": 459.91015625,
+          "max": 470.78515625
+        },
+        "observed_resident_peak": {
+          "median": 2,
+          "min": 2,
+          "max": 2
+        }
+      },
+      "external_io": {
+        "throughput_tasks_s": {
+          "median": 7.684882278256665,
+          "min": 7.647393866116814,
+          "max": 7.926568012356783
+        },
+        "batch_ms": {
+          "median": 4164.019544,
+          "min": 4037.056132,
+          "max": 4184.432051
+        },
+        "request_p95_ms": {
+          "median": 4150.636431,
+          "min": 4022.982866,
+          "max": 4172.197836
+        },
+        "sampled_peak_pss_mib": {
+          "median": 473.03125,
+          "min": 466.9453125,
+          "max": 476.7265625
+        },
+        "sampled_peak_rss_mib": {
+          "median": 473.0390625,
+          "min": 466.953125,
+          "max": 476.734375
+        },
+        "sampled_peak_private_dirty_mib": {
+          "median": 465.609375,
+          "min": 459.5234375,
+          "max": 469.3046875
+        },
+        "observed_resident_peak": {
+          "median": 2,
+          "min": 2,
+          "max": 2
+        }
+      },
+      "paired_throughput_ratio": {
+        "median": 0.9907174988965449,
+        "min": 0.9837303878418108,
+        "max": 0.9986090630869227
+      }
+    },
+    {
+      "resident_limit": 4,
+      "delay": "200ms",
+      "repeats": 5,
+      "inline": {
+        "throughput_tasks_s": {
+          "median": 7.711821533504205,
+          "min": 7.657158729202288,
+          "max": 7.751360254660632
+        },
+        "batch_ms": {
+          "median": 4149.473618,
+          "min": 4128.307671,
+          "max": 4179.095815
+        },
+        "request_p95_ms": {
+          "median": 4127.858783,
+          "min": 4113.880967,
+          "max": 4163.10291
+        },
+        "sampled_peak_pss_mib": {
+          "median": 465.59375,
+          "min": 459.30078125,
+          "max": 474.20703125
+        },
+        "sampled_peak_rss_mib": {
+          "median": 465.6015625,
+          "min": 459.30859375,
+          "max": 474.21484375
+        },
+        "sampled_peak_private_dirty_mib": {
+          "median": 458.171875,
+          "min": 451.87890625,
+          "max": 466.72265625
+        },
+        "observed_resident_peak": {
+          "median": 2,
+          "min": 2,
+          "max": 2
+        }
+      },
+      "external_io": {
+        "throughput_tasks_s": {
+          "median": 14.91414294468415,
+          "min": 14.646834883359123,
+          "max": 15.218964297002698
+        },
+        "batch_ms": {
+          "median": 2145.614409,
+          "min": 2102.639797,
+          "max": 2184.772359
+        },
+        "request_p95_ms": {
+          "median": 2113.903291,
+          "min": 2080.690843,
+          "max": 2173.964426
+        },
+        "sampled_peak_pss_mib": {
+          "median": 486.39453125,
+          "min": 456.4375,
+          "max": 489.51171875
+        },
+        "sampled_peak_rss_mib": {
+          "median": 489.53515625,
+          "min": 460.87109375,
+          "max": 492.65234375
+        },
+        "sampled_peak_private_dirty_mib": {
+          "median": 475.83984375,
+          "min": 445.8203125,
+          "max": 478.89453125
+        },
+        "observed_resident_peak": {
+          "median": 4,
+          "min": 4,
+          "max": 4
+        }
+      },
+      "paired_throughput_ratio": {
+        "median": 1.9278493794827978,
+        "min": 1.9128289488763164,
+        "max": 1.96339272037473
+      }
+    }
+  ]
+}

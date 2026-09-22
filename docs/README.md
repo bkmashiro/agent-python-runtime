@@ -40,6 +40,8 @@ for the execution model and build commands.
 
 ## Performance and scheduling
 
+- [`linux-density-study.md`](linux-density-study.md) — same-limit Linux throughput and sampled memory comparison for Inline versus ExternalIO, with raw data and reproduction commands.
+
 - [`performance-results.md`](performance-results.md) — measured prepared/COW,
   compilation-cache, historical prefix/PLM, admission, and service results with scope and
   trade-offs.

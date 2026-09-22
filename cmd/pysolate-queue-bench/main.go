@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,6 +23,137 @@ type queueCaseSpec struct {
 	name     string
 	code     string
 	wantPark bool
+}
+
+type phaseMeasurement struct {
+	elapsed     time.Duration
+	latencies   []int64
+	completed   int
+	errors      int
+	resultCount int
+	dispatches  int
+}
+
+type memorySnapshot struct {
+	RSSKB          int64 `json:"rss_kib,omitempty"`
+	PSSKB          int64 `json:"pss_kib,omitempty"`
+	PrivateDirtyKB int64 `json:"private_dirty_kib,omitempty"`
+}
+
+type memorySampler struct {
+	peakRSS          atomic.Int64
+	peakPSS          atomic.Int64
+	peakPrivateDirty atomic.Int64
+	mu               sync.Mutex
+	stop             chan struct{}
+	done             chan struct{}
+}
+
+func newMemorySampler(interval time.Duration) *memorySampler {
+	s := &memorySampler{stop: make(chan struct{}), done: make(chan struct{})}
+	go func() {
+		defer close(s.done)
+		s.sample()
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				s.sample()
+			case <-s.stop:
+				return
+			}
+		}
+	}()
+	return s
+}
+
+func (s *memorySampler) sample() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	current := readMemory()
+	updatePeak(&s.peakRSS, current.RSSKB)
+	updatePeak(&s.peakPSS, current.PSSKB)
+	updatePeak(&s.peakPrivateDirty, current.PrivateDirtyKB)
+}
+
+func (s *memorySampler) reset() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.peakRSS.Store(0)
+	s.peakPSS.Store(0)
+	s.peakPrivateDirty.Store(0)
+}
+
+func (s *memorySampler) close() {
+	if s == nil {
+		return
+	}
+	close(s.stop)
+	<-s.done
+}
+
+func (s *memorySampler) snapshot() memorySnapshot {
+	if s == nil {
+		return memorySnapshot{}
+	}
+	return memorySnapshot{RSSKB: s.peakRSS.Load(), PSSKB: s.peakPSS.Load(), PrivateDirtyKB: s.peakPrivateDirty.Load()}
+}
+
+func updatePeak(peak *atomic.Int64, value int64) {
+	for old := peak.Load(); value > old && !peak.CompareAndSwap(old, value); old = peak.Load() {
+	}
+}
+
+func parseMemoryRollup(raw []byte) memorySnapshot {
+	var snapshot memorySnapshot
+	for _, line := range strings.Split(string(raw), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		value, err := strconv.ParseInt(fields[1], 10, 64)
+		if err != nil {
+			continue
+		}
+		switch fields[0] {
+		case "Rss:":
+			snapshot.RSSKB = value
+		case "Pss:":
+			snapshot.PSSKB = value
+		case "Private_Dirty:":
+			snapshot.PrivateDirtyKB = value
+		}
+	}
+	return snapshot
+}
+
+func readMemory() memorySnapshot {
+	raw, err := os.ReadFile("/proc/self/smaps_rollup")
+	if err != nil {
+		return memorySnapshot{}
+	}
+	return parseMemoryRollup(raw)
+}
+
+func nullableMemory(snapshot memorySnapshot) any {
+	if snapshot.RSSKB <= 0 && snapshot.PSSKB <= 0 && snapshot.PrivateDirtyKB <= 0 {
+		return nil
+	}
+	return snapshot
+}
+
+func nullableMetric(value int64) any {
+	if value <= 0 {
+		return nil
+	}
+	return value
 }
 
 func main() {
@@ -42,6 +174,7 @@ func run() error {
 	heap := flag.Int("heap", 8, "private allocation MiB per Guest")
 	hold := flag.Duration("hold", 200*time.Millisecond, "synthetic Host wait")
 	cow := flag.Bool("cow", true, "use seeded COW, false selects copy")
+	warmup := flag.Int("warmup", 0, "completed unmeasured Runs before measured Run creation")
 	flag.Parse()
 	if *resident == 0 {
 		*resident = *active
@@ -49,7 +182,7 @@ func run() error {
 	if *toolActive == 0 {
 		*toolActive = *resident
 	}
-	if *tasks < 1 || *tasks > 64 || *active < 1 || *resident < *active || *toolActive < 1 || *heap < 0 || *heap > 64 {
+	if *tasks < 1 || *tasks > 64 || *active < 1 || *resident < *active || *toolActive < 1 || *heap < 0 || *heap > 64 || *warmup < 0 || *warmup > 16 {
 		return errors.New("invalid bounded fixture")
 	}
 	if *mode != "executor" && *mode != "semaphore" && *mode != "unbounded" {
@@ -74,18 +207,28 @@ func run() error {
 	}
 	defer store.Close()
 	var held, peak atomic.Int32
-	var peakRSS atomic.Int64
+	var toolDispatches atomic.Int32
+	var peakRunning, peakResident, peakInflightTools atomic.Int64
+	startupMemory := readMemory()
+	memory := newMemorySampler(10 * time.Millisecond)
+	defer memory.close()
 	scheduling := durable.Inline
 	if *externalIO {
 		scheduling = durable.ExternalIO
 	}
+	var executor *durable.Executor
 	sample := func() {
-		v := rss()
-		for old := peakRSS.Load(); v > old && !peakRSS.CompareAndSwap(old, v); old = peakRSS.Load() {
+		memory.sample()
+		if executor != nil {
+			stats := executor.Stats()
+			updatePeak(&peakRunning, int64(stats.Running))
+			updatePeak(&peakResident, int64(stats.Resident))
+			updatePeak(&peakInflightTools, int64(stats.InflightTools))
 		}
 	}
 	tools := []durable.Tool{
 		{Name: "probe", Version: "v1", Recovery: durable.RetrySafe, Scheduling: scheduling, Call: func(ctx context.Context, _ json.RawMessage) (any, error) {
+			toolDispatches.Add(1)
 			n := held.Add(1)
 			defer held.Add(-1)
 			for old := peak.Load(); n > old && !peak.CompareAndSwap(old, n); old = peak.Load() {
@@ -112,17 +255,45 @@ func run() error {
 		return err
 	}
 	defer runner.Close(context.Background())
+	create := func(id string, inputID int) error {
+		input, marshalErr := json.Marshal(map[string]int{"id": inputID})
+		if marshalErr != nil {
+			return marshalErr
+		}
+		_, createErr := runner.Create(ctx, durable.Definition{ID: id, Code: spec.code, Inputs: input, Seed: "bench-seed", ArtifactSHA256: runner.ArtifactID(), EnvironmentVersion: "bench-v1"})
+		return createErr
+	}
+	warmupStarted := time.Now()
+	for i := 0; i < *warmup; i++ {
+		id := fmt.Sprintf("warmup-%d", i)
+		if err := create(id, i); err != nil {
+			return err
+		}
+		out, resumeErr := runner.Resume(ctx, id)
+		if spec.wantPark {
+			if !errors.Is(resumeErr, durable.ErrParked) {
+				return fmt.Errorf("warm-up park: %w", resumeErr)
+			}
+			if err := runner.Decide(ctx, id+"/wait/1", durable.Decision{Result: json.RawMessage(`true`)}); err != nil {
+				return err
+			}
+			out, err := runner.Resume(ctx, id)
+			if err != nil || string(out.Value) != strconv.Itoa(i) {
+				return fmt.Errorf("warm-up resume result=%s error=%v", out.Value, err)
+			}
+		} else if resumeErr != nil || string(out.Value) != strconv.Itoa(i) {
+			return fmt.Errorf("warm-up result=%s error=%v", out.Value, resumeErr)
+		}
+	}
+	warmupNS := time.Since(warmupStarted)
 	setup := time.Since(started)
 	ids := make([]string, *tasks)
 	for i := range ids {
 		ids[i] = fmt.Sprintf("task-%d", i)
-		input, _ := json.Marshal(map[string]int{"id": i})
-		_, err = runner.Create(ctx, durable.Definition{ID: ids[i], Code: spec.code, Inputs: input, Seed: "bench-seed", ArtifactSHA256: runner.ArtifactID(), EnvironmentVersion: "bench-v1"})
-		if err != nil {
+		if err := create(ids[i], i); err != nil {
 			return err
 		}
 	}
-	var executor *durable.Executor
 	if *mode == "executor" {
 		executor, err = durable.NewExecutor(runner, durable.Limits{MaxRunning: *active, MaxResident: *resident, MaxInflightTools: *toolActive, MaxQueued: *tasks})
 		if err != nil {
@@ -130,12 +301,16 @@ func run() error {
 		}
 		defer executor.Close(context.Background())
 	}
+	preMeasuredBatchMemory := readMemory()
+	setupPeakMemory := memory.snapshot()
+	memory.reset()
+	toolDispatches.Store(0)
 	var phaseLatencies [][]int64
-	phase := func(wantPark bool) (time.Duration, error) {
+	phase := func(wantPark bool) (phaseMeasurement, error) {
 		begin := time.Now()
 		latencies := make([]int64, len(ids))
-		errs := make(chan error, len(ids))
 		var wg sync.WaitGroup
+		var completed, resultCount, phaseErrors atomic.Int64
 		limit := *active
 		if *mode == "unbounded" {
 			limit = *tasks
@@ -147,11 +322,11 @@ func run() error {
 			if executor != nil {
 				attempt, err = executor.Submit(ctx, id)
 				if err != nil {
-					return 0, err
+					return phaseMeasurement{}, err
 				}
 			}
 			wg.Add(1)
-			go func(i int, id string, attempt *durable.Attempt) {
+			go func(i int, id string, attempt *durable.Attempt, submitted time.Time) {
 				defer wg.Done()
 				defer func() { latencies[i] = time.Since(submitted).Nanoseconds() }()
 				var value []byte
@@ -163,30 +338,38 @@ func run() error {
 					select {
 					case slots <- struct{}{}:
 					case <-ctx.Done():
-						errs <- ctx.Err()
+						phaseErrors.Add(1)
 						return
 					}
 					out, x := runner.Resume(ctx, id)
 					<-slots
 					value, e = out.Value, x
 				}
+				resultCount.Add(1)
+				valid := false
 				if wantPark {
-					if !errors.Is(e, durable.ErrParked) {
-						errs <- fmt.Errorf("expected park, got %v", e)
-					}
-				} else if e != nil || string(value) != strconv.Itoa(i) {
-					errs <- fmt.Errorf("result=%s error=%v", value, e)
+					valid = errors.Is(e, durable.ErrParked)
+				} else {
+					valid = e == nil && string(value) == strconv.Itoa(i)
 				}
-			}(i, id, attempt)
+				if valid {
+					completed.Add(1)
+				} else {
+					phaseErrors.Add(1)
+				}
+			}(i, id, attempt, submitted)
 		}
 		wg.Wait()
-		elapsed := time.Since(begin)
-		phaseLatencies = append(phaseLatencies, latencies)
-		close(errs)
-		for e := range errs {
-			return elapsed, e
+		sample()
+		measurement := phaseMeasurement{elapsed: time.Since(begin), latencies: latencies, completed: int(completed.Load()), errors: int(phaseErrors.Load()), resultCount: int(resultCount.Load()), dispatches: int(toolDispatches.Load())}
+		phaseLatencies = append(phaseLatencies, measurement.latencies)
+		if measurement.completed+measurement.errors != *tasks || measurement.resultCount != *tasks {
+			return measurement, fmt.Errorf("phase accounting completed=%d errors=%d results=%d tasks=%d", measurement.completed, measurement.errors, measurement.resultCount, *tasks)
 		}
-		return elapsed, nil
+		if spec.name == "read-finish" && measurement.dispatches != *tasks {
+			return measurement, fmt.Errorf("tool dispatch accounting dispatches=%d want=%d", measurement.dispatches, *tasks)
+		}
+		return measurement, nil
 	}
 	if !spec.wantPark {
 		batch, err := phase(false)
@@ -194,12 +377,29 @@ func run() error {
 			return err
 		}
 		sample()
+		measuredPeakMemory := memory.snapshot()
+		afterBatchMemory := readMemory()
+		if *mode != "unbounded" {
+			waitLimit := int64(*active)
+			if *mode == "executor" && *externalIO {
+				waitLimit = int64(*toolActive)
+			}
+			if int64(peak.Load()) > waitLimit || peakRunning.Load() > int64(*active) || peakResident.Load() > int64(*resident) || peakInflightTools.Load() > int64(*toolActive) {
+				return errors.New("configured concurrency bound exceeded")
+			}
+		}
 		return json.NewEncoder(os.Stdout).Encode(map[string]any{
 			"case": spec.name, "mode": *mode, "tasks": *tasks,
 			"running_limit": *active, "resident_limit": *resident, "tool_limit": *toolActive,
 			"external_io": *externalIO, "heap_mib": *heap, "synthetic_hold_ns": hold.Nanoseconds(),
-			"setup_ns": setup.Nanoseconds(), "batch_ns": batch.Nanoseconds(), "request_ns": phaseLatencies[0],
-			"peak_host_waits": peak.Load(), "sampled_peak_rss_kib": nullableRSS(peakRSS.Load()), "completed": *tasks,
+			"cow": *cow, "preparation": map[bool]string{true: "cow", false: "copy"}[*cow],
+			"gomaxprocs": runtime.GOMAXPROCS(0), "gomaxprocs_source": "runtime.GOMAXPROCS(0)", "num_cpu": runtime.NumCPU(),
+			"warmup": *warmup, "warmup_ns": warmupNS.Nanoseconds(), "setup_ns": setup.Nanoseconds(), "batch_ns": batch.elapsed.Nanoseconds(), "request_ns": phaseLatencies[0],
+			"startup_memory": nullableMemory(startupMemory), "sampled_setup_peak_memory": nullableMemory(setupPeakMemory), "pre_measured_batch_memory": nullableMemory(preMeasuredBatchMemory), "after_batch_memory": nullableMemory(afterBatchMemory),
+			"sampled_peak_memory": nullableMemory(measuredPeakMemory), "sampled_peak_scope": "measured_batch", "memory_sample_interval_ns": int64(10 * time.Millisecond),
+			"sampled_peak_rss_kib": nullableMetric(measuredPeakMemory.RSSKB), "sampled_peak_pss_kib": nullableMetric(measuredPeakMemory.PSSKB), "sampled_peak_private_dirty_kib": nullableMetric(measuredPeakMemory.PrivateDirtyKB),
+			"peak_host_waits": peak.Load(), "peak_executor_running": peakRunning.Load(), "peak_executor_resident": peakResident.Load(), "peak_executor_inflight_tools": peakInflightTools.Load(),
+			"completed": batch.completed, "errors": batch.errors, "result_count": batch.resultCount, "tool_dispatches": batch.dispatches,
 		})
 	}
 
@@ -207,7 +407,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	afterPark := rss()
+	afterPark := readMemory()
 	sample()
 	for _, id := range ids {
 		if err := runner.Decide(ctx, id+"/wait/1", durable.Decision{Result: json.RawMessage(`true`)}); err != nil {
@@ -222,15 +422,11 @@ func run() error {
 	if *mode == "executor" && *externalIO {
 		peakLimit = *toolActive
 	}
-	if *mode != "unbounded" && int(peak.Load()) > peakLimit {
+	if *mode != "unbounded" && (int(peak.Load()) > peakLimit || peakRunning.Load() > int64(*active) || peakResident.Load() > int64(*resident) || peakInflightTools.Load() > int64(*toolActive)) {
 		return errors.New("configured concurrency bound exceeded")
 	}
-	var peakMem, parkedMem any
-	if peakRSS.Load() > 0 {
-		peakMem = peakRSS.Load()
-		parkedMem = afterPark
-	}
-	return json.NewEncoder(os.Stdout).Encode(map[string]any{"case": spec.name, "mode": *mode, "tasks": *tasks, "running_limit": *active, "resident_limit": *resident, "tool_limit": *toolActive, "external_io": *externalIO, "heap_mib": *heap, "synthetic_hold_ns": hold.Nanoseconds(), "setup_ns": setup.Nanoseconds(), "park_batch_ns": parked.Nanoseconds(), "resume_batch_ns": resumed.Nanoseconds(), "peak_host_waits": peak.Load(), "sampled_peak_rss_kib": peakMem, "after_park_rss_kib": parkedMem, "park_request_ns": phaseLatencies[0], "resume_request_ns": phaseLatencies[1], "completed": *tasks})
+	measuredPeakMemory := memory.snapshot()
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{"case": spec.name, "mode": *mode, "tasks": *tasks, "running_limit": *active, "resident_limit": *resident, "tool_limit": *toolActive, "external_io": *externalIO, "heap_mib": *heap, "synthetic_hold_ns": hold.Nanoseconds(), "cow": *cow, "preparation": map[bool]string{true: "cow", false: "copy"}[*cow], "gomaxprocs": runtime.GOMAXPROCS(0), "gomaxprocs_source": "runtime.GOMAXPROCS(0)", "num_cpu": runtime.NumCPU(), "warmup": *warmup, "warmup_ns": warmupNS.Nanoseconds(), "setup_ns": setup.Nanoseconds(), "park_batch_ns": parked.elapsed.Nanoseconds(), "resume_batch_ns": resumed.elapsed.Nanoseconds(), "peak_host_waits": peak.Load(), "peak_executor_running": peakRunning.Load(), "peak_executor_resident": peakResident.Load(), "peak_executor_inflight_tools": peakInflightTools.Load(), "sampled_peak_rss_kib": nullableMetric(measuredPeakMemory.RSSKB), "sampled_peak_pss_kib": nullableMetric(measuredPeakMemory.PSSKB), "sampled_peak_private_dirty_kib": nullableMetric(measuredPeakMemory.PrivateDirtyKB), "sampled_peak_memory": nullableMemory(measuredPeakMemory), "sampled_peak_scope": "measured_batch_and_readmit", "memory_sample_interval_ns": int64(10 * time.Millisecond), "startup_memory": nullableMemory(startupMemory), "sampled_setup_peak_memory": nullableMemory(setupPeakMemory), "pre_measured_batch_memory": nullableMemory(preMeasuredBatchMemory), "after_park_memory": nullableMemory(afterPark), "after_park_rss_kib": nullableMetric(afterPark.RSSKB), "park_request_ns": phaseLatencies[0], "resume_request_ns": phaseLatencies[1], "park_completed": parked.completed, "resume_completed": resumed.completed, "completed": resumed.completed, "errors": parked.errors + resumed.errors, "result_count": resumed.resultCount, "tool_dispatches": resumed.dispatches, "park_tool_dispatches": parked.dispatches, "resume_tool_dispatches": resumed.dispatches - parked.dispatches})
 }
 
 func selectQueueCase(name string, heapMiB int) (queueCaseSpec, error) {
@@ -246,20 +442,9 @@ func selectQueueCase(name string, heapMiB int) (queueCaseSpec, error) {
 }
 
 func nullableRSS(value int64) any {
-	if value <= 0 {
-		return nil
-	}
-	return value
+	return nullableMetric(value)
 }
 
 func rss() int64 {
-	raw, _ := os.ReadFile("/proc/self/status")
-	for _, line := range strings.Split(string(raw), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) > 1 && fields[0] == "VmRSS:" {
-			v, _ := strconv.ParseInt(fields[1], 10, 64)
-			return v
-		}
-	}
-	return 0
+	return readMemory().RSSKB
 }

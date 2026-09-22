@@ -1,0 +1,21 @@
+Main binary filename not available.
+Type: delay
+Showing nodes accounting for 131.56s, 99.88% of 131.71s total
+Dropped 41 nodes (cum <= 0.66s)
+Showing top 15 nodes out of 38
+      flat  flat%   sum%        cum   cum%
+   121.53s 92.27% 92.27%    121.53s 92.27%  runtime.selectgo
+     6.54s  4.96% 97.24%      6.54s  4.96%  runtime.chanrecv1
+     3.49s  2.65% 99.88%      3.49s  2.65%  sync.(*WaitGroup).Wait
+         0     0% 99.88%      3.36s  2.55%  github.com/bkmashiro/agent-python-runtime.(*Runner).RunRecorded
+         0     0% 99.88%      3.33s  2.53%  github.com/bkmashiro/agent-python-runtime.(*Runner).dispatch
+         0     0% 99.88%      3.34s  2.53%  github.com/bkmashiro/agent-python-runtime.(*Runner).hostCall
+         0     0% 99.88%      3.34s  2.53%  github.com/bkmashiro/agent-python-runtime.(*Runner).invoke
+         0     0% 99.88%      3.33s  2.53%  github.com/bkmashiro/agent-python-runtime.(*Runner).invoke.func1
+         0     0% 99.88%      3.36s  2.55%  github.com/bkmashiro/agent-python-runtime.(*Runner).run
+         0     0% 99.88%      3.34s  2.53%  github.com/bkmashiro/agent-python-runtime.callWithBytes
+         0     0% 99.88%      3.34s  2.53%  github.com/bkmashiro/agent-python-runtime.executeGuest
+         0     0% 99.88%    112.81s 85.65%  github.com/bkmashiro/agent-python-runtime/durable.(*Attempt).Result
+         0     0% 99.88%    112.81s 85.65%  github.com/bkmashiro/agent-python-runtime/durable.(*Attempt).Wait
+         0     0% 99.88%      3.38s  2.57%  github.com/bkmashiro/agent-python-runtime/durable.(*Executor).run
+         0     0% 99.88%      3.38s  2.57%  github.com/bkmashiro/agent-python-runtime/durable.(*Runner).Advance

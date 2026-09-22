@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/bkmashiro/agent-python-runtime/internal/perfdiag"
 )
 
 func journalOnlyRunner(store *Store, tools ...Tool) *Runner {
@@ -224,6 +226,116 @@ func TestJournalLookupErrorOnlyAndCompletedReplay(t *testing.T) {
 	}
 	if len(observations) != 1 || observations[0].Operation != ToolLookup || observations[0].Outcome != ToolSucceeded {
 		t.Fatalf("lookup observations=%+v", observations)
+	}
+}
+
+func TestDiagnosticsJournalPhasesAndCancelledPersistence(t *testing.T) {
+	store, _ := openTestStore(t)
+	collector := perfdiag.NewCollector()
+	ctx := perfdiag.WithCollector(context.Background(), collector)
+	runner := journalOnlyRunner(store, Tool{
+		Name: "echo", Version: "v1", Recovery: RetrySafe,
+		Call: func(context.Context, json.RawMessage) (any, error) { return "ok", nil },
+	})
+	success := storeTestDefinition("diagnostic-success")
+	if err := store.Create(ctx, success); err != nil {
+		t.Fatal(err)
+	}
+	response, err := (&journal{runner: runner, runID: success.ID}).Call(ctx, "echo", json.RawMessage(`{"x":1}`), func(context.Context) []byte {
+		return []byte(`{"value":"ok"}`)
+	})
+	if err != nil || string(response) != `{"value":"ok"}` {
+		t.Fatalf("success response=%s err=%v", response, err)
+	}
+
+	waitRunner := journalOnlyRunner(store, Tool{
+		Name: "approval", Version: "v1", Recovery: WaitMode,
+		Wait: func(context.Context, json.RawMessage) (WaitSpec, error) { return WaitSpec{Kind: "approval"}, nil },
+	})
+	waiting := storeTestDefinition("diagnostic-wait")
+	if err := store.Create(ctx, waiting); err != nil {
+		t.Fatal(err)
+	}
+	j := &journal{runner: waitRunner, runID: waiting.ID}
+	if _, err := j.Call(ctx, "approval", json.RawMessage(`{}`), func(context.Context) []byte {
+		t.Fatal("wait operation dispatched")
+		return nil
+	}); !errors.Is(err, ErrParked) {
+		t.Fatalf("wait error=%v", err)
+	}
+	if err := store.ResolveWait(ctx, waiting.ID+"/wait/0", Decision{Result: json.RawMessage(`true`)}); err != nil {
+		t.Fatal(err)
+	}
+	j = &journal{runner: waitRunner, runID: waiting.ID}
+	response, err = j.Call(ctx, "approval", json.RawMessage(`{}`), func(context.Context) []byte {
+		t.Fatal("recovered wait operation dispatched")
+		return nil
+	})
+	if err != nil || string(response) != `{"value":true}` {
+		t.Fatalf("recovered response=%s err=%v", response, err)
+	}
+
+	cancelled := storeTestDefinition("diagnostic-cancelled")
+	if err := store.Create(ctx, cancelled); err != nil {
+		t.Fatal(err)
+	}
+	logged := LoggedCall{Sequence: 0, CallID: "call-0", Capability: "echo", Arguments: json.RawMessage(`{}`)}
+	if _, created, err := store.BeginCall(context.Background(), cancelled.ID, logged); err != nil || !created {
+		t.Fatalf("pending call created=%v err=%v", created, err)
+	}
+	cancelCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	if response, err := (&journal{runner: runner, runID: cancelled.ID}).complete(cancelCtx, logged, []byte(`{"value":"persisted"}`)); err != nil || string(response) != `{"value":"persisted"}` {
+		t.Fatalf("cancelled completion=%s err=%v", response, err)
+	}
+	completed, created, err := store.BeginCall(context.Background(), cancelled.ID, logged)
+	if err != nil || created || completed.State != CallCompleted || string(completed.Outcome) != `{"value":"persisted"}` {
+		t.Fatalf("persisted call=%#v created=%v err=%v", completed, created, err)
+	}
+
+	counts := make(map[string]uint64)
+	for _, entry := range collector.Snapshot() {
+		counts[entry.Phase] = entry.Stats.Count
+	}
+	for phase, want := range map[string]uint64{
+		"durable.journal.call":        3,
+		"durable.journal.wait":        2,
+		"durable.journal.complete":    3,
+		"durable.store.complete_call": 3,
+	} {
+		if counts[phase] != want {
+			t.Fatalf("phase %q count=%d, want %d", phase, counts[phase], want)
+		}
+	}
+}
+func TestDiagnosticsExpiredWaitPreservesCollector(t *testing.T) {
+	store, _ := openTestStore(t)
+	collector := perfdiag.NewCollector()
+	ctx := perfdiag.WithCollector(context.Background(), collector)
+	deadline := time.Now().Add(-time.Second)
+	runner := journalOnlyRunner(store, Tool{
+		Name: "approval", Version: "v1", Recovery: WaitMode,
+		Wait: func(context.Context, json.RawMessage) (WaitSpec, error) {
+			return WaitSpec{Kind: "approval", Deadline: &deadline}, nil
+		},
+	})
+	definition := storeTestDefinition("diagnostic-expired")
+	if err := store.Create(ctx, definition); err != nil {
+		t.Fatal(err)
+	}
+	response, err := (&journal{runner: runner, runID: definition.ID}).Call(ctx, "approval", json.RawMessage(`{}`), func(context.Context) []byte {
+		t.Fatal("expired wait dispatched")
+		return nil
+	})
+	if err != nil || string(response) != `{"value":null,"error":"wait expired"}` {
+		t.Fatalf("response=%s err=%v", response, err)
+	}
+	counts := make(map[string]uint64)
+	for _, entry := range collector.Snapshot() {
+		counts[entry.Phase] = entry.Count
+	}
+	if counts["durable.store.resolve_wait"] != 1 || counts["durable.store.get_wait"] != 2 {
+		t.Fatalf("missing expired-wait diagnostics: %v", counts)
 	}
 }
 

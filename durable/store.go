@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bkmashiro/agent-python-runtime/internal/perfdiag"
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
 )
@@ -221,6 +222,8 @@ func (s *Store) Close() error {
 }
 
 func (s *Store) Create(ctx context.Context, definition Definition) error {
+	span := perfdiag.Start(ctx, "durable.store.create")
+	defer span.End()
 	if err := validateDefinition(definition); err != nil {
 		return err
 	}
@@ -271,6 +274,8 @@ func validateDefinition(definition Definition) error {
 }
 
 func (s *Store) Get(ctx context.Context, runID string) (Run, error) {
+	span := perfdiag.Start(ctx, "durable.store.get")
+	defer span.End()
 	row := s.db.QueryRowContext(ctx, `SELECT run_id, code, seed, artifact_sha256,
 		environment_version, inputs, tools, status, outcome, reason FROM runs WHERE run_id=?`, runID)
 	var run Run
@@ -313,6 +318,8 @@ func (s *Store) lockPath(runID string) string {
 }
 
 func (s *Store) BeginCall(ctx context.Context, runID string, call LoggedCall) (Call, bool, error) {
+	span := perfdiag.Start(ctx, "durable.store.begin_call")
+	defer span.End()
 	if len([]byte(runID)) > maxRunIDBytes {
 		return Call{}, false, ErrNotFound
 	}
@@ -394,6 +401,8 @@ func (s *Store) BeginCall(ctx context.Context, runID string, call LoggedCall) (C
 }
 
 func (s *Store) CompleteCall(ctx context.Context, runID string, sequence uint32, outcome json.RawMessage) (json.RawMessage, error) {
+	span := perfdiag.Start(ctx, "durable.store.complete_call")
+	defer span.End()
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return nil, err
@@ -435,6 +444,8 @@ func (s *Store) CompleteCall(ctx context.Context, runID string, sequence uint32,
 }
 
 func (s *Store) EnsureWait(ctx context.Context, runID string, sequence uint32, spec WaitSpec) (Wait, error) {
+	span := perfdiag.Start(ctx, "durable.store.ensure_wait")
+	defer span.End()
 	// Replay callers should GetWait first; an existing row is authoritative.
 	waitID := waitKey(runID, sequence)
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
@@ -511,6 +522,8 @@ func (s *Store) EnsureWait(ctx context.Context, runID string, sequence uint32, s
 }
 
 func (s *Store) GetWait(ctx context.Context, waitID string) (Wait, error) {
+	span := perfdiag.Start(ctx, "durable.store.get_wait")
+	defer span.End()
 	wait, found, err := queryWait(ctx, s.db, waitID)
 	if err != nil {
 		return Wait{}, err
@@ -522,6 +535,8 @@ func (s *Store) GetWait(ctx context.Context, waitID string) (Wait, error) {
 }
 
 func (s *Store) ResolveWait(ctx context.Context, waitID string, decision Decision) error {
+	span := perfdiag.Start(ctx, "durable.store.resolve_wait")
+	defer span.End()
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return err
@@ -558,6 +573,8 @@ func (s *Store) ResolveWait(ctx context.Context, waitID string, decision Decisio
 }
 
 func (s *Store) CallCount(ctx context.Context, runID string) (uint32, error) {
+	span := perfdiag.Start(ctx, "durable.store.call_count")
+	defer span.End()
 	var count uint64
 	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM calls WHERE run_id=?", runID).Scan(&count)
 	if err != nil {
@@ -579,6 +596,8 @@ func (s *Store) CallCount(ctx context.Context, runID string) (uint32, error) {
 }
 
 func (s *Store) SetState(ctx context.Context, runID, status string, outcome json.RawMessage, reason string) error {
+	span := perfdiag.Start(ctx, "durable.store.set_state")
+	defer span.End()
 	if !validStatus(status) {
 		return fmt.Errorf("invalid durable run status %q", status)
 	}
@@ -791,6 +810,8 @@ func (s *Store) hasCall(ctx context.Context, runID string, sequence uint32) (boo
 // readCompleted reads a small immutable prefix window, not a mutable Store cache.
 // A pending row stops read-ahead so its state is observed by BeginCall normally.
 func (s *Store) readCompleted(ctx context.Context, runID string, from uint32) ([]Call, error) {
+	span := perfdiag.Start(ctx, "durable.store.read_completed")
+	defer span.End()
 	rows, err := s.db.QueryContext(ctx, `SELECT sequence,call_id,tool,operation_key,state,arguments,outcome FROM calls
  WHERE run_id=? AND sequence>=? ORDER BY sequence LIMIT 64`, runID, from)
 	if err != nil {

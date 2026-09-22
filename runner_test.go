@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/bkmashiro/agent-python-runtime/internal/perfdiag"
 )
 
 // Deliberately fail if the real artifact is missing: no native substitute or skip.
@@ -141,6 +143,38 @@ func TestManifestValidation(t *testing.T) {
 	for _, spec := range guest {
 		if spec.PythonPath == "" {
 			t.Fatalf("tool lacks Python path: %#v", spec)
+		}
+	}
+}
+
+func TestDiagnosticsPreserveGuestLifecycleAcrossError(t *testing.T) {
+	wasm, err := readGuestArtifact()
+	if err != nil {
+		t.Fatal(err)
+	}
+	collector := perfdiag.NewCollector()
+	ctx := perfdiag.WithCollector(context.Background(), collector)
+	r, err := New(ctx, wasm, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close(context.Background())
+	if out, err := r.Run(ctx, "result = 7", nil); err != nil || string(out.Value) != "7" {
+		t.Fatalf("first run out=%+v err=%v", out, err)
+	}
+	if _, err := r.Run(ctx, "raise ValueError('diagnostic error')", nil); err == nil {
+		t.Fatal("expected Guest error")
+	}
+	if out, err := r.Run(ctx, "result = 9", nil); err != nil || string(out.Value) != "9" {
+		t.Fatalf("post-error run out=%+v err=%v", out, err)
+	}
+	counts := make(map[string]uint64)
+	for _, entry := range collector.Snapshot() {
+		counts[entry.Phase] = entry.Stats.Count
+	}
+	for _, phase := range []string{"new_guest", "execute", "guest_close", "state_close"} {
+		if counts[phase] != 3 {
+			t.Fatalf("phase %q count=%d, want 3", phase, counts[phase])
 		}
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/bkmashiro/agent-python-runtime/internal/cowmem"
+	"github.com/bkmashiro/agent-python-runtime/internal/perfdiag"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/experimental"
 	experimentalsysfs "github.com/tetratelabs/wazero/experimental/sysfs"
@@ -116,6 +117,8 @@ func prepare(ctx context.Context, wasm []byte, manifest Manifest, cow, workspace
 
 // All constructors use this lifecycle. Only CPython init vs memory restore differs.
 func (r *Runner) newGuest(ctx context.Context, stdout, stderr *boundedText) (api.Module, error) {
+	span := perfdiag.Start(ctx, "new_guest")
+	defer span.End()
 	instantiateCtx := ctx
 	var mapped cowmem.Memory
 	if r.cow != nil {

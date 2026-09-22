@@ -1,0 +1,26 @@
+File: pysolate-profile-bench
+Build ID: d3ecec9ef528dfce1500533d4f84e9c8379da77a
+Type: alloc_space
+Time: 2026-09-22 23:04:50 CST
+Showing nodes accounting for 565.65MB, 97.02% of 583.04MB total
+Dropped 72 nodes (cum <= 2.92MB)
+Showing top 18 nodes out of 40
+      flat  flat%   sum%        cum   cum%
+  332.88MB 57.09% 57.09%   332.88MB 57.09%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*moduleEngine).FunctionInstanceReference
+  121.50MB 20.84% 77.93%   121.50MB 20.84%  github.com/tetratelabs/wazero/internal/wasm.(*ModuleInstance).applyData
+   46.96MB  8.05% 85.99%    46.96MB  8.05%  github.com/tetratelabs/wazero/internal/wasm.(*ModuleInstance).buildTables
+   36.07MB  6.19% 92.17%    36.07MB  6.19%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*callEngine).cloneStack
+   23.73MB  4.07% 96.24%    23.73MB  4.07%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*callEngine).init
+    2.50MB  0.43% 96.67%    26.23MB  4.50%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*moduleEngine).NewFunction
+    1.50MB  0.26% 96.93%        5MB  0.86%  database/sql.(*DB).queryDC
+    0.50MB 0.086% 97.02%   503.35MB 86.33%  github.com/tetratelabs/wazero/internal/wasm.(*Store).instantiate
+         0     0% 97.02%     3.50MB   0.6%  database/sql.(*DB).QueryContext
+         0     0% 97.02%     3.50MB   0.6%  database/sql.(*DB).QueryContext.func1
+         0     0% 97.02%     3.50MB   0.6%  database/sql.(*DB).query
+         0     0% 97.02%     3.50MB   0.6%  database/sql.(*DB).retry
+         0     0% 97.02%        4MB  0.69%  database/sql.withLock
+         0     0% 97.02%   574.15MB 98.48%  github.com/bkmashiro/agent-python-runtime.(*Runner).RunRecorded
+         0     0% 97.02%     6.50MB  1.11%  github.com/bkmashiro/agent-python-runtime.(*Runner).hostCall
+         0     0% 97.02%     5.50MB  0.94%  github.com/bkmashiro/agent-python-runtime.(*Runner).invoke
+         0     0% 97.02%   509.39MB 87.37%  github.com/bkmashiro/agent-python-runtime.(*Runner).newGuest
+         0     0% 97.02%   574.15MB 98.48%  github.com/bkmashiro/agent-python-runtime.(*Runner).run

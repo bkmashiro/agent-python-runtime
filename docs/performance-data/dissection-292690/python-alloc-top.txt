@@ -1,0 +1,26 @@
+File: pysolate-profile-bench
+Build ID: d3ecec9ef528dfce1500533d4f84e9c8379da77a
+Type: alloc_space
+Time: 2026-09-22 23:03:22 CST
+Showing nodes accounting for 583MB, 98.69% of 590.71MB total
+Dropped 34 nodes (cum <= 2.95MB)
+Showing top 18 nodes out of 25
+      flat  flat%   sum%        cum   cum%
+  343.59MB 58.17% 58.17%   343.59MB 58.17%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*moduleEngine).FunctionInstanceReference
+  121.50MB 20.57% 78.73%   121.50MB 20.57%  github.com/tetratelabs/wazero/internal/wasm.(*ModuleInstance).applyData
+   46.96MB  7.95% 86.68%    46.96MB  7.95%  github.com/tetratelabs/wazero/internal/wasm.(*ModuleInstance).buildTables
+   35.12MB  5.95% 92.63%    35.12MB  5.95%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*callEngine).cloneStack
+   32.31MB  5.47% 98.10%    32.31MB  5.47%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*callEngine).init
+       3MB  0.51% 98.61%    35.32MB  5.98%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*moduleEngine).NewFunction
+    0.50MB 0.085% 98.69%     4.21MB  0.71%  main.run
+         0     0% 98.69%   586.50MB 99.29%  github.com/bkmashiro/agent-python-runtime.(*Runner).Run
+         0     0% 98.69%   521.61MB 88.30%  github.com/bkmashiro/agent-python-runtime.(*Runner).newGuest
+         0     0% 98.69%   586.50MB 99.29%  github.com/bkmashiro/agent-python-runtime.(*Runner).run
+         0     0% 98.69%    57.83MB  9.79%  github.com/bkmashiro/agent-python-runtime.callWithBytes
+         0     0% 98.69%    64.89MB 10.98%  github.com/bkmashiro/agent-python-runtime.executeGuest
+         0     0% 98.69%     7.06MB  1.20%  github.com/bkmashiro/agent-python-runtime.readGuestResponse
+         0     0% 98.69%   513.06MB 86.85%  github.com/tetratelabs/wazero.(*runtime).InstantiateModule
+         0     0% 98.69%    35.12MB  5.95%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*callEngine).Call
+         0     0% 98.69%    35.12MB  5.95%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*callEngine).callWithStack
+         0     0% 98.69%    35.12MB  5.95%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*callEngine).growStack
+         0     0% 98.69%    35.32MB  5.98%  github.com/tetratelabs/wazero/internal/wasm.(*ModuleInstance).ExportedFunction

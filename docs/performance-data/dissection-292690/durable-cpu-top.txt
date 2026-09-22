@@ -1,0 +1,27 @@
+File: bench
+Build ID: d3ecec9ef528dfce1500533d4f84e9c8379da77a
+Type: cpu
+Time: 2026-09-22 23:04:22 CST
+Duration: 20.60s, Total samples = 21.16s (102.70%)
+Showing nodes accounting for 20s, 94.52% of 21.16s total
+Dropped 299 nodes (cum <= 0.11s)
+Showing top 18 nodes out of 71
+      flat  flat%   sum%        cum   cum%
+    14.92s 70.51% 70.51%     14.92s 70.51%  runtime.memmove
+     2.31s 10.92% 81.43%      2.31s 10.92%  internal/runtime/syscall/linux.Syscall6
+     1.89s  8.93% 90.36%      1.89s  8.93%  runtime._ExternalCode
+     0.18s  0.85% 91.21%      0.24s  1.13%  github.com/tetratelabs/wazero/internal/leb128.decodeInt32
+     0.14s  0.66% 91.87%      0.14s  0.66%  runtime.memclrNoHeapPointers
+     0.12s  0.57% 92.44%      0.43s  2.03%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*callEngine).callWithStack
+     0.10s  0.47% 92.91%      0.47s  2.22%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*moduleEngine).FunctionInstanceReference
+     0.09s  0.43% 93.34%     15.27s 72.16%  github.com/tetratelabs/wazero/internal/wasm.(*ModuleInstance).applyData
+     0.09s  0.43% 93.76%      0.28s  1.32%  runtime.mallocgcSmallScanNoHeader
+     0.04s  0.19% 93.95%      0.51s  2.41%  github.com/tetratelabs/wazero/internal/wasm.(*ModuleInstance).applyElements
+     0.03s  0.14% 94.09%      0.12s  0.57%  runtime.scanObject
+     0.02s 0.095% 94.19%      0.26s  1.23%  github.com/tetratelabs/wazero/internal/leb128.LoadInt32
+     0.02s 0.095% 94.28%      0.46s  2.17%  runtime.mallocgc
+     0.02s 0.095% 94.38%      0.31s  1.47%  runtime.newobject
+     0.01s 0.047% 94.42%      0.17s   0.8%  github.com/ncruces/go-sqlite3.(*sqlite).call
+     0.01s 0.047% 94.47%      0.15s  0.71%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*callEngine).CallWithStack
+     0.01s 0.047% 94.52%      0.12s  0.57%  runtime.stealWork
+         0     0% 94.52%      0.11s  0.52%  database/sql.(*Row).Scan

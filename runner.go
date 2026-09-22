@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/bkmashiro/agent-python-runtime/internal/cowmem"
+	"github.com/bkmashiro/agent-python-runtime/internal/perfdiag"
 	workspacepkg "github.com/bkmashiro/agent-python-runtime/runtime/workspace"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -180,9 +181,15 @@ func (r *Runner) run(ctx context.Context, source string, inputs any, earlyReads 
 	state := newRun(ctx, r, earlyReads)
 	state.recording = recording
 	state.fsConfig = fsConfig
-	defer state.close()
+	defer func() {
+		span := perfdiag.Start(state.ctx, "state_close")
+		defer span.End()
+		state.close()
+	}()
 	ctx = state.ctx
+	marshalSpan := perfdiag.Start(ctx, "marshal")
 	request, err := r.marshalRunRequest(source, inputs, earlyReads, fsConfig != nil)
+	marshalSpan.End()
 	if err != nil {
 		return Output{}, err
 	}
@@ -192,7 +199,11 @@ func (r *Runner) run(ctx context.Context, source string, inputs any, earlyReads 
 	if err != nil {
 		return Output{}, err
 	}
-	defer m.Close(context.Background())
+	defer func() {
+		span := perfdiag.Start(ctx, "guest_close")
+		defer span.End()
+		_ = m.Close(context.Background())
+	}()
 	response, err := executeGuest(ctx, m, request)
 	if err != nil {
 		return runFailure(state, stdout, stderr, err)
@@ -222,6 +233,8 @@ func (r *Runner) marshalRunRequest(source string, inputs any, earlyReads, worksp
 }
 
 func executeGuest(ctx context.Context, m api.Module, request []byte) (guestExecutionResponse, error) {
+	span := perfdiag.Start(ctx, "execute")
+	defer span.End()
 	packed, err := callWithBytes(ctx, m, "execute", request)
 	if err != nil {
 		return guestExecutionResponse{}, err
@@ -250,6 +263,8 @@ type guestExecutionResponse struct {
 }
 
 func readGuestResponse(ctx context.Context, m api.Module, packed []uint64) (guestExecutionResponse, error) {
+	span := perfdiag.Start(ctx, "read_response")
+	defer span.End()
 	// execute returns (length << 32) | pointer. Go copies before release/Close.
 	p, n := uint32(packed[0]), uint32(packed[0]>>32)
 	if p == 0 {

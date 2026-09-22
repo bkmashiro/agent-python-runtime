@@ -1,0 +1,90 @@
+{
+  "kind": "pysolate_phase_dissection",
+  "phases": [
+    {
+      "phase": "durable.journal.call",
+      "count": 64,
+      "total_ns": 3650882332
+    },
+    {
+      "phase": "durable.journal.complete",
+      "count": 64,
+      "total_ns": 69354511
+    },
+    {
+      "phase": "durable.journal.dispatch",
+      "count": 64,
+      "total_ns": 3606366779
+    },
+    {
+      "phase": "durable.store.begin_call",
+      "count": 64,
+      "total_ns": 32930890
+    },
+    {
+      "phase": "durable.store.complete_call",
+      "count": 64,
+      "total_ns": 69132562
+    },
+    {
+      "phase": "durable.store.get",
+      "count": 192,
+      "total_ns": 41365022
+    },
+    {
+      "phase": "durable.store.read_completed",
+      "count": 64,
+      "total_ns": 11081563
+    },
+    {
+      "phase": "durable.store.set_state",
+      "count": 64,
+      "total_ns": 59332680
+    },
+    {
+      "phase": "execute",
+      "count": 64,
+      "total_ns": 4145347885
+    },
+    {
+      "phase": "guest_close",
+      "count": 64,
+      "total_ns": 187196078
+    },
+    {
+      "phase": "marshal",
+      "count": 64,
+      "total_ns": 903681
+    },
+    {
+      "phase": "new_guest",
+      "count": 64,
+      "total_ns": 2239068303
+    },
+    {
+      "phase": "read_response",
+      "count": 64,
+      "total_ns": 2168538
+    },
+    {
+      "phase": "state_close",
+      "count": 64,
+      "total_ns": 234708
+    },
+    {
+      "phase": "tool.queue",
+      "count": 64,
+      "total_ns": 0
+    },
+    {
+      "phase": "tool.resume",
+      "count": 64,
+      "total_ns": 0
+    },
+    {
+      "phase": "tool.service",
+      "count": 64,
+      "total_ns": 3535703685
+    }
+  ]
+}

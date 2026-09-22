@@ -1,0 +1,25 @@
+{
+  "kind": "measured_allocation_delta",
+  "start": {
+    "total_alloc_bytes": 407835464,
+    "mallocs": 362433,
+    "frees": 304448,
+    "heap_alloc_bytes": 43246584,
+    "heap_inuse_bytes": 44548096
+  },
+  "end": {
+    "total_alloc_bytes": 1022668312,
+    "mallocs": 6678215,
+    "frees": 6562623,
+    "heap_alloc_bytes": 50099888,
+    "heap_inuse_bytes": 51437568
+  },
+  "measured_delta": {
+    "total_alloc_bytes": 614832848,
+    "mallocs": 6315782,
+    "frees": 6258175,
+    "heap_alloc_bytes": 50099888,
+    "heap_inuse_bytes": 51437568
+  },
+  "heap_scope": "end_of_measured_interval_retained_heap"
+}

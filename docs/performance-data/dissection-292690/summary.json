@@ -1,0 +1,170 @@
+{
+  "processes": 36,
+  "measured_requests": 9684,
+  "cases": {
+    "python": {
+      "latency": {
+        "baseline": {
+          "process_medians_ms": [
+            17.6263475,
+            17.7508665,
+            17.7319795
+          ],
+          "median_ms": 17.7319795
+        },
+        "off": {
+          "process_medians_ms": [
+            17.724564,
+            17.7511175,
+            17.743001
+          ],
+          "median_ms": 17.743001
+        },
+        "phases": {
+          "process_medians_ms": [
+            17.607429500000002,
+            17.767937,
+            17.7041845
+          ],
+          "median_ms": 17.7041845
+        }
+      },
+      "phase_mean_ms_per_request": {
+        "execute": 1.757351125,
+        "guest_close": 0.10474139,
+        "marshal": 0.012275290000000001,
+        "new_guest": 16.04015253,
+        "read_response": 0.012888879999999998,
+        "state_close": 0.00132304
+      },
+      "allocated_bytes_per_request": 1229665.696,
+      "allocations_per_request": 12631.564
+    },
+    "tool": {
+      "latency": {
+        "baseline": {
+          "process_medians_ms": [
+            17.320009499999998,
+            17.0625465,
+            17.096336
+          ],
+          "median_ms": 17.096336
+        },
+        "off": {
+          "process_medians_ms": [
+            17.1310915,
+            17.146566,
+            17.196485000000003
+          ],
+          "median_ms": 17.146566
+        },
+        "phases": {
+          "process_medians_ms": [
+            17.14463,
+            17.034390000000002,
+            17.172152
+          ],
+          "median_ms": 17.14463
+        }
+      },
+      "phase_mean_ms_per_request": {
+        "execute": 1.17834388,
+        "guest_close": 0.0981206,
+        "marshal": 0.01191469,
+        "new_guest": 16.13917193,
+        "read_response": 0.00946549,
+        "state_close": 0.001428455
+      },
+      "allocated_bytes_per_request": 1230970.544,
+      "allocations_per_request": 12662.546
+    },
+    "durable": {
+      "latency": {
+        "off": {
+          "process_medians_ms": [
+            18.805204,
+            18.8705,
+            18.905974999999998
+          ],
+          "median_ms": 18.8705
+        },
+        "phases": {
+          "process_medians_ms": [
+            18.723761500000002,
+            18.797889,
+            18.927039
+          ],
+          "median_ms": 18.797889
+        }
+      },
+      "phase_mean_ms_per_request": {
+        "durable.journal.call": 0.747049245,
+        "durable.journal.complete": 0.27444452500000005,
+        "durable.journal.dispatch": 0.28482661,
+        "durable.store.begin_call": 0.36114457,
+        "durable.store.complete_call": 0.27351175,
+        "durable.store.create": 0.1343856,
+        "durable.store.get": 0.230631855,
+        "durable.store.read_completed": 0.09399966,
+        "durable.store.set_state": 0.26331041499999996,
+        "execute": 2.03514629,
+        "guest_close": 0.10184616,
+        "marshal": 0.005163745,
+        "new_guest": 16.342952165,
+        "read_response": 0.011074915000000001,
+        "state_close": 0.001318665,
+        "tool.queue": 0.0,
+        "tool.resume": 0.0,
+        "tool.service": 0.00485679
+      },
+      "allocated_bytes_per_request": 1261129.136,
+      "allocations_per_request": 13347.37
+    }
+  },
+  "queue": {
+    "false": {
+      "batch_ms": 3397.303998,
+      "phase_mean_ms_per_request": {
+        "durable.journal.call": 57.0450364375,
+        "durable.journal.complete": 1.083664234375,
+        "durable.journal.dispatch": 56.349480921875,
+        "durable.store.begin_call": 0.51454515625,
+        "durable.store.complete_call": 1.08019628125,
+        "durable.store.get": 0.64632846875,
+        "durable.store.read_completed": 0.173149421875,
+        "durable.store.set_state": 0.927073125,
+        "execute": 64.771060703125,
+        "guest_close": 2.92493871875,
+        "marshal": 0.014120015625,
+        "new_guest": 34.985442234375,
+        "read_response": 0.03388340625,
+        "state_close": 0.0036673125,
+        "tool.queue": 0.0,
+        "tool.resume": 0.0,
+        "tool.service": 55.245370078125
+      }
+    },
+    "true": {
+      "batch_ms": 1186.665663,
+      "phase_mean_ms_per_request": {
+        "durable.journal.call": 76.41063540625,
+        "durable.journal.complete": 0.453654171875,
+        "durable.journal.dispatch": 75.70265084375,
+        "durable.store.begin_call": 0.52954428125,
+        "durable.store.complete_call": 0.452347890625,
+        "durable.store.get": 0.344175765625,
+        "durable.store.read_completed": 0.172731953125,
+        "durable.store.set_state": 0.398558390625,
+        "execute": 83.0064673125,
+        "guest_close": 1.7396520625,
+        "marshal": 0.0074261875,
+        "new_guest": 22.5457089375,
+        "read_response": 0.013753265625,
+        "state_close": 0.001615953125,
+        "tool.queue": 0.0019174375,
+        "tool.resume": 12.270203921875,
+        "tool.service": 62.968454578125
+      }
+    }
+  }
+}

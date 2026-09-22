@@ -11,6 +11,7 @@ import (
 	"time"
 
 	pysolate "github.com/bkmashiro/agent-python-runtime"
+	"github.com/bkmashiro/agent-python-runtime/internal/perfdiag"
 )
 
 // RecoveryMode states what the host can safely do after a recorded call has
@@ -366,6 +367,7 @@ func (runner *Runner) Resume(ctx context.Context, runID string) (pysolate.Output
 	if closed {
 		return pysolate.Output{}, ErrInvalidRunner
 	}
+	persistCtx := diagnosticBackground(ctx)
 
 	release, err := runner.store.Claim(runID)
 	if err != nil {
@@ -381,7 +383,7 @@ func (runner *Runner) Resume(ctx context.Context, runID string) (pysolate.Output
 		return pysolate.Output{}, fmt.Errorf("%w: %s", ErrBlocked, run.Reason)
 	}
 	if definitionErr := runner.validateDefinition(run.Definition); definitionErr != nil {
-		blockErr := runner.store.SetState(context.Background(), runID, StatusBlocked, nil, definitionErr.Error())
+		blockErr := runner.store.SetState(persistCtx, runID, StatusBlocked, nil, definitionErr.Error())
 		if blockErr != nil && !errors.Is(blockErr, ErrConflict) {
 			return pysolate.Output{}, errors.Join(ErrBlocked, blockErr)
 		}
@@ -422,7 +424,7 @@ func (runner *Runner) Resume(ctx context.Context, runID string) (pysolate.Output
 	}()
 
 	// Cancel may have committed between the first read and active registration.
-	latest, err := runner.store.Get(context.Background(), runID)
+	latest, err := runner.store.Get(persistCtx, runID)
 	if err != nil {
 		return pysolate.Output{}, err
 	}
@@ -435,7 +437,7 @@ func (runner *Runner) Resume(ctx context.Context, runID string) (pysolate.Output
 	output, runErr := runner.core.RunRecorded(attemptCtx, run.Definition.Code,
 		json.RawMessage(run.Definition.Inputs), run.Definition.Seed, journal)
 
-	latest, statusErr := runner.store.Get(context.Background(), runID)
+	latest, statusErr := runner.store.Get(persistCtx, runID)
 	if statusErr != nil {
 		return output, statusErr
 	}
@@ -446,12 +448,12 @@ func (runner *Runner) Resume(ctx context.Context, runID string) (pysolate.Output
 	var pythonErr *pysolate.PythonError
 	completed := runErr == nil || errors.As(runErr, &pythonErr)
 	if completed {
-		remaining, countErr := runner.store.hasCall(context.Background(), runID, journal.count())
+		remaining, countErr := runner.store.hasCall(persistCtx, runID, journal.count())
 		if countErr != nil {
 			return output, countErr
 		}
 		if remaining {
-			return output, runner.blockAttempt(runID, "recorded call history was not fully consumed")
+			return output, runner.blockAttempt(persistCtx, runID, "recorded call history was not fully consumed")
 		}
 	}
 
@@ -465,8 +467,8 @@ func (runner *Runner) Resume(ctx context.Context, runID string) (pysolate.Output
 			if reason == "" {
 				reason = pythonErr.Error()
 			}
-			if stateErr := runner.store.SetState(context.Background(), runID, StatusFailed, stored, reason); stateErr != nil {
-				if current, getErr := runner.store.Get(context.Background(), runID); getErr == nil && current.Status == StatusCancelled {
+			if stateErr := runner.store.SetState(persistCtx, runID, StatusFailed, stored, reason); stateErr != nil {
+				if current, getErr := runner.store.Get(persistCtx, runID); getErr == nil && current.Status == StatusCancelled {
 					return output, ErrCancelled
 				}
 				return output, stateErr
@@ -474,7 +476,7 @@ func (runner *Runner) Resume(ctx context.Context, runID string) (pysolate.Output
 			return output, runErr
 		}
 		if errors.Is(runErr, ErrHistoryMismatch) || errors.Is(runErr, ErrBlocked) {
-			return output, runner.blockAttempt(runID, runErr.Error())
+			return output, runner.blockAttempt(persistCtx, runID, runErr.Error())
 		}
 		return output, runErr
 	}
@@ -483,8 +485,8 @@ func (runner *Runner) Resume(ctx context.Context, runID string) (pysolate.Output
 	if err != nil {
 		return output, err
 	}
-	if err := runner.store.SetState(context.Background(), runID, StatusCompleted, stored, ""); err != nil {
-		if current, getErr := runner.store.Get(context.Background(), runID); getErr == nil && current.Status == StatusCancelled {
+	if err := runner.store.SetState(persistCtx, runID, StatusCompleted, stored, ""); err != nil {
+		if current, getErr := runner.store.Get(persistCtx, runID); getErr == nil && current.Status == StatusCancelled {
 			return output, ErrCancelled
 		}
 		return output, err
@@ -492,11 +494,15 @@ func (runner *Runner) Resume(ctx context.Context, runID string) (pysolate.Output
 	return output, nil
 }
 
-func (runner *Runner) blockAttempt(runID, reason string) error {
-	if err := runner.store.SetState(context.Background(), runID, StatusBlocked, nil, reason); err != nil {
+func (runner *Runner) blockAttempt(ctx context.Context, runID, reason string) error {
+	if err := runner.store.SetState(diagnosticBackground(ctx), runID, StatusBlocked, nil, reason); err != nil {
 		return errors.Join(ErrBlocked, err)
 	}
 	return fmt.Errorf("%w: %s", ErrBlocked, reason)
+}
+
+func diagnosticBackground(ctx context.Context) context.Context {
+	return perfdiag.WithCollector(context.Background(), perfdiag.FromContext(ctx))
 }
 
 // Get returns the current durable state without executing Guest code.
@@ -579,6 +585,8 @@ func (journal *journal) nextCall() uint32 {
 // attempt; Store then decides whether this is a new, replayed, or completed
 // call before any external dispatch is allowed.
 func (journal *journal) Call(ctx context.Context, tool string, args json.RawMessage, next func(context.Context) []byte) ([]byte, error) {
+	span := perfdiag.Start(ctx, "durable.journal.call")
+	defer span.End()
 	sequence := journal.nextCall()
 	logged := LoggedCall{
 		Sequence:   sequence,
@@ -652,12 +660,16 @@ func (journal *journal) Call(ctx context.Context, tool string, args json.RawMess
 }
 
 func (journal *journal) dispatchAndComplete(ctx context.Context, logged LoggedCall, next func(context.Context) []byte) ([]byte, error) {
+	span := perfdiag.Start(ctx, "durable.journal.dispatch")
+	defer span.End()
 	response := next(ctx)
-	return journal.complete(logged, response)
+	return journal.complete(ctx, logged, response)
 }
 
-func (journal *journal) complete(logged LoggedCall, response []byte) ([]byte, error) {
-	persisted, err := journal.runner.store.CompleteCall(context.Background(), journal.runID, logged.Sequence, append(json.RawMessage(nil), response...))
+func (journal *journal) complete(ctx context.Context, logged LoggedCall, response []byte) ([]byte, error) {
+	span := perfdiag.Start(ctx, "durable.journal.complete")
+	defer span.End()
+	persisted, err := journal.runner.store.CompleteCall(diagnosticBackground(ctx), journal.runID, logged.Sequence, append(json.RawMessage(nil), response...))
 	if err != nil {
 		return nil, err
 	}
@@ -665,6 +677,8 @@ func (journal *journal) complete(logged LoggedCall, response []byte) ([]byte, er
 }
 
 func (journal *journal) lookup(ctx context.Context, logged LoggedCall, tool Tool, next func(context.Context) []byte) ([]byte, error) {
+	span := perfdiag.Start(ctx, "durable.journal.lookup")
+	defer span.End()
 	resolved, err := executeScheduled(ctx, tool, ToolLookup, logged.Arguments, func() (LookupResult, error) {
 		return tool.Lookup(ctx, logged.Arguments)
 	})
@@ -681,7 +695,7 @@ func (journal *journal) lookup(ctx context.Context, logged LoggedCall, tool Tool
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrBlocked, err)
 		}
-		return journal.complete(logged, response)
+		return journal.complete(ctx, logged, response)
 	default:
 		return nil, fmt.Errorf("%w: lookup result is unknown", ErrBlocked)
 	}
@@ -714,6 +728,8 @@ func encodeWireOutcome(value json.RawMessage, errorText string) []byte {
 }
 
 func (journal *journal) wait(ctx context.Context, logged LoggedCall, tool Tool) ([]byte, error) {
+	span := perfdiag.Start(ctx, "durable.journal.wait")
+	defer span.End()
 	waitID := fmt.Sprintf("%s/wait/%d", journal.runID, logged.Sequence)
 	wait, err := journal.runner.store.GetWait(ctx, waitID)
 	if errors.Is(err, ErrNotFound) {
@@ -727,10 +743,11 @@ func (journal *journal) wait(ctx context.Context, logged LoggedCall, tool Tool) 
 		return nil, err
 	}
 	if wait.Decision == nil && wait.Spec.Deadline != nil && !time.Now().Before(*wait.Spec.Deadline) {
-		if err := journal.runner.store.ResolveWait(context.Background(), wait.ID, Decision{Error: "wait expired"}); err != nil {
+		persistCtx := diagnosticBackground(ctx)
+		if err := journal.runner.store.ResolveWait(persistCtx, wait.ID, Decision{Error: "wait expired"}); err != nil {
 			return nil, err
 		}
-		wait, err = journal.runner.store.GetWait(context.Background(), wait.ID)
+		wait, err = journal.runner.store.GetWait(persistCtx, wait.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -739,5 +756,5 @@ func (journal *journal) wait(ctx context.Context, logged LoggedCall, tool Tool) 
 		return nil, &ParkError{Kind: ParkWait, RunID: journal.runID, WaitID: wait.ID, Sequence: logged.Sequence, Reason: "waiting for decision"}
 	}
 	response := encodeWireOutcome(wait.Decision.Result, wait.Decision.Error)
-	return journal.complete(logged, response)
+	return journal.complete(ctx, logged, response)
 }

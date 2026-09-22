@@ -1,0 +1,22 @@
+{
+  "platform": "Linux-6.17.0-35-generic-x86_64-with-glibc2.39",
+  "cpu_affinity": [
+    0,
+    1
+  ],
+  "gomaxprocs": 2,
+  "memory_limits": {
+    "/sys/fs/cgroup/system.slice/slurmstepd.scope/job_292690/step_batch/user/task_0/memory.max": "max",
+    "/sys/fs/cgroup/system.slice/slurmstepd.scope/job_292690/step_batch/user/memory.max": "2147483648",
+    "/sys/fs/cgroup/system.slice/slurmstepd.scope/job_292690/step_batch/memory.max": "max",
+    "/sys/fs/cgroup/system.slice/slurmstepd.scope/job_292690/memory.max": "2147483648",
+    "/sys/fs/cgroup/system.slice/slurmstepd.scope/memory.max": "max",
+    "/sys/fs/cgroup/system.slice/memory.max": "max"
+  },
+  "sha256": {
+    "bench": "ec48a1fd74281375577c12276cc02dfcb167e6f8fadb1a32901e4ee983397633",
+    "baseline": "f3f676d01325b1193ab1d3893f822b2823d3f763fac1de16bd3a85005b2a782e",
+    "queue": "a81593743ebec43a1fcd3a373ce43c96c4183baca7fb5f25cbc3907a004551d7",
+    "pysolate.wasm": "2c63ce407eae626c89fcd1dd918c713b1f8b75a35a6cf6ca6861466168d0faf8"
+  }
+}

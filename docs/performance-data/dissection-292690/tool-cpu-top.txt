@@ -1,0 +1,27 @@
+File: bench
+Build ID: d3ecec9ef528dfce1500533d4f84e9c8379da77a
+Type: cpu
+Time: 2026-09-22 23:03:39 CST
+Duration: 18.61s, Total samples = 18.89s (101.50%)
+Showing nodes accounting for 18.08s, 95.71% of 18.89s total
+Dropped 199 nodes (cum <= 0.09s)
+Showing top 18 nodes out of 56
+      flat  flat%   sum%        cum   cum%
+    14.20s 75.17% 75.17%     14.20s 75.17%  runtime.memmove
+     2.18s 11.54% 86.71%      2.18s 11.54%  internal/runtime/syscall/linux.Syscall6
+     0.95s  5.03% 91.74%      0.95s  5.03%  runtime._ExternalCode
+     0.21s  1.11% 92.85%      0.21s  1.11%  runtime.memclrNoHeapPointers
+     0.12s  0.64% 93.49%      0.54s  2.86%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*moduleEngine).FunctionInstanceReference
+     0.10s  0.53% 94.02%      0.23s  1.22%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*callEngine).callWithStack
+     0.10s  0.53% 94.55%      0.13s  0.69%  github.com/tetratelabs/wazero/internal/leb128.decodeInt32
+     0.09s  0.48% 95.02%      0.27s  1.43%  runtime.mallocgcSmallScanNoHeader
+     0.05s  0.26% 95.29%     14.44s 76.44%  github.com/tetratelabs/wazero/internal/wasm.(*ModuleInstance).applyData
+     0.02s  0.11% 95.39%      0.15s  0.79%  github.com/tetratelabs/wazero/internal/leb128.LoadInt32
+     0.02s  0.11% 95.50%      0.28s  1.48%  runtime.newobject
+     0.01s 0.053% 95.55%      0.55s  2.91%  github.com/tetratelabs/wazero/internal/wasm.(*ModuleInstance).applyElements
+     0.01s 0.053% 95.61%      0.12s  0.64%  runtime.findRunnable
+     0.01s 0.053% 95.66%      0.52s  2.75%  runtime.mallocgc
+     0.01s 0.053% 95.71%      0.25s  1.32%  runtime.systemstack
+         0     0% 95.71%     16.21s 85.81%  github.com/bkmashiro/agent-python-runtime.(*Runner).Run
+         0     0% 95.71%     15.84s 83.85%  github.com/bkmashiro/agent-python-runtime.(*Runner).newGuest
+         0     0% 95.71%     16.21s 85.81%  github.com/bkmashiro/agent-python-runtime.(*Runner).run

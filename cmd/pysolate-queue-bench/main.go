@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/durable"
+	"github.com/bkmashiro/agent-python-runtime/internal/perfdiag"
 )
 
 type queueCaseSpec struct {
@@ -175,6 +176,11 @@ func run() error {
 	hold := flag.Duration("hold", 200*time.Millisecond, "synthetic Host wait")
 	cow := flag.Bool("cow", true, "use seeded COW, false selects copy")
 	warmup := flag.Int("warmup", 0, "completed unmeasured Runs before measured Run creation")
+	profile := flag.String("cpuprofile", "", "diagnostic CPU profile, includes construction")
+	measuredCPU := flag.String("measured-cpuprofile", "", "CPU profile scoped to measured phase(s) only")
+	tracePath := flag.String("traceprofile", "", "runtime trace scoped to measured phase(s) only")
+	allocPath := flag.String("allocprofile", "", "JSON allocation-counter delta scoped to measured phase(s)")
+	phasePath := flag.String("phases", "", "JSON phase counts and elapsed nanoseconds for measured phase(s)")
 	flag.Parse()
 	if *resident == 0 {
 		*resident = *active
@@ -188,6 +194,14 @@ func run() error {
 	if *mode != "executor" && *mode != "semaphore" && *mode != "unbounded" {
 		return errors.New("unknown mode")
 	}
+	if *profile != "" && *measuredCPU != "" {
+		return errors.New("choose legacy -cpuprofile or -measured-cpuprofile, not both")
+	}
+	fullProfile, err := perfdiag.StartProfiles(*profile, "")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = fullProfile.Stop() }()
 	spec, err := selectQueueCase(*caseName, *heap)
 	if err != nil {
 		return err
@@ -212,6 +226,19 @@ func run() error {
 	startupMemory := readMemory()
 	memory := newMemorySampler(10 * time.Millisecond)
 	defer memory.close()
+	var collector *perfdiag.Collector
+	if *measuredCPU != "" || *tracePath != "" || *allocPath != "" || *phasePath != "" {
+		collector = perfdiag.NewCollector()
+	}
+	collecting := atomic.Bool{}
+	toolObserver := durable.ToolObserverFunc(func(observation durable.ToolObservation) {
+		if !collecting.Load() {
+			return
+		}
+		collector.Add("tool.queue", observation.QueueDuration)
+		collector.Add("tool.service", observation.ServiceDuration)
+		collector.Add("tool.resume", observation.ResumeDuration)
+	})
 	scheduling := durable.Inline
 	if *externalIO {
 		scheduling = durable.ExternalIO
@@ -227,7 +254,7 @@ func run() error {
 		}
 	}
 	tools := []durable.Tool{
-		{Name: "probe", Version: "v1", Recovery: durable.RetrySafe, Scheduling: scheduling, Call: func(ctx context.Context, _ json.RawMessage) (any, error) {
+		{Name: "probe", Version: "v1", Recovery: durable.RetrySafe, Scheduling: scheduling, Observer: toolObserver, Call: func(ctx context.Context, _ json.RawMessage) (any, error) {
 			toolDispatches.Add(1)
 			n := held.Add(1)
 			defer held.Add(-1)
@@ -305,6 +332,37 @@ func run() error {
 	setupPeakMemory := memory.snapshot()
 	memory.reset()
 	toolDispatches.Store(0)
+	if *allocPath != "" {
+		if err := perfdiag.WriteAllocationSnapshot(*allocPath + ".before.pprof"); err != nil {
+			return err
+		}
+	}
+	measuredProfile, err := perfdiag.StartProfiles(*measuredCPU, *tracePath)
+	if err != nil {
+		return err
+	}
+	allocationStart := perfdiag.ReadAllocations()
+	collecting.Store(collector != nil)
+	stopMeasured := func() error {
+		if measuredProfile == nil {
+			return nil
+		}
+		collecting.Store(false)
+		allocationEnd := perfdiag.ReadAllocations()
+		profileErr := measuredProfile.Stop()
+		if *allocPath != "" {
+			profileErr = errors.Join(profileErr, perfdiag.WriteAllocationSnapshot(*allocPath+".after.pprof"))
+		}
+		measuredProfile = nil
+		if err := perfdiag.WriteAllocationDelta(*allocPath, allocationStart, allocationEnd); err != nil {
+			profileErr = errors.Join(profileErr, err)
+		}
+		if err := perfdiag.WritePhases(*phasePath, collector.Snapshot()); err != nil {
+			profileErr = errors.Join(profileErr, err)
+		}
+		return profileErr
+	}
+	defer func() { _ = stopMeasured() }()
 	var phaseLatencies [][]int64
 	phase := func(wantPark bool) (phaseMeasurement, error) {
 		begin := time.Now()
@@ -315,12 +373,13 @@ func run() error {
 		if *mode == "unbounded" {
 			limit = *tasks
 		}
+		phaseCtx := perfdiag.WithCollector(ctx, collector)
 		slots := make(chan struct{}, limit)
 		for i, id := range ids {
 			submitted := time.Now()
 			var attempt *durable.Attempt
 			if executor != nil {
-				attempt, err = executor.Submit(ctx, id)
+				attempt, err = executor.Submit(phaseCtx, id)
 				if err != nil {
 					return phaseMeasurement{}, err
 				}
@@ -332,16 +391,16 @@ func run() error {
 				var value []byte
 				var e error
 				if attempt != nil {
-					out, x := attempt.Wait(ctx)
+					out, x := attempt.Wait(phaseCtx)
 					value, e = out.Value, x
 				} else {
 					select {
 					case slots <- struct{}{}:
-					case <-ctx.Done():
+					case <-phaseCtx.Done():
 						phaseErrors.Add(1)
 						return
 					}
-					out, x := runner.Resume(ctx, id)
+					out, x := runner.Resume(phaseCtx, id)
 					<-slots
 					value, e = out.Value, x
 				}
@@ -388,6 +447,9 @@ func run() error {
 				return errors.New("configured concurrency bound exceeded")
 			}
 		}
+		if err := stopMeasured(); err != nil {
+			return err
+		}
 		return json.NewEncoder(os.Stdout).Encode(map[string]any{
 			"case": spec.name, "mode": *mode, "tasks": *tasks,
 			"running_limit": *active, "resident_limit": *resident, "tool_limit": *toolActive,
@@ -410,7 +472,8 @@ func run() error {
 	afterPark := readMemory()
 	sample()
 	for _, id := range ids {
-		if err := runner.Decide(ctx, id+"/wait/1", durable.Decision{Result: json.RawMessage(`true`)}); err != nil {
+		decideCtx := perfdiag.WithCollector(ctx, collector)
+		if err := runner.Decide(decideCtx, id+"/wait/1", durable.Decision{Result: json.RawMessage(`true`)}); err != nil {
 			return err
 		}
 	}
@@ -424,6 +487,9 @@ func run() error {
 	}
 	if *mode != "unbounded" && (int(peak.Load()) > peakLimit || peakRunning.Load() > int64(*active) || peakResident.Load() > int64(*resident) || peakInflightTools.Load() > int64(*toolActive)) {
 		return errors.New("configured concurrency bound exceeded")
+	}
+	if err := stopMeasured(); err != nil {
+		return err
 	}
 	measuredPeakMemory := memory.snapshot()
 	return json.NewEncoder(os.Stdout).Encode(map[string]any{"case": spec.name, "mode": *mode, "tasks": *tasks, "running_limit": *active, "resident_limit": *resident, "tool_limit": *toolActive, "external_io": *externalIO, "heap_mib": *heap, "synthetic_hold_ns": hold.Nanoseconds(), "cow": *cow, "preparation": map[bool]string{true: "cow", false: "copy"}[*cow], "gomaxprocs": runtime.GOMAXPROCS(0), "gomaxprocs_source": "runtime.GOMAXPROCS(0)", "num_cpu": runtime.NumCPU(), "warmup": *warmup, "warmup_ns": warmupNS.Nanoseconds(), "setup_ns": setup.Nanoseconds(), "park_batch_ns": parked.elapsed.Nanoseconds(), "resume_batch_ns": resumed.elapsed.Nanoseconds(), "peak_host_waits": peak.Load(), "peak_executor_running": peakRunning.Load(), "peak_executor_resident": peakResident.Load(), "peak_executor_inflight_tools": peakInflightTools.Load(), "sampled_peak_rss_kib": nullableMetric(measuredPeakMemory.RSSKB), "sampled_peak_pss_kib": nullableMetric(measuredPeakMemory.PSSKB), "sampled_peak_private_dirty_kib": nullableMetric(measuredPeakMemory.PrivateDirtyKB), "sampled_peak_memory": nullableMemory(measuredPeakMemory), "sampled_peak_scope": "measured_batch_and_readmit", "memory_sample_interval_ns": int64(10 * time.Millisecond), "startup_memory": nullableMemory(startupMemory), "sampled_setup_peak_memory": nullableMemory(setupPeakMemory), "pre_measured_batch_memory": nullableMemory(preMeasuredBatchMemory), "after_park_memory": nullableMemory(afterPark), "after_park_rss_kib": nullableMetric(afterPark.RSSKB), "park_request_ns": phaseLatencies[0], "resume_request_ns": phaseLatencies[1], "park_completed": parked.completed, "resume_completed": resumed.completed, "completed": resumed.completed, "errors": parked.errors + resumed.errors, "result_count": resumed.resultCount, "tool_dispatches": resumed.dispatches, "park_tool_dispatches": parked.dispatches, "resume_tool_dispatches": resumed.dispatches - parked.dispatches})

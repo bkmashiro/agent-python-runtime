@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,6 +18,7 @@ import (
 
 	pysolate "github.com/bkmashiro/agent-python-runtime"
 	"github.com/bkmashiro/agent-python-runtime/durable"
+	"github.com/bkmashiro/agent-python-runtime/internal/perfdiag"
 	"github.com/tetratelabs/wazero"
 )
 
@@ -46,6 +46,7 @@ func run() error {
 	guest := flag.String("guest", "dist/pysolate.wasm", "Guest artifact")
 	prepared := flag.String("prepare", "fresh", "recorded/durable image: fresh/copy/cow")
 	mode := flag.String("mode", "fresh", "fresh/copy/cow/recorded/durable-live/durable-replay")
+	durableCase := flag.String("durable-case", "park", "durable-live/replay case: park or finish")
 	work := flag.String("work", "python", "python/numpy/tools/early-reads")
 	n := flag.Int("n", 5, "measured rounds")
 	concurrency := flag.Int("concurrency", 1, "requests per round")
@@ -53,22 +54,29 @@ func run() error {
 	payload := flag.Int("payload", 0, "synthetic response body bytes")
 	delay := flag.Duration("delay", 0, "synthetic Host delay per call")
 	cacheDir := flag.String("cache", "", "optional private native compilation cache")
-	profile := flag.String("cpuprofile", "", "diagnostic CPU profile, includes construction")
+	profile := flag.String("cpuprofile", "", "diagnostic CPU profile, includes construction (legacy scope)")
+	measuredCPU := flag.String("measured-cpuprofile", "", "CPU profile scoped to measured rounds only")
+	tracePath := flag.String("traceprofile", "", "runtime trace scoped to measured rounds only")
+	allocPath := flag.String("allocprofile", "", "JSON allocation-counter delta scoped to measured rounds")
+	phasePath := flag.String("phases", "", "JSON phase counts and elapsed nanoseconds for measured rounds")
 	flag.Parse()
 	if *n < 1 || *concurrency < 1 || *calls < 0 || *calls > 512 || *payload < 0 || *payload > 900000 {
 		return errors.New("invalid workload size")
 	}
-	if *profile != "" {
-		f, err := os.Create(*profile)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		if err = pprof.StartCPUProfile(f); err != nil {
-			return err
-		}
-		defer pprof.StopCPUProfile()
+	if *profile != "" && *measuredCPU != "" {
+		return errors.New("choose legacy -cpuprofile or -measured-cpuprofile, not both")
 	}
+	if (*mode != "durable-live" && *mode != "durable-replay") && *durableCase != "park" {
+		return errors.New("-durable-case applies only to durable modes")
+	}
+	if *durableCase != "park" && *durableCase != "finish" {
+		return errors.New("unknown durable case")
+	}
+	fullProfile, err := perfdiag.StartProfiles(*profile, "")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = fullProfile.Stop() }()
 	wasm, err := os.ReadFile(*guest)
 	if err != nil {
 		return err
@@ -78,6 +86,19 @@ func run() error {
 		return err
 	}
 	body := strings.Repeat("x", *payload)
+	var collector *perfdiag.Collector
+	if *measuredCPU != "" || *tracePath != "" || *allocPath != "" || *phasePath != "" {
+		collector = perfdiag.NewCollector()
+	}
+	collecting := atomic.Bool{}
+	toolObserver := durable.ToolObserverFunc(func(observation durable.ToolObservation) {
+		if !collecting.Load() {
+			return
+		}
+		collector.Add("tool.queue", observation.QueueDuration)
+		collector.Add("tool.service", observation.ServiceDuration)
+		collector.Add("tool.resume", observation.ResumeDuration)
+	})
 	tool := func(ctx context.Context, args json.RawMessage) (any, error) {
 		if counter, ok := ctx.Value(callKey{}).(*atomic.Int32); ok {
 			counter.Add(1)
@@ -176,7 +197,7 @@ func run() error {
 			preparation = []durable.Preparation{{Seed: "bench-seed", COW: *prepared == "cow"}}
 		}
 		dr, e := durable.NewRunner(ctx, store, wasm, "bench-v1", []durable.Tool{
-			{Name: "read", Version: "v1", Recovery: durable.RetrySafe, Call: tool},
+			{Name: "read", Version: "v1", Recovery: durable.RetrySafe, Call: tool, Observer: toolObserver},
 			{Name: "wait", Version: "v1", Recovery: durable.WaitMode, Wait: func(context.Context, json.RawMessage) (durable.WaitSpec, error) {
 				return durable.WaitSpec{Kind: "approval", Request: json.RawMessage(`{}`)}, nil
 			}},
@@ -185,7 +206,10 @@ func run() error {
 			return e
 		}
 		closeRunner = func() error { return dr.Close(context.Background()) }
-		code := source + "\nassert result == " + expected + "\nwait()\n"
+		code := source + "\nassert result == " + expected + "\n"
+		if *durableCase == "park" {
+			code += "wait()\n"
+		}
 		create := func(ctx context.Context, id string) error {
 			_, e := dr.Create(ctx, durable.Definition{ID: id, Code: code, Seed: "bench-seed", Inputs: json.RawMessage(`null`), ArtifactSHA256: dr.ArtifactID(), EnvironmentVersion: "bench-v1"})
 			return e
@@ -197,8 +221,13 @@ func run() error {
 				if e = create(ctx, id); e != nil {
 					return e
 				}
-				if _, e = dr.Resume(ctx, id); !errors.Is(e, durable.ErrParked) {
-					return fmt.Errorf("seed history: %w", e)
+				out, resumeErr := dr.Resume(ctx, id)
+				if *durableCase == "park" {
+					if !errors.Is(resumeErr, durable.ErrParked) {
+						return fmt.Errorf("seed history: %w", resumeErr)
+					}
+				} else if resumeErr != nil || string(out.Value) != expected {
+					return fmt.Errorf("seed finish result=%s error=%v", out.Value, resumeErr)
 				}
 			}
 			historySeedNS = time.Since(seedStart).Nanoseconds()
@@ -212,10 +241,13 @@ func run() error {
 				}
 			}
 			out, e := dr.Resume(ctx, id)
-			if errors.Is(e, durable.ErrParked) {
+			if *durableCase == "park" && errors.Is(e, durable.ErrParked) {
 				return out, nil
 			}
-			return out, fmt.Errorf("expected parked attempt: %w", e)
+			if *durableCase == "finish" && e == nil && string(out.Value) == expected {
+				return out, nil
+			}
+			return out, fmt.Errorf("unexpected durable attempt: %w", e)
 		}
 	default:
 		return errors.New("unknown mode")
@@ -223,7 +255,7 @@ func run() error {
 	setupNS := time.Since(setup).Nanoseconds()
 	defer func() { _ = closeRunner() }()
 	enc := json.NewEncoder(os.Stdout)
-	if err := enc.Encode(map[string]any{"kind": "environment", "mode": *mode, "work": *work, "go": runtime.Version(), "os": runtime.GOOS, "arch": runtime.GOARCH, "concurrency": *concurrency, "rounds": *n, "calls": *calls, "payload": *payload, "synthetic_delay_ns": delay.Nanoseconds(), "prepare": *prepared, "setup_ns": setupNS - historySeedNS, "history_seed_ns": historySeedNS, "profiled": *profile != ""}); err != nil {
+	if err := enc.Encode(map[string]any{"kind": "environment", "mode": *mode, "work": *work, "durable_case": *durableCase, "go": runtime.Version(), "os": runtime.GOOS, "arch": runtime.GOARCH, "concurrency": *concurrency, "rounds": *n, "calls": *calls, "payload": *payload, "synthetic_delay_ns": delay.Nanoseconds(), "prepare": *prepared, "setup_ns": setupNS - historySeedNS, "history_seed_ns": historySeedNS, "profiled": *profile != "" || *measuredCPU != "" || *tracePath != "" || *allocPath != "" || *phasePath != "", "profile_scope": map[bool]string{true: "measured", false: "none"}[*measuredCPU != "" || *tracePath != "" || *allocPath != "" || *phasePath != ""]}); err != nil {
 		return err
 	}
 	// One excluded warm-up per worker. Durable replay histories were seeded above.
@@ -236,6 +268,37 @@ func run() error {
 			return fmt.Errorf("warm-up result=%s want=%s", out.Value, expected)
 		}
 	}
+	if *allocPath != "" {
+		if err := perfdiag.WriteAllocationSnapshot(*allocPath + ".before.pprof"); err != nil {
+			return err
+		}
+	}
+	measuredProfile, err := perfdiag.StartProfiles(*measuredCPU, *tracePath)
+	if err != nil {
+		return err
+	}
+	allocationStart := perfdiag.ReadAllocations()
+	collecting.Store(collector != nil)
+	stopMeasured := func() error {
+		if measuredProfile == nil {
+			return nil
+		}
+		collecting.Store(false)
+		allocationEnd := perfdiag.ReadAllocations()
+		profileErr := measuredProfile.Stop()
+		if *allocPath != "" {
+			profileErr = errors.Join(profileErr, perfdiag.WriteAllocationSnapshot(*allocPath+".after.pprof"))
+		}
+		measuredProfile = nil
+		if err := perfdiag.WriteAllocationDelta(*allocPath, allocationStart, allocationEnd); err != nil {
+			profileErr = errors.Join(profileErr, err)
+		}
+		if err := perfdiag.WritePhases(*phasePath, collector.Snapshot()); err != nil {
+			profileErr = errors.Join(profileErr, err)
+		}
+		return profileErr
+	}
+	defer func() { _ = stopMeasured() }()
 	failed := false
 	for round := 0; round < *n; round++ {
 		rows := make([]row, *concurrency)
@@ -247,6 +310,7 @@ func run() error {
 				defer group.Done()
 				var counter atomic.Int32
 				requestCtx := context.WithValue(ctx, callKey{}, &counter)
+				requestCtx = perfdiag.WithCollector(requestCtx, collector)
 				start := time.Now()
 				out, e := invoke(requestCtx, round, worker)
 				elapsed := time.Since(start).Nanoseconds()
@@ -283,6 +347,9 @@ func run() error {
 		if err := enc.Encode(row{Kind: "batch", Mode: *mode, Work: *work, Round: round, Nanos: batchNS, RSSKB: rss, PSSKB: pss}); err != nil {
 			return err
 		}
+	}
+	if err := stopMeasured(); err != nil {
+		return err
 	}
 	start := time.Now()
 	err = closeRunner()

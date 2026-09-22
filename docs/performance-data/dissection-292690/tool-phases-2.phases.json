@@ -1,0 +1,35 @@
+{
+  "kind": "pysolate_phase_dissection",
+  "phases": [
+    {
+      "phase": "execute",
+      "count": 200,
+      "total_ns": 237500301
+    },
+    {
+      "phase": "guest_close",
+      "count": 200,
+      "total_ns": 20627007
+    },
+    {
+      "phase": "marshal",
+      "count": 200,
+      "total_ns": 2382938
+    },
+    {
+      "phase": "new_guest",
+      "count": 200,
+      "total_ns": 3278438721
+    },
+    {
+      "phase": "read_response",
+      "count": 200,
+      "total_ns": 1849300
+    },
+    {
+      "phase": "state_close",
+      "count": 200,
+      "total_ns": 305726
+    }
+  ]
+}

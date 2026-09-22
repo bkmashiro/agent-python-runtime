@@ -135,15 +135,16 @@ func (r *Runner) Run(ctx context.Context, source string, inputs any) (Output, er
 	if r.workspaceImage {
 		return Output{}, errors.New("workspace-prepared runner requires RunWorkspace")
 	}
-	return r.run(ctx, source, inputs, false, nil, nil, nil)
+	return r.run(ctx, source, inputs, false, nil, nil)
 }
 
-// RunPLM enables the built-in Guest AST pass, only for explicitly allowed snapshot reads.
-func (r *Runner) RunPLM(ctx context.Context, source string, inputs any) (Output, error) {
+// RunWithEarlyReads enables the built-in Guest AST pass over the complete source,
+// only for explicitly allowed snapshot reads.
+func (r *Runner) RunWithEarlyReads(ctx context.Context, source string, inputs any) (Output, error) {
 	if r.workspaceImage {
 		return Output{}, errors.New("workspace-prepared runner requires RunWorkspace")
 	}
-	return r.run(ctx, source, inputs, true, nil, nil, nil)
+	return r.run(ctx, source, inputs, true, nil, nil)
 }
 
 // RunWorkspace grants one private bounded workspace at /workspace for this
@@ -164,7 +165,7 @@ func (r *Runner) RunWorkspace(ctx context.Context, source string, inputs any, le
 	if err != nil {
 		return Output{}, err
 	}
-	return r.run(ctx, source, inputs, false, nil, nil, fsConfig)
+	return r.run(ctx, source, inputs, false, nil, fsConfig)
 }
 
 func workspaceFSConfig(filesystem experimentalsys.FS) (wazero.FSConfig, error) {
@@ -175,13 +176,13 @@ func workspaceFSConfig(filesystem experimentalsys.FS) (wazero.FSConfig, error) {
 	return base.WithSysFSMount(filesystem, "workspace"), nil
 }
 
-func (r *Runner) run(ctx context.Context, source string, inputs any, plm bool, chunks <-chan string, recording *recording, fsConfig wazero.FSConfig) (Output, error) {
-	state := newRun(ctx, r, plm)
+func (r *Runner) run(ctx context.Context, source string, inputs any, earlyReads bool, recording *recording, fsConfig wazero.FSConfig) (Output, error) {
+	state := newRun(ctx, r, earlyReads)
 	state.recording = recording
 	state.fsConfig = fsConfig
 	defer state.close()
 	ctx = state.ctx
-	request, err := r.marshalRunRequest(source, inputs, plm, fsConfig != nil)
+	request, err := r.marshalRunRequest(source, inputs, earlyReads, fsConfig != nil)
 	if err != nil {
 		return Output{}, err
 	}
@@ -192,7 +193,7 @@ func (r *Runner) run(ctx context.Context, source string, inputs any, plm bool, c
 		return Output{}, err
 	}
 	defer m.Close(context.Background())
-	response, err := executeGuest(ctx, m, request, chunks)
+	response, err := executeGuest(ctx, m, request)
 	if err != nil {
 		return runFailure(state, stdout, stderr, err)
 	}
@@ -203,14 +204,14 @@ func (r *Runner) run(ctx context.Context, source string, inputs any, plm bool, c
 	return out, nil
 }
 
-func (r *Runner) marshalRunRequest(source string, inputs any, plm, workspace bool) ([]byte, error) {
+func (r *Runner) marshalRunRequest(source string, inputs any, earlyReads, workspace bool) ([]byte, error) {
 	request, err := json.Marshal(struct {
 		Source    string          `json:"source"`
 		Inputs    any             `json:"inputs"`
 		PLM       bool            `json:"plm"`
 		Workspace bool            `json:"workspace"`
 		Manifest  []guestToolSpec `json:"manifest"`
-	}{source, inputs, plm, workspace, r.guestManifest})
+	}{source, inputs, earlyReads, workspace, r.guestManifest})
 	if err != nil {
 		return nil, err
 	}
@@ -220,19 +221,26 @@ func (r *Runner) marshalRunRequest(source string, inputs any, plm, workspace boo
 	return request, nil
 }
 
-func executeGuest(ctx context.Context, m api.Module, request []byte, chunks <-chan string) (guestExecutionResponse, error) {
-	if chunks != nil {
-		if err := receiveSource(ctx, m, request, chunks); err != nil {
-			return guestExecutionResponse{}, err
-		}
-		// Input and source already belong to this Guest. Do not send a second copy.
-		request = []byte(`{"prefix":true}`)
-	}
+func executeGuest(ctx context.Context, m api.Module, request []byte) (guestExecutionResponse, error) {
 	packed, err := callWithBytes(ctx, m, "execute", request)
 	if err != nil {
 		return guestExecutionResponse{}, err
 	}
 	return readGuestResponse(ctx, m, packed)
+}
+
+// Request memory is temporary for this call; returned Guest response memory, if any,
+// is owned by its caller.
+func callWithBytes(ctx context.Context, m api.Module, name string, data []byte) ([]uint64, error) {
+	ptr, err := m.ExportedFunction("alloc").Call(ctx, uint64(len(data)))
+	if err != nil {
+		return nil, err
+	}
+	if ptr[0] == 0 || !m.Memory().Write(uint32(ptr[0]), data) {
+		return nil, errors.New("Guest request allocation failed")
+	}
+	defer m.ExportedFunction("release").Call(ctx, ptr[0])
+	return m.ExportedFunction(name).Call(ctx, ptr[0], uint64(len(data)))
 }
 
 type guestExecutionResponse struct {

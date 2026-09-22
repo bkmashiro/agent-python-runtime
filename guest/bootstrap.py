@@ -1,12 +1,9 @@
-"""Execution convention: inputs in, result out; optional whole-program PLM."""
+"""Execution convention: inputs in, result out; optional whole-program early reads."""
 import json
 import os
 import sys
 from _pysolate import call, prepare, resolve
 import pysolate
-
-_prefix = None
-
 
 def decode(response):
     response = json.loads(response)
@@ -17,8 +14,7 @@ def decode(response):
 
 def invoke_tool(name, args):
     request = json.dumps({"tool": name, "args": args})
-    handle = _prefix.claim(request) if _prefix is not None else None
-    return decode(call(request) if handle is None else resolve(handle, request))
+    return decode(call(request))
 
 
 def make_tool(name):
@@ -32,8 +28,7 @@ def prepare_call(thunk):
     try:
         name, args = thunk()
         request = json.dumps({"tool": name, "args": args})
-        handle = _prefix.claim(request) if _prefix is not None else None
-        return prepare(request) if handle is None else handle
+        return prepare(request)
     except Exception:
         # Argument lookup/encoding errors belong at the original Python call, not here.
         return 0
@@ -43,28 +38,10 @@ def resolve_call(handle, name, **args):
     return decode(resolve(handle, json.dumps({"tool": name, "args": args})))
 
 
-def prefix_begin(request):
-    global _prefix
-    from prefix import Prefix
-    request = json.loads(request)
-    _prefix = Prefix(request["inputs"], request["manifest"], prepare)
-
-
-def prefix_feed(chunk):
-    _prefix.feed(chunk)
-
-
 def execute(request):
     transformed = ""
     try:
         request = json.loads(request)
-        if request.get("prefix"):
-            request = {
-                "source": _prefix.source,
-                "inputs": _prefix.inputs,
-                "manifest": _prefix.manifest,
-                "plm": True,
-            }
         scope = {"__name__": "__main__", "inputs": request["inputs"]}
         scope.update(pysolate.configure(request["manifest"], invoke_tool))
         if request.get("workspace"):

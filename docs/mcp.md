@@ -86,7 +86,7 @@ durable/workspace lifecycle boundary and the measured inline versus
 ## Authority and lifecycle boundaries
 
 - The command passed to `ConnectCommand` is trusted Host configuration. Guest code cannot choose or spawn it.
-- MCP annotations are descriptive. `readOnlyHint` never grants PLM/early-read authority unless the Host's `AllowEarlyRead` policy explicitly accepts it.
+- MCP annotations are descriptive. `readOnlyHint` never grants RunWithEarlyReads/early-read authority unless the Host's `AllowEarlyRead` policy explicitly accepts it.
 - Protocol-default annotation values are preserved: absent `destructiveHint` and `openWorldHint` are treated as true.
 - Credentials and environment variables supplied to the subprocess remain Host-owned. Do not pass secrets that the selected MCP server should not receive.
 - Discovery happens before Runner construction. Refreshing a catalog requires a new Runner or prepared service state, but never a Guest artifact rebuild.

@@ -95,7 +95,7 @@ func run(guestPath string, delay time.Duration, samples int) error {
 			return fmt.Errorf("sequential run: %w", err)
 		}
 		started = time.Now()
-		prepared, err := runner.RunPLM(ctx, source, inputs)
+		prepared, err := runner.RunWithEarlyReads(ctx, source, inputs)
 		fullCode = append(fullCode, time.Since(started))
 		if err != nil {
 			return fmt.Errorf("full-code run: %w", err)

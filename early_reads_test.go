@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func TestPLMGuest(t *testing.T) {
+func TestRunWithEarlyReads(t *testing.T) {
 	wasm, err := readGuestArtifact()
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +74,7 @@ func TestPLMGuest(t *testing.T) {
 	defer r.Close(context.Background())
 	run := func(t *testing.T, source, want string, transformed bool) {
 		t.Helper()
-		out, err := r.RunPLM(ctx, source, map[string]any{"item": "book", "yes": false})
+		out, err := r.RunWithEarlyReads(ctx, source, map[string]any{"item": "book", "yes": false})
 		if err != nil || string(out.Value) != want {
 			t.Fatalf("got %+v, %v; want %s", out, err, want)
 		}
@@ -179,7 +179,7 @@ result=handles[-1] == 0 and len(set(handles[:-1])) == 64`, "true", false)
 			t.Fatal(err)
 		}
 		defer s.Close(context.Background())
-		out, err := s.RunPLM(ctx, `result=lookup(key="book")`, nil)
+		out, err := s.RunWithEarlyReads(ctx, `result=lookup(key="book")`, nil)
 		if err != nil || string(out.Value) != "21" || out.Transformed != "" {
 			t.Fatalf("%+v %v", out, err)
 		}

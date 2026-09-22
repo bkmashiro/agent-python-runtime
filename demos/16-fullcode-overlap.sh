@@ -5,7 +5,7 @@ source "$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 banner "Full-code preparation overlaps independent Host reads"
 printf '%s\n' \
-  'This uses the complete submitted script, not prefix/source streaming.' \
+  'This uses the complete submitted script; source streaming is not supported.' \
   'Each Host read has the same controlled delay; the result must stay identical.'
 
 go run ./examples/fullcode-overlap \

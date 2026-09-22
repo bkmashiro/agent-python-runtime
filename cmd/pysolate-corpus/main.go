@@ -64,7 +64,7 @@ func run() error {
 	flag.StringVar(&cfg.guest, "guest", "dist/pysolate.wasm", "agent-core Guest artifact")
 	flag.StringVar(&cfg.corpus, "corpus", "", "frozen corpus JSONL")
 	flag.StringVar(&cfg.prepared, "prepared", "copy", "fresh, copy, or Linux cow")
-	flag.StringVar(&cfg.execution, "execution", "normal", "normal or plm")
+	flag.StringVar(&cfg.execution, "execution", "normal", "normal or early-reads")
 	flag.StringVar(&cfg.caseID, "case", "", "optional exact case id")
 	flag.IntVar(&cfg.limit, "limit", 0, "maximum selected cases; 0 means all")
 	flag.IntVar(&cfg.iterations, "iterations", 1, "replays per prepared Runner")
@@ -76,7 +76,7 @@ func run() error {
 	if cfg.prepared != "fresh" && cfg.prepared != "copy" && cfg.prepared != "cow" {
 		return fmt.Errorf("unknown preparation mode %q", cfg.prepared)
 	}
-	if cfg.execution != "normal" && cfg.execution != "plm" {
+	if cfg.execution != "normal" && cfg.execution != "early-reads" {
 		return fmt.Errorf("unknown execution mode %q", cfg.execution)
 	}
 	wasm, err := os.ReadFile(cfg.guest)
@@ -182,8 +182,8 @@ func executeCase(base context.Context, wasm []byte, artifact string, item corpus
 		runCtx, cancelRun := context.WithTimeout(base, cfg.timeout)
 		started = time.Now()
 		var output pysolate.Output
-		if cfg.execution == "plm" {
-			output, err = runner.RunPLM(runCtx, item.Source, inputs)
+		if cfg.execution == "early-reads" {
+			output, err = runner.RunWithEarlyReads(runCtx, item.Source, inputs)
 		} else {
 			output, err = runner.Run(runCtx, item.Source, inputs)
 		}

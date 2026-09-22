@@ -97,4 +97,4 @@ durability and broad workload scripts remain individually runnable.
 12. `cmd/pysolate-phase-bench/` and `cmd/pysolate-queue-bench/`: fixed phase and scheduling measurements.
 13. `scheduling/`, `cmd/pysolate-schedule-sim/`, and `cmd/pysolate-calibrate/`: deterministic population-policy evaluation and measured-trace calibration.
 
-This branch is a direct continuation of the interview `spine/` implementation, not a wrapper around the old large runtime. The same short `Runner -> Wasm CPython -> Host bridge` path remains, while prepared/COW execution, PLM/prefix, dynamic tool providers, durable replay, workspaces and the HTTP service have been added around it.
+This branch is a direct continuation of the interview `spine/` implementation, not a wrapper around the old large runtime. The same short `Runner -> Wasm CPython -> Host bridge` path remains, while prepared/COW execution, complete-source early reads, dynamic tool providers, durable replay, workspaces and the HTTP service have been added around it.

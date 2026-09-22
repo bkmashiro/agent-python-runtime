@@ -5,7 +5,7 @@
 ## What each lane measures
 
 - **HumanEval reference lane:** executes the dataset's canonical solution and tests. It measures Python compatibility and execution correctness, not code-generation accuracy.
-- **BFCL replay lane:** turns ground-truth calls into fixed namespaced Python calls, then matches each canonical tool identity and canonical JSON arguments against a frozen result. It measures dynamic tool injection, the single Host-call ABI and normal/PLM execution. It does not measure function selection by a model, and BFCL does not provide real tool return values.
+- **BFCL replay lane:** turns ground-truth calls into fixed namespaced Python calls, then matches each canonical tool identity and canonical JSON arguments against a frozen result. It measures dynamic tool injection, the single Host-call ABI and normal/early-read execution. It does not measure function selection by a model, and BFCL does not provide real tool return values.
 - **Repository demo lane:** a small committed fixture for presentations and smoke tests.
 - **Agent workload lane:** 20 fixed common Python and Tool-enriched programs in
   `examples/corpus/agent-workloads.jsonl`; see [`workload-pack.md`](workload-pack.md).
@@ -65,7 +65,7 @@ Run a bounded smoke before a larger campaign:
 go run ./cmd/pysolate-corpus -corpus /tmp/humaneval.jsonl -limit 10
 go run ./cmd/pysolate-corpus -corpus /tmp/bfcl-simple.jsonl -limit 10
 go run ./cmd/pysolate-corpus \
-  -corpus /tmp/bfcl-simple.jsonl -limit 10 -execution plm
+  -corpus /tmp/bfcl-simple.jsonl -limit 10 -execution early-reads
 ```
 
 `-case` selects one exact ID. `-prepared` accepts `fresh`, `copy`, or Linux-only `cow`. `-iterations` replays the same fully consumed fixtures against the same prepared Runner, while every Run still receives private Guest state.
@@ -82,7 +82,7 @@ Each JSONL record contains:
 
 The loader rejects unknown fields, duplicate IDs/tools/replay keys, invalid JSON, unknown replay tools, ambiguous value/error fixtures and unconsumed fixtures. Replay dispatch never uses the case ID and never treats `expected` output as executable authority.
 
-Current v1 replay fixtures are stable read-only calls, so BFCL imports may opt into PLM early reads. Stateful writes, ordering-sensitive side effects, private workspace mutations and prefix-stream scheduling are deliberately excluded. Those need a richer event trace rather than pretending an unordered lookup table preserves side-effect semantics.
+Current v1 replay fixtures are stable read-only calls, so BFCL imports may opt into early reads. Stateful writes, ordering-sensitive side effects and private workspace mutations are deliberately excluded. Those need a richer event trace rather than pretending an unordered lookup table preserves side-effect semantics.
 
 ## Provenance used during implementation
 

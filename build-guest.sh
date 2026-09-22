@@ -69,8 +69,7 @@ if [[ ${RELINK} == 1 ]]; then
     "${WASI}/Modules/_decimal/libmpdec/libmpdec.a" "${HACL[@]}" \
     "${WASI}/Modules/expat/libexpat.a" "${VFS_LIB}" \
     -ldl -lwasi-emulated-getpid -lwasi-emulated-signal -lwasi-emulated-process-clocks \
-    -lpthread -lm -Wl,--export=init -Wl,--export=prefix_begin \
-    -Wl,--export=prefix_feed -Wl,--export=alloc -Wl,--export=release \
+    -lpthread -lm -Wl,--export=init -Wl,--export=alloc -Wl,--export=release \
     -Wl,--export=execute -Wl,--export-memory -Wl,--initial-memory=134217728 \
     -Wl,--max-memory=536870912 -Wl,-z,stack-size=16777216 -Wl,--strip-all \
     -o "${RAW_CORE}"
@@ -78,10 +77,10 @@ else
   [[ -f ${RAW_CORE} ]] || { echo "missing reusable raw core: ${RAW_CORE}" >&2; exit 9; }
 fi
 
-python3 - "${PY}/Lib" "${BUILD}/vfs" "${ROOT}/guest/bootstrap.py" "${ROOT}/guest/plm.py" "${ROOT}/guest/prefix.py" "${ROOT}/guest/pysolate.py" "${NUMPY_PACKAGE}" "${PYYAML_SOURCE}" "${PYYAML_ROOT}/LICENSE" "${PYYAML_ROOT}/PKG-INFO" <<'PY'
+python3 - "${PY}/Lib" "${BUILD}/vfs" "${ROOT}/guest/bootstrap.py" "${ROOT}/guest/plm.py" "${ROOT}/guest/pysolate.py" "${NUMPY_PACKAGE}" "${PYYAML_SOURCE}" "${PYYAML_ROOT}/LICENSE" "${PYYAML_ROOT}/PKG-INFO" <<'PY'
 from pathlib import Path
 import shutil, sys, os
-lib, out, bootstrap, plm, prefix, pysolate, numpy, pyyaml, pyyaml_license, pyyaml_metadata = map(Path, sys.argv[1:])
+lib, out, bootstrap, plm, pysolate, numpy, pyyaml, pyyaml_license, pyyaml_metadata = map(Path, sys.argv[1:])
 def copy_tree(src, dst):
     for p in sorted(src.rglob('*')):
         rel=p.relative_to(src); q=dst/rel
@@ -90,7 +89,7 @@ def copy_tree(src, dst):
         elif p.is_file() and not p.name.endswith(('.pyc', '.pyo')):
             q.parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(p,q); os.utime(q,(0,0))
 copy_tree(lib, out)
-for src, name in ((bootstrap,'pysolate_bootstrap.py'),(plm,'plm.py'),(prefix,'prefix.py'),(pysolate,'pysolate.py')):
+for src, name in ((bootstrap,'pysolate_bootstrap.py'),(plm,'plm.py'),(pysolate,'pysolate.py')):
     shutil.copyfile(src, out/name); os.utime(out/name,(0,0))
 copy_tree(numpy, out/'site-packages/numpy')
 copy_tree(pyyaml, out/'site-packages/yaml')

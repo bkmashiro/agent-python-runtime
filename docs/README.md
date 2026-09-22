@@ -41,7 +41,7 @@ for the execution model and build commands.
 ## Performance and scheduling
 
 - [`performance-results.md`](performance-results.md) — measured prepared/COW,
-  compilation-cache, prefix/PLM, admission, and service results with scope and
+  compilation-cache, historical prefix/PLM, admission, and service results with scope and
   trade-offs.
 - [`performance-goal.md`](performance-goal.md) — the completed performance
   goal and its original acceptance boundaries. Keep this as a historical

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"time"
 
 	pysolate "github.com/bkmashiro/agent-python-runtime"
@@ -26,7 +25,7 @@ func run() error {
 	artifact := flag.String("wasm", "dist/pysolate.wasm", "CPython/WASI artifact")
 	source := flag.String("source", "-", "Python file, or - for stdin")
 	input := flag.String("inputs", "{}", "JSON input")
-	mode := flag.String("mode", "normal", "normal, plm, or prefix (line replay)")
+	mode := flag.String("mode", "normal", "normal or early-reads")
 	prepared := flag.String("prepared", "fresh", "fresh, copy, or Linux cow")
 	timeout := flag.Duration("timeout", 30*time.Second, "compile and execution deadline")
 	flag.Parse()
@@ -86,16 +85,8 @@ func run() error {
 	switch *mode {
 	case "normal":
 		out, err = runner.Run(ctx, string(code), inputs)
-	case "plm":
-		out, err = runner.RunPLM(ctx, string(code), inputs)
-	case "prefix":
-		lines := strings.SplitAfter(string(code), "\n")
-		chunks := make(chan string, len(lines))
-		for _, line := range lines {
-			chunks <- line
-		}
-		close(chunks)
-		out, err = runner.RunPrefix(ctx, chunks, inputs)
+	case "early-reads":
+		out, err = runner.RunWithEarlyReads(ctx, string(code), inputs)
 	default:
 		return fmt.Errorf("unknown execution mode %q", *mode)
 	}

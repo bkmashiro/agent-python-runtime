@@ -114,7 +114,7 @@ Runner owns compiled code and an optional clean image
 
 There are four responsibilities:
 
-- **Runner:** ordinary execution, PLM and append-only source input share one lifecycle.
+- **Runner:** ordinary execution and complete-source early reads share one lifecycle.
 - **Tools:** Host providers discover canonical tools, metadata and Go call implementations; a small Python shim exposes only that catalog.
 - **Image:** optional full-copy or Linux private COW memory, captured before user execution.
 - **Store:** optional SQLite history for deterministic replay and durable waits.
@@ -254,20 +254,19 @@ contract](docs/durable-service.md).
 
 ## Optional execution modes
 
-- `RunPLM` prepares only explicitly allowed stable, read-only snapshots. Values and errors are delivered at their original Python calls. Failed tools are not automatically retried.
-- `RunPrefix` accepts append-only source chunks, prepares eligible reads and executes the completed source in the same Guest. It shares the Run's existing future table.
+- `RunWithEarlyReads` prepares only explicitly allowed stable, read-only snapshots. Values and errors are delivered at their original Python calls. Failed tools are not automatically retried.
 - `NewPrepared` copies a clean initialized image into each Guest.
 - `NewPreparedCOW` uses sealed Linux memfd/private mappings. It does not fall back to a different backend or restore an active stack.
 - `NewPreparedWorkspace` and `NewPreparedWorkspaceCOW` capture the mount shape required by private workspaces.
 
 ```sh
-go run ./cmd/pysolate -source examples/echo.py -mode plm
-go run ./cmd/pysolate -source examples/echo.py -mode prefix -prepared copy
+go run ./cmd/pysolate -source examples/echo.py -mode early-reads
+go run ./cmd/pysolate -source examples/echo.py -mode early-reads -prepared copy
 # Linux:
-go run ./cmd/pysolate -source examples/echo.py -mode prefix -prepared cow
+go run ./cmd/pysolate -source examples/echo.py -mode early-reads -prepared cow
 ```
 
-The CLI's prefix mode replays file lines. An embedding application can feed a real source stream.
+Streaming source execution has been removed. Pass complete source to `RunWithEarlyReads` (formerly `RunPLM`) or use CLI `-mode early-reads`; there is no `RunPrefix` replacement.
 
 ## Durable runs
 
@@ -275,7 +274,7 @@ The CLI's prefix mode replays file lines. An embedding application can feed a re
 
 Unresolved external operations follow the Host's declared safe-retry, idempotent, lookup, manual or wait policy. Nothing infers those semantics from a tool name or source code. The optional journal can stop an attempt in a way Python cannot catch.
 
-`RunRecorded` uses fresh Guests with per-attempt seeded WASI randomness and logical clocks. PLM is excluded. An explicitly seeded prepared image can restore the matching deterministic initialization state; ordinary unseeded images are rejected. `PythonError` is a completed Python failure; timeout, storage and other infrastructure errors remain distinct Go errors.
+`RunRecorded` uses fresh Guests with per-attempt seeded WASI randomness and logical clocks. Early reads are excluded. An explicitly seeded prepared image can restore the matching deterministic initialization state; ordinary unseeded images are rejected. `PythonError` is a completed Python failure; timeout, storage and other infrastructure errors remain distinct Go errors.
 
 The new SQLite format does not migrate old runtime databases. Cancellation stops future progress and signals the local attempt; it cannot roll back an external operation already started elsewhere.
 
@@ -291,7 +290,7 @@ Current engineering defaults are 512 MiB maximum linear memory, 1 MiB per reques
 runner.go, bridge.go       Guest lifecycle and Host calls
 tool_provider.go           provider discovery and normalized tool metadata
 mcpadapter/                narrow MCP provider plus official Go SDK adapter
-future.go, prefix.go       Run-owned early reads and source streaming
+future.go                  Run-owned early reads
 prepared.go                clean-image orchestration
 internal/cowmem/           Linux private-memory backend and platform stub
 recording.go               deterministic attempts and journal stops
@@ -323,11 +322,11 @@ Real-Guest tests fail when the artifact is missing. Linux COW tests require Linu
 
 ## Performance and bounded execution
 
-See [the measured results and trade-offs](docs/performance-results.md) for seeded reconstruction, native cache, Guest startup, PLM/prefix and admission. The default paths remain explicit; improvements are not a claim that every workload or cold cache is faster.
+See [the measured results and trade-offs](docs/performance-results.md) for seeded reconstruction, native cache, Guest startup, historical PLM/prefix measurements and admission. The default paths remain explicit; improvements are not a claim that every workload or cold cache is faster.
 
 ## Verified scope
 
-The new Guest was built and run, including matrix operations and separate NumPy Generator/RandomState integer-ABI regressions. `make check` passes with the real artifact. Targeted PLM/prefix and Store/journal race tests pass; a whole durable race run exceeded its initial 150-second execution budget and was not counted as a pass.
+The new Guest was built and run, including matrix operations and separate NumPy Generator/RandomState integer-ABI regressions. `make check` passes with the real artifact. Historical targeted PLM/prefix and Store/journal race tests passed; a whole durable race run exceeded its initial 150-second execution budget and was not counted as a pass.
 
 Linux tests exercise actual private COW mappings and Guest isolation. Recovery was verified after closing/reopening SQLite, after killing the process following an external fixture commit, and after hard-stopping/restarting a 2-vCPU/2-GiB Linux VM at that same window. The recovered fixture recorded one read, two write requests and one idempotent effect. This is not a physical-host power-loss guarantee.
 
@@ -340,7 +339,7 @@ Old APIs and databases are intentionally incompatible. The core and Guest contai
 position and logical clocks consumed during initialization. `RunRecorded` requires
 that exact seed. Different Runs can share the image when they explicitly use the
 same seed; there is no per-seed cache. A mismatched seed is rejected, never silently
-replayed with different randomness. PLM remains excluded from recorded execution.
+replayed with different randomness. Early reads remain excluded from recorded execution.
 
 For durable use, pass `durable.Preparation{Seed: "seed", COW: true}` as the optional
 last argument to `durable.NewRunner`. The default is still fresh. This changes no

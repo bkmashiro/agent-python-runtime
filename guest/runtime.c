@@ -66,7 +66,7 @@ static PyMethodDef methods[] = {
 };
 static struct PyModuleDef module = {PyModuleDef_HEAD_INIT, "_pysolate", NULL, -1, methods};
 static PyObject *init_pysolate(void) { return PyModule_Create(&module); }
-static PyObject *execute_fn, *prefix_begin_fn, *prefix_feed_fn;
+static PyObject *execute_fn;
 
 EXPORT("init") int32_t init(void) {
     if (PyImport_AppendInittab("_pysolate", init_pysolate) != 0) return -1;
@@ -90,25 +90,9 @@ EXPORT("init") int32_t init(void) {
     PyObject *bootstrap = PyImport_ImportModule("pysolate_bootstrap");
     if (!bootstrap) { PyErr_Print(); return -1; }
     execute_fn = PyObject_GetAttrString(bootstrap, "execute");
-    prefix_begin_fn = PyObject_GetAttrString(bootstrap, "prefix_begin");
-    prefix_feed_fn = PyObject_GetAttrString(bootstrap, "prefix_feed");
     Py_DECREF(bootstrap);
-    if (!execute_fn || !prefix_begin_fn || !prefix_feed_fn) { PyErr_Print(); return -1; }
+    if (!execute_fn) { PyErr_Print(); return -1; }
     return 0;
-}
-
-// Prefix calls only parse received source and issue eligible reads, never execute it.
-static int32_t prefix_step(PyObject *fn, const char *data, int32_t size) {
-    PyObject *result = PyObject_CallFunction(fn, "s#", data, (Py_ssize_t)size);
-    if (!result) { PyErr_Print(); return -1; }
-    Py_DECREF(result);
-    return 0;
-}
-EXPORT("prefix_begin") int32_t prefix_begin(const char *data, int32_t size) {
-    return prefix_step(prefix_begin_fn, data, size);
-}
-EXPORT("prefix_feed") int32_t prefix_feed(const char *data, int32_t size) {
-    return prefix_step(prefix_feed_fn, data, size);
 }
 
 EXPORT("alloc") void *alloc(uint32_t size) { return malloc(size); }

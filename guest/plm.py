@@ -1,4 +1,4 @@
-"""Small whole-program pass. Unsupported programs keep their original AST.
+"""Small whole-program early-read pass. Unsupported programs keep their original AST.
 
 Only adjacent tool assignments are reordered: prepare after argument definitions,
 resolve at the original statement. Other statements and control regions are barriers.

@@ -16,7 +16,7 @@ func TestPreparedGuest(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	calls := make(chan string, 32)
-	var second, prefixStarted chan struct{}
+	var second chan struct{}
 	read := func(ctx context.Context, raw json.RawMessage) (any, error) {
 		var a struct {
 			Key string `json:"key"`
@@ -36,9 +36,7 @@ func TestPreparedGuest(t *testing.T) {
 		case "second":
 			close(second)
 			return 5, nil
-		case "prefix":
-			close(prefixStarted)
-			return 21, nil
+
 		default:
 			return 21, nil
 		}
@@ -93,39 +91,13 @@ func TestPreparedGuest(t *testing.T) {
 			t.Fatal("shared writable storage")
 		}
 	})
-	t.Run("PLM still overlaps", func(t *testing.T) {
+	t.Run("early reads still overlap", func(t *testing.T) {
 		second = make(chan struct{})
-		out, err := r.RunPLM(ctx, "a=lookup(key='first')\nb=lookup(key='second')\nresult=a+b", nil)
+		out, err := r.RunWithEarlyReads(ctx, "a=lookup(key='first')\nb=lookup(key='second')\nresult=a+b", nil)
 		expect(t, out, err, "26")
 		if !strings.Contains(out.Transformed, "_pysolate_prepare") {
-			t.Fatal("PLM not used")
+			t.Fatal("early-read preparation not used")
 		}
-	})
-	t.Run("prefix before EOF", func(t *testing.T) {
-		runCtx, stop := context.WithCancel(ctx)
-		defer stop()
-		prefixStarted = make(chan struct{})
-		chunks := make(chan string)
-		go func() {
-			defer close(chunks)
-			select {
-			case chunks <- "a=lookup(key='prefix')\n":
-			case <-runCtx.Done():
-				return
-			}
-			select {
-			case <-prefixStarted:
-			case <-runCtx.Done():
-				return
-			}
-			select {
-			case chunks <- "result=a\n":
-			case <-runCtx.Done():
-				return
-			}
-		}()
-		out, err := r.RunPrefix(runCtx, chunks, nil)
-		expect(t, out, err, "21")
 	})
 	t.Run("error does not change image", func(t *testing.T) {
 		if _, err := r.Run(ctx, `raise ValueError("bad")`, nil); err == nil {

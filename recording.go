@@ -28,7 +28,7 @@ type recording struct {
 const journalExitCode = 125
 
 // RunRecorded starts a deterministic attempt. A prepared runner must have been
-// captured with this exact seed; PLM remains excluded.
+// captured with this exact seed; early-read execution remains excluded.
 func (r *Runner) RunRecorded(ctx context.Context, source string, inputs any, seed string, journal Journal) (Output, error) {
 	if journal == nil || seed == "" {
 		return Output{}, errors.New("recorded runs require a journal and seed")
@@ -36,7 +36,7 @@ func (r *Runner) RunRecorded(ctx context.Context, source string, inputs any, see
 	if (r.image != nil || r.cow != nil) && (r.preparedState == nil || r.preparedState.seed != seed) {
 		return Output{}, errors.New("prepared recording seed does not match")
 	}
-	return r.run(ctx, source, inputs, false, nil, newRecording(seed, journal), nil)
+	return r.run(ctx, source, inputs, false, newRecording(seed, journal), nil)
 }
 
 func (r *Runner) moduleConfig(ctx context.Context, stdout, stderr *boundedText) wazero.ModuleConfig {

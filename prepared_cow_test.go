@@ -86,16 +86,9 @@ func TestPreparedCOWRealGuestLifecycle(t *testing.T) {
 	if out, err := r.Run(ctx, `import builtins; result=hasattr(builtins,"cow_secret")`, nil); err != nil || string(out.Value) != "false" {
 		t.Fatalf("private-state leak: out=%+v err=%v", out, err)
 	}
-	out, err := r.RunPLM(ctx, "a=lookup(key='first')\nb=lookup(key='second')\nresult=a+b", nil)
+	out, err := r.RunWithEarlyReads(ctx, "a=lookup(key='first')\nb=lookup(key='second')\nresult=a+b", nil)
 	if err != nil || string(out.Value) != "26" || !strings.Contains(out.Transformed, "_pysolate_prepare") {
-		t.Fatalf("PLM run: out=%+v err=%v", out, err)
-	}
-	chunks := make(chan string, 2)
-	chunks <- "result=lookup(key='price')\n"
-	chunks <- ""
-	close(chunks)
-	if out, err := r.RunPrefix(ctx, chunks, nil); err != nil || string(out.Value) != "21" {
-		t.Fatalf("prefix run: out=%+v err=%v", out, err)
+		t.Fatalf("early-read run: out=%+v err=%v", out, err)
 	}
 	if _, err := r.Run(ctx, `result=lookup(key="absent")`, nil); err == nil || !strings.Contains(err.Error(), "missing key: absent") {
 		t.Fatalf("guest/tool error: %v", err)

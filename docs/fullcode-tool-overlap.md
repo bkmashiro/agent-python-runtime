@@ -45,8 +45,5 @@ combining them, such as profile plus shipping quote, repository metadata plus
 issue state, or two search indexes. It does not improve CPU-heavy Python,
 NumPy import cost, dependent Tool chains, or a single slow Tool.
 
-The spike currently exercises the existing `RunPLM` implementation so the
-behavior can be measured without adding another execution subsystem. If this
-shape proves useful, the implementation can be simplified around one
-full-source-only API; preserving the current PLM name or prefix machinery is
-not a requirement.
+The spike exercises `RunWithEarlyReads`, the single full-source-only API for
+this behavior. There is no prefix or source-streaming execution path.

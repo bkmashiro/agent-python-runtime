@@ -46,7 +46,7 @@ func run() error {
 	guest := flag.String("guest", "dist/pysolate.wasm", "Guest artifact")
 	prepared := flag.String("prepare", "fresh", "recorded/durable image: fresh/copy/cow")
 	mode := flag.String("mode", "fresh", "fresh/copy/cow/recorded/durable-live/durable-replay")
-	work := flag.String("work", "python", "python/numpy/tools/plm/prefix")
+	work := flag.String("work", "python", "python/numpy/tools/early-reads")
 	n := flag.Int("n", 5, "measured rounds")
 	concurrency := flag.Int("concurrency", 1, "requests per round")
 	calls := flag.Int("calls", 8, "tool calls per request")
@@ -142,22 +142,14 @@ func run() error {
 		closeRunner = func() error { return core.Close(context.Background()) }
 		invoke = func(ctx context.Context, _, _ int) (pysolate.Output, error) {
 			if *mode == "recorded" {
-				if *work == "plm" || *work == "prefix" {
-					return pysolate.Output{}, errors.New("recorded execution excludes PLM/prefix")
+				if *work == "early-reads" {
+					return pysolate.Output{}, errors.New("recorded execution excludes early-reads")
 				}
 				return core.RunRecorded(ctx, source, nil, "bench-seed", passJournal{})
 			}
 			switch *work {
-			case "plm":
-				return core.RunPLM(ctx, source, nil)
-			case "prefix":
-				chunks := strings.SplitAfter(source, "\n")
-				ch := make(chan string, len(chunks))
-				for _, s := range chunks {
-					ch <- s
-				}
-				close(ch)
-				return core.RunPrefix(ctx, ch, nil)
+			case "early-reads":
+				return core.RunWithEarlyReads(ctx, source, nil)
 			default:
 				return core.Run(ctx, source, nil)
 			}
@@ -262,7 +254,7 @@ func run() error {
 					e = fmt.Errorf("result=%s want=%s", out.Value, expected)
 				}
 				want := int32(0)
-				if *work == "tools" || *work == "plm" || *work == "prefix" {
+				if *work == "tools" || *work == "early-reads" {
 					want = int32(*calls)
 				}
 				if *mode == "durable-replay" {
@@ -318,7 +310,7 @@ func program(work string, calls int) (string, string, error) {
 		return "result = sum(i*i for i in range(1000))", "332833500", nil
 	case "numpy":
 		return "import numpy as np\na=np.arange(10000,dtype=np.int64)\nresult=int(a.sum())", "49995000", nil
-	case "tools", "plm", "prefix":
+	case "tools", "early-reads":
 		var b strings.Builder
 		for i := 0; i < calls; i++ {
 			fmt.Fprintf(&b, "x%d = read(value=%d)\n", i, i)

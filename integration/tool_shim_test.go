@@ -36,7 +36,7 @@ func TestDynamicToolNamespaceInRealGuest(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer runner.Close(context.Background())
-	out, err := runner.RunPLM(ctx, `quote=stock.getprice(symbol="AAPL")
+	out, err := runner.RunWithEarlyReads(ctx, `quote=stock.getprice(symbol="AAPL")
 result=quote`, nil)
 	if err != nil {
 		t.Fatal(err)

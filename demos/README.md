@@ -2,24 +2,60 @@
 
 Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PYSOLATE_GUEST=/path/to/pysolate.wasm` to override it.
 
+## Core product path
+
+```bash
+./demos/run-core.sh
+```
+
+This recommended presentation path runs:
+
+1. `02-namespaced-tools.sh` — ordinary Python calling a dynamically injected Host capability.
+2. `17-workspace-continuation.sh` — one Host-owned workspace used by two disposable Guests.
+3. `04-hot-service.sh` — repeated hot HTTP Runs and a complete workspace lifecycle.
+4. The visible part of `15-deterministic-replay.sh` — identical seeded execution with one real Tool dispatch and one replayed outcome.
+
+It skips the longer replay conformance tests. Run `15-deterministic-replay.sh`
+directly when those tests are wanted.
+
+## Complete index
+
+### Basic acceptance
+
 ```bash
 ./demos/01-basic-python.sh
 ./demos/02-namespaced-tools.sh
 ./demos/03-workspace-edit.sh
 ./demos/04-hot-service.sh
 ./demos/05-corpus-replay.sh
+./demos/14-agent-workloads.sh
+./demos/17-workspace-continuation.sh
+```
+
+### Host integration and durability
+
+```bash
+./demos/11-mcp-stdio.sh
+./demos/12-mcp-workspace-scheduling.sh
+./demos/13-durable-restart.sh
+./demos/15-deterministic-replay.sh
+```
+
+### Measurement and research
+
+```bash
 ./demos/06-semantic-phases.sh
 ./demos/07-live-io.sh
 ./demos/08-scheduling-simulation.sh
 ./demos/09-canonical-scheduling-sweep.sh
 ./demos/10-calibrated-scheduling.sh
-./demos/11-mcp-stdio.sh
-./demos/12-mcp-workspace-scheduling.sh
-./demos/13-durable-restart.sh
-./demos/14-agent-workloads.sh
-./demos/15-deterministic-replay.sh
 ./demos/16-fullcode-overlap.sh
-./demos/17-workspace-continuation.sh
+```
+
+### Script suites
+
+```bash
+./demos/run-core.sh
 ./demos/run-all.sh
 ```
 
@@ -41,9 +77,9 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 - `16-fullcode-overlap.sh` compares ordinary execution with complete-source preparation for two independent, explicitly opted-in Host reads under a controlled delay.
 - `17-workspace-continuation.sh` has one disposable Guest write progress and a second Guest read and extend it through the same Host-owned workspace. It does not use `RunRecorded` replay.
 
-`run-all.sh` intentionally runs the short product demonstrations `01`–`05`.
-The measurement-oriented `06`–`10` scripts and dependency-oriented MCP demos
-`11`–`17` remain explicit.
+`run-all.sh` retains the original acceptance suite `01`–`05` for compatibility.
+`run-core.sh` is the recommended presentation path. Measurement, MCP,
+durability and broad workload scripts remain individually runnable.
 
 ## Short code-reading route
 

@@ -123,7 +123,12 @@ infer arbitrary Python runtime behavior or retry unsafe effects.
 
 ## Demonstrations
 
-The scripts under [`../demos/`](../demos/) provide presentation-ready paths:
+The recommended presentation entry is `../demos/run-core.sh`: dynamic Host
+tools, workspace continuation, hot service execution and visible deterministic
+Tool replay. The complete script index is grouped in
+[`../demos/README.md`](../demos/README.md).
+
+Individual scripts provide narrower acceptance and research paths:
 
 - `01` basic Python and artifact contents;
 - `02` ordinary Python calling one dynamically injected namespaced Host tool;
@@ -143,6 +148,6 @@ The scripts under [`../demos/`](../demos/) provide presentation-ready paths:
 - `16` full-code overlap of independent read-only Host calls.
 - `17` Host-owned workspace continuation across disposable Guests.
 
-`demos/run-all.sh` runs the short product demonstrations (`01`–`05`). The
-measurement-oriented `06`–`10` scripts and dependency-oriented demos `11`–`17`
-remain explicit so setup time is not hidden inside the short demo suite.
+`demos/run-all.sh` retains the original acceptance suite (`01`–`05`). The
+measurement-oriented and dependency-heavy scripts remain explicit so setup
+time is not hidden inside the core presentation path.

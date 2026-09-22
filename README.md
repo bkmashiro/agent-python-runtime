@@ -156,30 +156,22 @@ go run ./cmd/pysolate -source examples/numpy.py
 
 The CLI grants only a pure `echo` demonstration tool. Applications supply their own tools through the Go API. Python stdout is forwarded to stderr; the final JSON value is printed to stdout.
 
-For presentation-ready end-to-end examples, use the scripts under [`demos/`](demos/README.md):
+For the short presentation path, run the four core product demonstrations:
 
 ```sh
-./demos/01-basic-python.sh
-./demos/02-namespaced-tools.sh
-./demos/03-workspace-edit.sh
-./demos/04-hot-service.sh
-./demos/05-corpus-replay.sh
-# Measurement-oriented demos:
-./demos/06-semantic-phases.sh
-./demos/07-live-io.sh
-./demos/08-scheduling-simulation.sh
-./demos/09-canonical-scheduling-sweep.sh
-./demos/10-calibrated-scheduling.sh
-./demos/11-mcp-stdio.sh
-./demos/12-mcp-workspace-scheduling.sh
-./demos/13-durable-restart.sh
-./demos/14-agent-workloads.sh
-./demos/15-deterministic-replay.sh
-./demos/16-fullcode-overlap.sh
-./demos/17-workspace-continuation.sh
-# Or run all demos:
+./demos/run-core.sh
+```
+
+It covers dynamic namespaced Host tools, workspace continuation across
+disposable Guests, the hot HTTP service, and deterministic Tool-outcome replay.
+For the original short acceptance suite, use:
+
+```sh
 ./demos/run-all.sh
 ```
+
+See [`demos/README.md`](demos/README.md) for the complete core, acceptance,
+integration, durability and research demo index.
 
 A Runner compiles once and may serve independent Runs. Each Run owns its Python state and tool workers. Tools must be concurrency-safe and honor their context. Call `Close` after all Runs have returned.
 

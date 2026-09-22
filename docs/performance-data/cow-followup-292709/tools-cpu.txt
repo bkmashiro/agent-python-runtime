@@ -1,0 +1,29 @@
+File: pysolate-data-image-bench
+Build ID: 245a0902f4eab28a810be26864a3102b1086bbe8
+Type: cpu
+Time: 2026-09-23 00:48:58 CST
+Duration: 4.16s, Total samples = 4.59s (110.46%)
+Showing nodes accounting for 4.08s, 88.89% of 4.59s total
+Dropped 139 nodes (cum <= 0.02s)
+Showing top 20 nodes out of 95
+      flat  flat%   sum%        cum   cum%
+        2s 43.57% 43.57%         2s 43.57%  internal/runtime/syscall/linux.Syscall6
+     1.08s 23.53% 67.10%      1.08s 23.53%  runtime._ExternalCode
+     0.10s  2.18% 69.28%      0.10s  2.18%  runtime.memclrNoHeapPointers
+     0.09s  1.96% 71.24%      0.52s 11.33%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*moduleEngine).FunctionInstanceReference
+     0.09s  1.96% 73.20%      0.09s  1.96%  runtime.tryDeferToSpanScan
+     0.07s  1.53% 74.73%      0.15s  3.27%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*callEngine).callWithStack
+     0.07s  1.53% 76.25%      0.09s  1.96%  runtime.(*mspan).writeHeapBitsSmall
+     0.07s  1.53% 77.78%      0.07s  1.53%  runtime.madvise
+     0.06s  1.31% 79.08%      0.22s  4.79%  github.com/tetratelabs/wazero/internal/wasm.(*ModuleInstance).applyData
+     0.06s  1.31% 80.39%      0.06s  1.31%  runtime.memmove
+     0.06s  1.31% 81.70%      0.21s  4.58%  runtime.scanObject
+     0.04s  0.87% 82.57%      0.04s  0.87%  github.com/tetratelabs/wazero/internal/engine/wazevo/backend/isa/amd64.afterGoFunctionCallEntrypoint
+     0.04s  0.87% 83.44%      0.04s  0.87%  github.com/tetratelabs/wazero/internal/leb128.LoadInt32.func1
+     0.04s  0.87% 84.31%      0.08s  1.74%  github.com/tetratelabs/wazero/internal/leb128.decodeInt32
+     0.04s  0.87% 85.19%      0.56s 12.20%  github.com/tetratelabs/wazero/internal/wasm.(*ModuleInstance).applyElements
+     0.04s  0.87% 86.06%      0.04s  0.87%  runtime.nextFreeFast (inline)
+     0.04s  0.87% 86.93%      0.04s  0.87%  runtime.typePointers.next
+     0.03s  0.65% 87.58%      0.03s  0.65%  github.com/tetratelabs/wazero/internal/wasm.(*ModuleInstance).FailIfClosed
+     0.03s  0.65% 88.24%      0.22s  4.79%  runtime.mallocgcSmallScanNoHeader
+     0.03s  0.65% 88.89%      0.27s  5.88%  runtime.newobject

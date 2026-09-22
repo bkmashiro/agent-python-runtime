@@ -1,0 +1,29 @@
+File: pysolate-data-image-bench
+Build ID: 245a0902f4eab28a810be26864a3102b1086bbe8
+Type: cpu
+Time: 2026-09-23 00:48:38 CST
+Duration: 4.55s, Total samples = 4.95s (108.88%)
+Showing nodes accounting for 4.52s, 91.31% of 4.95s total
+Dropped 121 nodes (cum <= 0.02s)
+Showing top 20 nodes out of 98
+      flat  flat%   sum%        cum   cum%
+     1.63s 32.93% 32.93%      1.63s 32.93%  internal/runtime/syscall/linux.Syscall6
+     1.57s 31.72% 64.65%      1.57s 31.72%  runtime._ExternalCode
+     0.25s  5.05% 69.70%      0.30s  6.06%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*callEngine).callWithStack
+     0.11s  2.22% 71.92%      0.59s 11.92%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*moduleEngine).FunctionInstanceReference
+     0.10s  2.02% 73.94%      0.15s  3.03%  github.com/tetratelabs/wazero/internal/leb128.decodeInt32
+     0.10s  2.02% 75.96%      0.12s  2.42%  runtime.(*mspan).writeHeapBitsSmall
+     0.10s  2.02% 77.98%      0.31s  6.26%  runtime.mallocgcSmallScanNoHeader
+     0.08s  1.62% 79.60%      0.08s  1.62%  github.com/tetratelabs/wazero/internal/engine/wazevo/backend/isa/amd64.afterGoFunctionCallEntrypoint
+     0.07s  1.41% 81.01%      0.07s  1.41%  runtime.memclrNoHeapPointers
+     0.07s  1.41% 82.42%      0.07s  1.41%  runtime.memmove
+     0.07s  1.41% 83.84%      0.10s  2.02%  runtime.tryDeferToSpanScan
+     0.06s  1.21% 85.05%      0.06s  1.21%  runtime.findObject
+     0.05s  1.01% 86.06%      0.05s  1.01%  github.com/tetratelabs/wazero/internal/leb128.LoadInt32.func1
+     0.05s  1.01% 87.07%      0.05s  1.01%  runtime.madvise
+     0.04s  0.81% 87.88%      0.21s  4.24%  github.com/tetratelabs/wazero/internal/wasm.(*ModuleInstance).applyData
+     0.04s  0.81% 88.69%      0.63s 12.73%  github.com/tetratelabs/wazero/internal/wasm.(*ModuleInstance).applyElements
+     0.04s  0.81% 89.49%      0.20s  4.04%  runtime.scanObject
+     0.03s  0.61% 90.10%      0.03s  0.61%  github.com/tetratelabs/wazero/internal/wasm.(*ModuleInstance).FailIfClosed
+     0.03s  0.61% 90.71%      0.03s  0.61%  internal/runtime/atomic.(*Uint32).Add
+     0.03s  0.61% 91.31%      0.03s  0.61%  runtime.futex

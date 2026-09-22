@@ -40,6 +40,9 @@ for the execution model and build commands.
 
 ## Performance and scheduling
 
+- [`cow-data-image.md`](cow-data-image.md) — opt-in COW data images, measured speedups, one-time guard cost and memory tradeoffs.
+- [`roadmap.md`](roadmap.md) — current approved work and delivery status.
+
 - [`performance-dissection.md`](performance-dissection.md) — opt-in phase timing, CPU/allocation profiling and measured warm-path hotspots.
 
 - [`linux-density-study.md`](linux-density-study.md) — same-limit Linux throughput and sampled memory comparison for Inline versus ExternalIO, with raw data and reproduction commands.

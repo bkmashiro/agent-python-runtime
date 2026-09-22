@@ -20,6 +20,16 @@ Retained sealed-image allocation increased from **128 MiB to 151.41 MiB** (one e
 
 Raw [per-process summaries](performance-data/cow-data-image-292705/summary.jsonl), [environment](performance-data/cow-data-image-292705/environment.json), request rows and phase files live under `performance-data/cow-data-image-292705/`. [Verification output](performance-data/cow-data-image-292705/verification.txt) includes the final guard, isolation, timeout and deterministic NumPy/replay tests plus the one-time scan benchmark. Earlier failed measurement-script batches are excluded. `tools/run-cow-data-image.py` reproduces the paired workload matrix within an existing allocation.
 
+## Follow-up: optimized-path memory and hotspots
+
+A bounded Linux follow-up profiled the optimized Python, immediate-Tool and durable paths. Large-copy `memmove` fell from about 72% to 1.4% of sampled CPU. Remaining Go allocation is mainly wazero's instance-bound function references, data-instance slices, tables and call stacks. The runtime/API fraction must be distinguished from benchmark `/proc` reads and unattributed Wasm/native execution; see [Python CPU](performance-data/cow-followup-292709/python-cpu.txt), [allocations](performance-data/cow-followup-292709/python-alloc.txt) and [durable CPU](performance-data/cow-followup-292709/durable-cpu.txt).
+
+A separate diagnostic probe constructed each variant, ran 200 short requests, observed memory, explicitly forced collection/scavenging **only for diagnosis**, and closed the Runner. For data-image execution, about 467 MB of the Go heap was idle after the batch while only about 5 MB had been released. After diagnostic collection, live Go heap was 51.9 MB (versus 76.2 MB for baseline) and process PSS fell from about 577 MiB to 114 MiB. Both modes returned near their initial live heap after close. The probe ran the two arms sequentially in one process and is not a randomized memory benchmark or a promise of production steady-state RSS. Its `special` mapping group includes Linux named anonymous Go mappings, not just the stack. It does not count unmapped sealed-file pages.
+
+This evidence explains the large sampled process-memory excess as reclaimable Go heap rather than an observed Guest-mapping leak. The extra 23.41 MiB sealed seed remains real. No per-request GC, GC tuning, shared mutable instance objects or engine fork was added. Neither proposed follow-up justified another runtime optimization within this goal: removing repeated creation of instance-bound engine objects would require more invasive changes; a small release-function cache would address only a minor remaining cost. Keep the measured optimization and stop rather than accumulating speculative caches.
+
+The [probe output](performance-data/cow-followup-292709/memory-probe.txt) and [standalone probe source](performance-data/cow-followup-292709/memory_probe.go.txt) are retained. Copy the latter into the root package as a temporary `_test.go`, cross-compile it and run `TestP3MemoryProbe` on Linux against the same artifact to reproduce the diagnosis. Raw binary profiles remain local under `.hermes/artifacts/pysolate-performance/292709`, outside Git.
+
 ## Usage
 
 ```go

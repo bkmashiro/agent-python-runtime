@@ -1,0 +1,29 @@
+package pysolate
+
+import("context";"encoding/json";"fmt";"os";"runtime";"runtime/debug";"strconv";"strings";"testing")
+
+func TestP3MemoryProbe(t *testing.T){
+ wasm,err:=readGuestArtifact();if err!=nil{t.Fatal(err)}
+ for _,enable:=range []bool{false,true}{t.Run(fmt.Sprint(enable),func(t *testing.T){
+  snapshot:=func(phase string){
+   var ms runtime.MemStats;runtime.ReadMemStats(&ms)
+   raw,err:=os.ReadFile("/proc/self/smaps");if err!=nil{t.Fatal(err)}
+   groups:=map[string]int64{}; group:="other"
+   for _,line:=range strings.Split(string(raw),"\n"){
+    f:=strings.Fields(line);if len(f)>=5 && strings.Contains(f[0],"-"){
+     group="anonymous";if len(f)>5{group="file";if strings.Contains(line,"memfd:"){group="memfd"}else if strings.HasPrefix(f[5],"["){group="special"}}
+    }else if len(f)>1&&f[0]=="Pss:"{v,_:=strconv.ParseInt(f[1],10,64);groups[group]+=v}
+   }
+   b,_:=json.Marshal(map[string]any{"data_image":enable,"phase":phase,"pss_kib":groups,"heap_alloc":ms.HeapAlloc,"heap_inuse":ms.HeapInuse,"heap_idle":ms.HeapIdle,"heap_released":ms.HeapReleased,"heap_sys":ms.HeapSys,"num_gc":ms.NumGC});fmt.Println(string(b))
+  }
+  snapshot("before")
+  r,err:=NewPreparedCOW(context.Background(),wasm,nil,COWOptions{DataImage:enable});if err!=nil{t.Fatal(err)}
+  snapshot("constructed")
+  for i:=0;i<200;i++{o,e:=r.Run(context.Background(),"result=sum(range(1000))",nil);if e!=nil||string(o.Value)!="499500"{t.Fatalf("%s %v",o.Value,e)}}
+  snapshot("200-runs")
+  // Diagnostic only: determine reclaimable heap versus retained mappings.
+  debug.FreeOSMemory();snapshot("after-diagnostic-gc")
+  if err:=r.Close(context.Background());err!=nil{t.Fatal(err)}
+  debug.FreeOSMemory();snapshot("closed")
+ })}
+}

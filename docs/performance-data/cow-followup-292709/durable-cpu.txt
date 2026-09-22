@@ -1,0 +1,29 @@
+File: pysolate-data-image-bench
+Build ID: 245a0902f4eab28a810be26864a3102b1086bbe8
+Type: cpu
+Time: 2026-09-23 00:49:18 CST
+Duration: 6.12s, Total samples = 6.80s (111.02%)
+Showing nodes accounting for 5.98s, 87.94% of 6.80s total
+Dropped 220 nodes (cum <= 0.03s)
+Showing top 20 nodes out of 175
+      flat  flat%   sum%        cum   cum%
+     2.37s 34.85% 34.85%      2.37s 34.85%  runtime._ExternalCode
+     2.23s 32.79% 67.65%      2.23s 32.79%  internal/runtime/syscall/linux.Syscall6
+     0.17s  2.50% 70.15%      0.33s  4.85%  runtime.mallocgcSmallScanNoHeader
+     0.14s  2.06% 72.21%      0.54s  7.94%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*callEngine).callWithStack
+     0.13s  1.91% 74.12%      0.13s  1.91%  runtime.memclrNoHeapPointers
+     0.11s  1.62% 75.74%      0.11s  1.62%  runtime.futex
+     0.11s  1.62% 77.35%      0.11s  1.62%  runtime.usleep
+     0.09s  1.32% 78.68%      0.09s  1.32%  runtime.madvise
+     0.09s  1.32% 80.00%      0.11s  1.62%  runtime.tryDeferToSpanScan
+     0.08s  1.18% 81.18%      0.14s  2.06%  github.com/tetratelabs/wazero/internal/leb128.decodeInt32
+     0.08s  1.18% 82.35%      0.31s  4.56%  github.com/tetratelabs/wazero/internal/wasm.(*ModuleInstance).applyData
+     0.08s  1.18% 83.53%      0.08s  1.18%  runtime.memmove
+     0.07s  1.03% 84.56%      0.56s  8.24%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*moduleEngine).FunctionInstanceReference
+     0.06s  0.88% 85.44%      0.06s  0.88%  github.com/tetratelabs/wazero/internal/leb128.LoadInt32.func1
+     0.04s  0.59% 86.03%      0.04s  0.59%  runtime.acquirem (inline)
+     0.04s  0.59% 86.62%      0.05s  0.74%  runtime.typePointers.next
+     0.03s  0.44% 87.06%      0.04s  0.59%  runtime.(*mspan).writeHeapBitsSmall
+     0.02s  0.29% 87.35%      0.18s  2.65%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*callEngine).CallWithStack
+     0.02s  0.29% 87.65%      0.17s  2.50%  github.com/tetratelabs/wazero/internal/wasm.executeConstExpressionI32
+     0.02s  0.29% 87.94%      0.51s  7.50%  runtime.mallocgc

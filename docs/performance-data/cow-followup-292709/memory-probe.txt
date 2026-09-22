@@ -1,0 +1,17 @@
+=== RUN   TestP3MemoryProbe
+=== RUN   TestP3MemoryProbe/false
+{"data_image":false,"heap_alloc":34911552,"heap_idle":10412032,"heap_inuse":35430400,"heap_released":10338304,"heap_sys":45842432,"num_gc":1,"phase":"before","pss_kib":{"anonymous":88,"file":4556,"special":35208}}
+{"data_image":false,"heap_alloc":368752848,"heap_idle":5570560,"heap_inuse":371359744,"heap_released":5570560,"heap_sys":376930304,"num_gc":4,"phase":"constructed","pss_kib":{"anonymous":49016,"file":6000,"special":367548}}
+{"data_image":false,"heap_alloc":120507968,"heap_idle":300433408,"heap_inuse":122667008,"heap_released":186916864,"heap_sys":423100416,"num_gc":7,"phase":"200-runs","pss_kib":{"anonymous":49016,"file":6012,"special":238512}}
+{"data_image":false,"heap_alloc":76233272,"heap_idle":345251840,"heap_inuse":77881344,"heap_released":344604672,"heap_sys":423133184,"num_gc":8,"phase":"after-diagnostic-gc","pss_kib":{"anonymous":49016,"file":6012,"special":84636}}
+{"data_image":false,"heap_alloc":34878936,"heap_idle":387579904,"heap_inuse":35553280,"heap_released":387186688,"heap_sys":423133184,"num_gc":9,"phase":"closed","pss_kib":{"anonymous":88,"file":6012,"special":43196}}
+=== RUN   TestP3MemoryProbe/true
+{"data_image":true,"heap_alloc":35280464,"heap_idle":386998272,"heap_inuse":36134912,"heap_released":386875392,"heap_sys":423133184,"num_gc":9,"phase":"before","pss_kib":{"anonymous":88,"file":6040,"special":43444}}
+{"data_image":true,"heap_alloc":340987448,"heap_idle":78938112,"heap_inuse":343932928,"heap_released":78938112,"heap_sys":422871040,"num_gc":13,"phase":"constructed","pss_kib":{"anonymous":49020,"file":6080,"special":343048}}
+{"data_image":true,"heap_alloc":84462744,"heap_idle":466812928,"heap_inuse":86212608,"heap_released":4857856,"heap_sys":553025536,"num_gc":14,"phase":"200-runs","pss_kib":{"anonymous":49020,"file":6080,"special":535420}}
+{"data_image":true,"heap_alloc":51857720,"heap_idle":499875840,"heap_inuse":53215232,"heap_released":499646464,"heap_sys":553091072,"num_gc":15,"phase":"after-diagnostic-gc","pss_kib":{"anonymous":49020,"file":6080,"special":62052}}
+{"data_image":true,"heap_alloc":34879168,"heap_idle":517562368,"heap_inuse":35561472,"heap_released":517373952,"heap_sys":553123840,"num_gc":16,"phase":"closed","pss_kib":{"anonymous":128,"file":6080,"special":44768}}
+--- PASS: TestP3MemoryProbe (17.79s)
+    --- PASS: TestP3MemoryProbe/false (10.30s)
+    --- PASS: TestP3MemoryProbe/true (7.42s)
+PASS

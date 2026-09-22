@@ -1,0 +1,23 @@
+File: pysolate-data-image-bench
+Build ID: 245a0902f4eab28a810be26864a3102b1086bbe8
+Type: alloc_space
+Time: 2026-09-23 00:49:09 CST
+Showing nodes accounting for 378.82MB, 98.77% of 383.55MB total
+Dropped 37 nodes (cum <= 1.92MB)
+Showing top 15 nodes out of 25
+      flat  flat%   sum%        cum   cum%
+  237.36MB 61.89% 61.89%   237.36MB 61.89%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*moduleEngine).FunctionInstanceReference
+   68.89MB 17.96% 79.85%    68.89MB 17.96%  github.com/tetratelabs/wazero/internal/wasm.(*ModuleInstance).applyData
+   30.94MB  8.07% 87.91%    30.94MB  8.07%  github.com/tetratelabs/wazero/internal/wasm.(*ModuleInstance).buildTables
+   22.98MB  5.99% 93.91%    22.98MB  5.99%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*callEngine).cloneStack
+   14.14MB  3.69% 97.59%    14.14MB  3.69%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*callEngine).init
+    4.51MB  1.17% 98.77%    18.64MB  4.86%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*moduleEngine).NewFunction
+         0     0% 98.77%   380.82MB 99.29%  github.com/bkmashiro/agent-python-runtime.(*Runner).Run
+         0     0% 98.77%   342.21MB 89.22%  github.com/bkmashiro/agent-python-runtime.(*Runner).newGuest
+         0     0% 98.77%   380.82MB 99.29%  github.com/bkmashiro/agent-python-runtime.(*Runner).run
+         0     0% 98.77%    34.58MB  9.02%  github.com/bkmashiro/agent-python-runtime.callWithBytes
+         0     0% 98.77%    38.61MB 10.07%  github.com/bkmashiro/agent-python-runtime.executeGuest
+         0     0% 98.77%     4.03MB  1.05%  github.com/bkmashiro/agent-python-runtime.readGuestResponse
+         0     0% 98.77%   338.20MB 88.18%  github.com/tetratelabs/wazero.(*runtime).InstantiateModule
+         0     0% 98.77%    23.98MB  6.25%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*callEngine).Call
+         0     0% 98.77%    23.98MB  6.25%  github.com/tetratelabs/wazero/internal/engine/wazevo.(*callEngine).callWithStack

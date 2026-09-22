@@ -23,6 +23,9 @@ A concise product statement is:
 > replays recorded outcomes automatically. Recovery semantics are declared once
 > by the Tool provider, not repeated in every workflow.
 
+The broader ownership split is documented in
+[`runtime-harness-boundary.md`](runtime-harness-boundary.md).
+
 ## Contrast with workflow-first systems
 
 Temporal requires developers to define Workflow code and move external I/O into

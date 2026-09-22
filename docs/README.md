@@ -20,6 +20,9 @@ for the execution model and build commands.
   ordinary Python does not need a workflow DSL, how Tool declarations define
   reusable effect boundaries, the Temporal comparison, and the limits of
   automatic recovery.
+- [`runtime-harness-boundary.md`](runtime-harness-boundary.md) — the ownership
+  split between isolated execution, replay and local resource lifecycle in
+  Pysolate versus goals, model turns, events and global policy in the harness.
 - [`service.md`](service.md) — the long-running local HTTP service, hot
   prepared execution, workspace endpoints, admission behavior, and benchmark.
 - [`corpus-replay.md`](corpus-replay.md) — deterministic HumanEval/BFCL

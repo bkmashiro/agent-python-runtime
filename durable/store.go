@@ -336,8 +336,17 @@ func (s *Store) BeginCall(ctx context.Context, runID string, call LoggedCall) (C
 	if err == nil {
 		record.RunID, record.Sequence = runID, call.Sequence
 		record.Arguments, record.Outcome = cloneRaw(args), cloneRaw(outcome)
-		if record.CallID != call.CallID || record.Tool != call.Capability || !bytes.Equal(record.Arguments, call.Arguments) {
-			return Call{}, false, ErrHistoryMismatch
+		if record.CallID != call.CallID {
+			return Call{}, false, historyMismatch(runID, call.Sequence, HistoryMismatchCallID)
+		}
+		if record.Tool != call.Capability {
+			return Call{}, false, historyMismatch(runID, call.Sequence, HistoryMismatchCapability)
+		}
+		if record.OperationKey != operationKey(runID, call.Sequence) {
+			return Call{}, false, historyMismatch(runID, call.Sequence, HistoryMismatchOperationKey)
+		}
+		if !bytes.Equal(record.Arguments, call.Arguments) {
+			return Call{}, false, historyMismatch(runID, call.Sequence, HistoryMismatchArguments)
 		}
 		if (record.State == CallPending || record.State == CallWaiting) && (terminalStatus(status) || status == StatusBlocked) {
 			return Call{}, false, ErrConflict
@@ -355,7 +364,7 @@ func (s *Store) BeginCall(ctx context.Context, runID string, call LoggedCall) (C
 		return Call{}, false, err
 	}
 	if count != uint64(call.Sequence) {
-		return Call{}, false, ErrHistoryMismatch
+		return Call{}, false, historyMismatch(runID, call.Sequence, HistoryMismatchSequence)
 	}
 	opKey := operationKey(runID, call.Sequence)
 	current, err := payloadSizeTx(ctx, tx, runID)
@@ -371,7 +380,7 @@ func (s *Store) BeginCall(ctx context.Context, runID string, call LoggedCall) (C
 		call.Capability, opKey, CallPending, rawBytes(call.Arguments))
 	if err != nil {
 		if isConstraint(err) {
-			return Call{}, false, ErrHistoryMismatch
+			return Call{}, false, historyMismatch(runID, call.Sequence, HistoryMismatchSequence)
 		}
 		return Call{}, false, err
 	}
@@ -482,7 +491,7 @@ func (s *Store) EnsureWait(ctx context.Context, runID string, sequence uint32, s
 		rawBytes(spec.Request), deadline)
 	if err != nil {
 		if isConstraint(err) {
-			return Wait{}, ErrHistoryMismatch
+			return Wait{}, historyMismatch(runID, sequence, HistoryMismatchSequence)
 		}
 		return Wait{}, err
 	}
@@ -782,7 +791,7 @@ func (s *Store) hasCall(ctx context.Context, runID string, sequence uint32) (boo
 // readCompleted reads a small immutable prefix window, not a mutable Store cache.
 // A pending row stops read-ahead so its state is observed by BeginCall normally.
 func (s *Store) readCompleted(ctx context.Context, runID string, from uint32) ([]Call, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT sequence,call_id,tool,state,arguments,outcome FROM calls
+	rows, err := s.db.QueryContext(ctx, `SELECT sequence,call_id,tool,operation_key,state,arguments,outcome FROM calls
  WHERE run_id=? AND sequence>=? ORDER BY sequence LIMIT 64`, runID, from)
 	if err != nil {
 		return nil, err
@@ -793,13 +802,13 @@ func (s *Store) readCompleted(ctx context.Context, runID string, from uint32) ([
 	for rows.Next() {
 		var call Call
 		var args, outcome []byte
-		if err := rows.Scan(&call.Sequence, &call.CallID, &call.Tool, &call.State, &args, &outcome); err != nil {
+		if err := rows.Scan(&call.Sequence, &call.CallID, &call.Tool, &call.OperationKey, &call.State, &args, &outcome); err != nil {
 			return nil, err
 		}
 		if call.Sequence != from+uint32(len(calls)) || call.State != CallCompleted {
 			break
 		}
-		call.Arguments, call.Outcome = args, outcome
+		call.RunID, call.Arguments, call.Outcome = runID, cloneRaw(args), cloneRaw(outcome)
 		calls = append(calls, call)
 		size += len(args) + len(outcome)
 		if size >= 1<<20 {

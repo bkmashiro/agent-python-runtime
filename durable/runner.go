@@ -598,8 +598,20 @@ func (journal *journal) Call(ctx context.Context, tool string, args json.RawMess
 			record := journal.history[0]
 			journal.history[0] = Call{}
 			journal.history = journal.history[1:]
-			if record.CallID != logged.CallID || record.Tool != tool || !bytes.Equal(record.Arguments, args) {
-				return nil, ErrHistoryMismatch
+			if record.Sequence != sequence {
+				return nil, historyMismatch(journal.runID, sequence, HistoryMismatchSequence)
+			}
+			if record.CallID != logged.CallID {
+				return nil, historyMismatch(journal.runID, sequence, HistoryMismatchCallID)
+			}
+			if record.Tool != tool {
+				return nil, historyMismatch(journal.runID, sequence, HistoryMismatchCapability)
+			}
+			if !bytes.Equal(record.Arguments, args) {
+				return nil, historyMismatch(journal.runID, sequence, HistoryMismatchArguments)
+			}
+			if record.OperationKey != operationKey(journal.runID, sequence) {
+				return nil, historyMismatch(journal.runID, sequence, HistoryMismatchOperationKey)
 			}
 			return record.Outcome, nil
 		}

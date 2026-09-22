@@ -54,6 +54,40 @@ The contract does not make the whole service schedule deterministic:
 This separation is useful: deterministic *program-visible inputs and effects*
 make recovery correct, while wall-clock scheduling measurements remain honest.
 
+## Replay diagnostics
+
+The durable Host API exposes a read-only view of the existing `calls` journal;
+it does not add a trace table or a second source of truth. Pages are ordered by
+sequence and bounded to 32 records by default (64 maximum). Continue with the
+returned `NextSequence` when `HasMore` is true:
+
+```go
+page, err := runner.ReplayHistory(ctx, runID, durable.ReplayHistoryOptions{
+	Limit: 20,
+})
+// page.Calls[i] has Sequence, Capability, Version, State,
+// OperationKey and OutcomeClass.
+```
+
+Arguments and outcomes are omitted by default. A caller handling protected
+diagnostic access may request them explicitly with `IncludePayloads: true`;
+the bound still applies to the number of returned records, not to the size of
+one persisted payload. `OutcomeClass` is only a coarse `pending`, `success`,
+`error` or `unknown` classification.
+
+The journal records call identity, capability, operation key, state and
+outcome, but not the historical route that produced them. History therefore
+does not report whether a call was dispatched, replayed, looked up or waited;
+those distinctions are available only to a live observer at the time they are
+actually observed. The diagnostics API does not manufacture historic evidence.
+
+History mismatches retain `errors.Is(err, durable.ErrHistoryMismatch)` and now
+also expose a `*durable.HistoryMismatchError` with the run sequence and first
+mismatching field (`call_id`, `capability`, `operation_key`, `arguments`, or
+`sequence`). The error contains no expected or received arguments/results, so
+the default failure path does not leak tool payloads. Use a payload-enabled
+history page only when raw persisted data is explicitly authorized.
+
 ## Workload evidence
 
 The first `agent-workloads@v1` run on the current macOS host and artifact
@@ -71,31 +105,16 @@ performance question is repeated heavy-import reconstruction, while ordinary
 Python and replayed Tool calls are already small enough that adding a complex
 determinism mechanism would have little return.
 
-## Highest-value next features
+## Remaining highest-value next features
 
-### 1. Read-only replay transcript
-
-Expose an ordered, bounded Host API for one Run's Tool records: sequence,
-capability/version, arguments, state, operation key, outcome class and whether
-execution dispatched, replayed, looked up or waited. This would make divergence
-and recovery auditable without opening SQLite directly. It should not include a
-new hash protocol or become another source of truth.
-
-### 2. Structured divergence details
-
-Return a typed blocked reason with the sequence and which field differed
-(call identity, capability or arguments). Keep raw payload inclusion opt-in so
-errors do not accidentally leak sensitive Tool arguments. This is more useful
-than the current generic `durable history mismatch` message.
-
-### 3. Determinism coverage in the workload pack
+### 1. Determinism coverage in the workload pack
 
 Repeat a bounded subset with the same seed in separate processes and compare
 exact JSON output and Tool transcript. Then rerun with another seed and require
 only declared entropy-dependent fields to change. Keep load/admission timing out
 of this oracle.
 
-### 4. Investigate NumPy reconstruction only if common
+### 2. Investigate NumPy reconstruction only if common
 
 The fixed pack observed a multi-second NumPy case while normal cases were
 single-digit milliseconds. Before adding snapshots or package-specific policy,
@@ -113,5 +132,5 @@ reviving prefix/PLM heuristics.
 - additional prefix/PLM branches for replay.
 
 The current replay boundary is strong because it stays small: deterministic
-Guest inputs plus explicit Host effects. The next implementation should improve
-visibility into that boundary before broadening it.
+Guest inputs plus explicit Host effects. Future changes should preserve that
+boundary and the diagnostics limits before broadening it.

@@ -34,6 +34,9 @@ for the execution model and build commands.
   adapters and exact Tool-result replay without an LLM in the timed loop.
 - [`workload-pack.md`](workload-pack.md) — 20 frozen common Agent Python/Tool
   cases plus workspace, real MCP and process-recovery acceptance lanes.
+- [`fullcode-tool-overlap.md`](fullcode-tool-overlap.md) — a deliberately small
+  complete-source optimization for overlapping independent Host reads, with a
+  real-Guest controlled-delay demo and explicit exclusions.
 
 ## Performance and scheduling
 
@@ -137,7 +140,8 @@ The scripts under [`../demos/`](../demos/) provide presentation-ready paths:
 - `13` process-kill durable recovery with an idempotent Host effect.
 - `14` the complete fixed Agent workload pack.
 - `15` deterministic randomness/clock/Tool replay conformance.
+- `16` full-code overlap of independent read-only Host calls.
 
 `demos/run-all.sh` runs the short product demonstrations (`01`–`05`). The
-measurement-oriented `06`–`10` scripts and dependency-oriented demos `11`–`15`
+measurement-oriented `06`–`10` scripts and dependency-oriented demos `11`–`16`
 remain explicit so setup time is not hidden inside the short demo suite.

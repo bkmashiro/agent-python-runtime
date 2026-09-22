@@ -175,6 +175,7 @@ For presentation-ready end-to-end examples, use the scripts under [`demos/`](dem
 ./demos/13-durable-restart.sh
 ./demos/14-agent-workloads.sh
 ./demos/15-deterministic-replay.sh
+./demos/16-fullcode-overlap.sh
 # Or run all demos:
 ./demos/run-all.sh
 ```
@@ -221,6 +222,11 @@ real workspace, MCP stdio and durable process-restart acceptance. See the
 processes, then checks completed Tool-outcome replay and prepared seed state.
 The [determinism contract and next replay features](docs/deterministic-execution-and-replay.md)
 separate program-visible replay guarantees from real scheduling variance.
+
+For a small complete-source latency example, `./demos/16-fullcode-overlap.sh`
+compares ordinary execution with overlapping two independent, explicitly
+opted-in Host reads. It uses controlled delays and does not rely on prefix
+streaming; see [the scope and exclusions](docs/fullcode-tool-overlap.md).
 
 ### Long-running service
 

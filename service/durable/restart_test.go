@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -31,7 +32,11 @@ func TestDurableServiceRestartHelper(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	runner, err := durable.NewRunner(ctx, store, restartGuest(t), "service-restart-v1", restartTools(t, directory, hold))
+	var preparation []durable.Preparation
+	if os.Getenv("PYSOLATE_TEST_COW_DATA_IMAGE") == "1" {
+		preparation = []durable.Preparation{{Seed: "restart-seed", COW: true, COWDataImage: true}}
+	}
+	runner, err := durable.NewRunner(ctx, store, restartGuest(t), "service-restart-v1", restartTools(t, directory, hold), preparation...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,6 +57,13 @@ func TestDurableServiceRestartHelper(t *testing.T) {
 }
 
 func TestHTTPServiceRecoversAfterRealProcessKill(t *testing.T) {
+	t.Run("default", testHTTPServiceRecovery)
+	if runtime.GOOS == "linux" {
+		t.Run("cow-data-image", func(t *testing.T) { t.Setenv("PYSOLATE_TEST_COW_DATA_IMAGE", "1"); testHTTPServiceRecovery(t) })
+	}
+}
+
+func testHTTPServiceRecovery(t *testing.T) {
 	directory := t.TempDir()
 	first := startDurableServiceChild(t, directory, true)
 	defer first.stop()
@@ -97,6 +109,21 @@ func TestHTTPServiceRecoversAfterRealProcessKill(t *testing.T) {
 		t.Fatalf("get status=%d body=%#v", status, run)
 	}
 
+	status, history := durableRequest(t, http.DefaultClient, http.MethodGet, second.url+"/v1/durable/runs/restart-run/history?limit=1", nil)
+	calls, ok := history["calls"].([]any)
+	if status != http.StatusOK || !ok || len(calls) != 1 {
+		t.Fatalf("history status=%d body=%#v", status, history)
+	}
+	encoded, _ := json.Marshal(history)
+	for _, forbidden := range []string{`"arguments"`, `"outcome"`, `"operation_key"`, `"call_id"`} {
+		if bytes.Contains(encoded, []byte(forbidden)) {
+			t.Fatalf("history leaked %s: %s", forbidden, encoded)
+		}
+	}
+	call, ok := calls[0].(map[string]any)
+	if !ok || call["state"] != durable.CallCompleted {
+		t.Fatalf("unexpected history call: %#v", calls[0])
+	}
 	db := restartProviderDB(t, directory)
 	var requests, effects int
 	if err := db.QueryRow("SELECT (SELECT count(*) FROM requests),(SELECT count(*) FROM effects)").Scan(&requests, &effects); err != nil {

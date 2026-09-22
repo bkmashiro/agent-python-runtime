@@ -4,16 +4,16 @@ Approved goal: make existing execution capabilities easy to explain and use; fin
 
 ## Current pointer
 
-**P1 — product story and core demo clarity.** P0 is complete. P2 implementation may proceed independently, but integration/claims remain gated on real validation.
+**Complete.** P0–P4 met the approved scope. No additional autonomous work is scheduled.
 
 ## Outcomes
 
-- [x] P0: COW data-image opt-in, admission checks, Linux isolation/replay/workspace validation, paired performance results and explicit memory tradeoff. See [cow-data-image.md](cow-data-image.md). Runtime API median gains: 6.14× short Python, 7.45× immediate Tool, 4.67× durable completion. Default unchanged; process memory still warrants investigation.
+- [x] P0: COW data-image opt-in, admission checks, Linux isolation/replay/workspace validation, paired performance results and explicit memory tradeoff. See [cow-data-image.md](cow-data-image.md). Runtime API median gains: 6.14× short Python, 7.45× immediate Tool, 4.67× durable completion. Default unchanged; the follow-up identifies reclaimable Go heap and records the retained seed cost.
 - [x] P1: README now leads with practical Python and four clear capability groups plus measured evidence. Five existing core demos include safe early reads; workspace and replay remain separate. Real `run-core.sh` passed.
-- [ ] P2a: explicit data-image flag across ordinary/workspace/durable service constructors and CLIs; invalid combinations reject. Linux HTTP acceptance and limited service A/B.
-- [ ] P2b: read-only `/v1/durable/runs/{id}/history`, reusing pagination. Exclude payloads and operation keys, preserve not-found/error handling and service trust boundary.
+- [x] P2a: explicit data-image options and CLI flags; Linux default/optimized HTTP acceptance and both real CLI probes passed. Six-process loopback comparison completed 600 successful requests; see `service.md`.
+- [x] P2b: read-only paginated history with payload/key exclusion and generic internal errors. Real kill/restart reads history after recovery; malformed pagination, missing runs and seed enforcement covered.
 - [x] P3: profiled optimized Python/Tool/durable execution and diagnosed elevated PSS as reclaimable Go heap, not an observed mapping leak. No additional runtime change justified: per-request GC rejected; instance-bound engine-object sharing deferred. See the follow-up in `cow-data-image.md`.
-- [ ] P4: align docs and final numbers, run affected real paths and relevant broad gate, signed commits/push with remote verification, clean worktree, stop.
+- [x] P4: docs and evidence aligned; real five-step core demo, Linux service/recovery acceptance, `make check`, targeted history race and link checks passed. Deliver final signed commit and verify remote HEAD, then stop.
 
 ## Execution constraints
 

@@ -35,6 +35,12 @@ type Server struct {
 	closed bool
 }
 
+// Options controls service-level execution choices. The zero value preserves
+// the existing prepared COW path; data-image sharing is deliberately opt-in.
+type Options struct {
+	COWDataImage bool
+}
+
 type createRequest struct {
 	Files []workspacepkg.InitialFile `json:"files"`
 }
@@ -56,16 +62,27 @@ type runResponse struct {
 	Error       string                      `json:"error,omitempty"`
 }
 
-func New(ctx context.Context, wasm []byte, manifest pysolate.Manifest, manager *workspacepkg.Manager, maxActive int) (*Server, error) {
+func New(ctx context.Context, wasm []byte, manifest pysolate.Manifest, manager *workspacepkg.Manager, maxActive int, options ...Options) (*Server, error) {
 	if manager == nil || maxActive < 1 || maxActive > 64 {
 		return nil, errors.New("invalid service configuration")
+	}
+	if len(options) > 1 {
+		return nil, errors.New("service accepts at most one options value")
+	}
+	dataImage := len(options) == 1 && options[0].COWDataImage
+	if dataImage && runtime.GOOS != "linux" {
+		return nil, errors.New("COW data-image requires Linux")
 	}
 	cache := wazero.NewCompilationCache()
 	ctx = pysolate.WithCompilationCache(ctx, cache)
 	var plain, withWorkspace *pysolate.Runner
 	var err error
 	if runtime.GOOS == "linux" {
-		plain, err = pysolate.NewPreparedCOW(ctx, wasm, manifest)
+		if dataImage {
+			plain, err = pysolate.NewPreparedCOW(ctx, wasm, manifest, pysolate.COWOptions{DataImage: true})
+		} else {
+			plain, err = pysolate.NewPreparedCOW(ctx, wasm, manifest)
+		}
 	} else {
 		plain, err = pysolate.NewPrepared(ctx, wasm, manifest)
 	}
@@ -74,7 +91,11 @@ func New(ctx context.Context, wasm []byte, manifest pysolate.Manifest, manager *
 		return nil, err
 	}
 	if runtime.GOOS == "linux" {
-		withWorkspace, err = pysolate.NewPreparedWorkspaceCOW(ctx, wasm, manifest)
+		if dataImage {
+			withWorkspace, err = pysolate.NewPreparedWorkspaceCOWWithOptions(ctx, wasm, manifest, pysolate.COWOptions{DataImage: true})
+		} else {
+			withWorkspace, err = pysolate.NewPreparedWorkspaceCOW(ctx, wasm, manifest)
+		}
 	} else {
 		withWorkspace, err = pysolate.NewPreparedWorkspace(ctx, wasm, manifest)
 	}

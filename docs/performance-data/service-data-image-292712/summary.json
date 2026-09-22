@@ -1,0 +1,45 @@
+{
+  "processes": 6,
+  "requests": 600,
+  "all_measured_status_200": true,
+  "conditions": [
+    {
+      "mode": "plain",
+      "arms": {
+        "False": {
+          "e2e_p50_ns": 25359368,
+          "e2e_p95_ns": 29044431
+        },
+        "True": {
+          "e2e_p50_ns": 6015158,
+          "e2e_p95_ns": 6326497
+        }
+      },
+      "paired_p50_speedup_median": 4.215910538010806,
+      "paired_p50_speedups": [
+        4.580882108719978,
+        4.215910538010806,
+        3.7006284850900895
+      ]
+    },
+    {
+      "mode": "workspace",
+      "arms": {
+        "False": {
+          "e2e_p50_ns": 26466873,
+          "e2e_p95_ns": 30596512
+        },
+        "True": {
+          "e2e_p50_ns": 7567731,
+          "e2e_p95_ns": 8139652
+        }
+      },
+      "paired_p50_speedup_median": 3.403642534999649,
+      "paired_p50_speedups": [
+        3.6072141084767146,
+        3.368981931308076,
+        3.403642534999649
+      ]
+    }
+  ]
+}

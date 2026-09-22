@@ -8,6 +8,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -26,10 +28,22 @@ type Runtime interface {
 	Decide(context.Context, string, durable.Decision) error
 }
 
+type historyReader interface {
+	ReplayHistory(context.Context, string, durable.ReplayHistoryOptions) (durable.ReplayHistoryPage, error)
+}
+
+// Options contains service-side contracts for an optionally prepared Runner.
+// PreparationSeed is enforced at create time so a prepared COW Runner cannot
+// accept a run that it will reject only after an attempt starts.
+type Options struct {
+	PreparationSeed string
+}
+
 type Server struct {
 	runtime            Runtime
 	executor           *durable.Executor
 	environmentVersion string
+	preparationSeed    string
 
 	mu     sync.Mutex
 	closed bool
@@ -64,15 +78,36 @@ type attemptResponse struct {
 	Failure     *durable.Failure `json:"failure,omitempty"`
 }
 
-func New(runtime Runtime, environmentVersion string, limits durable.Limits) (*Server, error) {
+type historyResponse struct {
+	Calls        []historyCallResponse `json:"calls"`
+	NextSequence uint32                `json:"next_sequence,omitempty"`
+	HasMore      bool                  `json:"has_more"`
+}
+
+type historyCallResponse struct {
+	Sequence     uint32               `json:"sequence"`
+	Tool         string               `json:"tool"`
+	Version      string               `json:"version,omitempty"`
+	State        string               `json:"state"`
+	OutcomeClass durable.OutcomeClass `json:"outcome_class"`
+}
+
+func New(runtime Runtime, environmentVersion string, limits durable.Limits, options ...Options) (*Server, error) {
 	if runtime == nil || runtime.ArtifactID() == "" || environmentVersion == "" {
 		return nil, errors.New("invalid durable service configuration")
+	}
+	if len(options) > 1 || (len(options) == 1 && options[0].PreparationSeed == "") {
+		return nil, errors.New("invalid durable service options")
 	}
 	executor, err := durable.NewExecutor(runtime, limits)
 	if err != nil {
 		return nil, err
 	}
-	return &Server{runtime: runtime, executor: executor, environmentVersion: environmentVersion}, nil
+	preparationSeed := ""
+	if len(options) == 1 {
+		preparationSeed = options[0].PreparationSeed
+	}
+	return &Server{runtime: runtime, executor: executor, environmentVersion: environmentVersion, preparationSeed: preparationSeed}, nil
 }
 
 func (server *Server) Close(ctx context.Context) error {
@@ -115,6 +150,8 @@ func (server *Server) ServeHTTP(writer http.ResponseWriter, request *http.Reques
 			switch {
 			case len(parts) == 1 && request.Method == http.MethodGet:
 				server.handleGet(writer, request, parts[0])
+			case len(parts) == 2 && parts[1] == "history":
+				server.handleHistory(writer, request, parts[0])
 			case len(parts) == 2 && parts[1] == "attempts":
 				server.handleAttempt(writer, request, parts[0])
 			case len(parts) == 2 && parts[1] == "cancel":
@@ -142,6 +179,10 @@ func (server *Server) handleCreate(writer http.ResponseWriter, request *http.Req
 		writeError(writer, http.StatusBadRequest, "invalid durable run request")
 		return
 	}
+	if server.preparationSeed != "" && body.Seed != server.preparationSeed {
+		writeError(writer, http.StatusBadRequest, "seed does not match prepared runner")
+		return
+	}
 	if len(body.Inputs) == 0 {
 		body.Inputs = json.RawMessage(`{}`)
 	}
@@ -167,6 +208,72 @@ func (server *Server) handleGet(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	writeJSON(writer, http.StatusOK, responseForRun(run))
+}
+
+func (server *Server) handleHistory(writer http.ResponseWriter, request *http.Request, id string) {
+	if request.Method != http.MethodGet {
+		writeError(writer, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	reader, ok := server.runtime.(historyReader)
+	if !ok {
+		writeError(writer, http.StatusNotImplemented, "durable history is unavailable")
+		return
+	}
+	options, err := parseHistoryOptions(request)
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
+	page, err := reader.ReplayHistory(request.Context(), id, options)
+	if err != nil {
+		status := statusFor(err)
+		message := err.Error()
+		if status >= http.StatusInternalServerError {
+			message = "unable to read durable history"
+		}
+		writeError(writer, status, message)
+		return
+	}
+	response := historyResponse{Calls: make([]historyCallResponse, 0, len(page.Calls)), NextSequence: page.NextSequence, HasMore: page.HasMore}
+	for _, call := range page.Calls {
+		response.Calls = append(response.Calls, historyCallResponse{
+			Sequence: call.Sequence, Tool: call.Capability, Version: call.Version,
+			State: call.State, OutcomeClass: call.OutcomeClass,
+		})
+	}
+	writeJSON(writer, http.StatusOK, response)
+}
+
+func parseHistoryOptions(request *http.Request) (durable.ReplayHistoryOptions, error) {
+	query, err := url.ParseQuery(request.URL.RawQuery)
+	if err != nil {
+		return durable.ReplayHistoryOptions{}, errors.New("invalid history query")
+	}
+	from, err := parseHistoryUint(query, "from_sequence")
+	if err != nil {
+		return durable.ReplayHistoryOptions{}, err
+	}
+	limit, err := parseHistoryUint(query, "limit")
+	if err != nil {
+		return durable.ReplayHistoryOptions{}, err
+	}
+	return durable.ReplayHistoryOptions{FromSequence: uint32(from), Limit: uint32(limit)}, nil
+}
+
+func parseHistoryUint(query map[string][]string, name string) (uint64, error) {
+	values, present := query[name]
+	if !present {
+		return 0, nil
+	}
+	if len(values) != 1 || values[0] == "" {
+		return 0, errors.New("invalid " + name)
+	}
+	value, err := strconv.ParseUint(values[0], 10, 32)
+	if err != nil {
+		return 0, errors.New("invalid " + name)
+	}
+	return value, nil
 }
 
 func (server *Server) handleAttempt(writer http.ResponseWriter, request *http.Request, id string) {

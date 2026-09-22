@@ -28,6 +28,7 @@ import (
 
 type metadata struct {
 	Type           string `json:"type"`
+	COWDataImage   bool   `json:"cow_data_image"`
 	Artifact       string `json:"artifact"`
 	ArtifactSHA256 string `json:"artifact_sha256"`
 	ArtifactBytes  int    `json:"artifact_bytes"`
@@ -90,6 +91,7 @@ func run() error {
 	concurrencyFlag := flag.String("concurrency", "1,2,4", "comma-separated concurrent worker counts")
 	maxActive := flag.Int("max-active", 4, "service execution slots")
 	mode := flag.String("mode", "all", "plain, workspace, or all")
+	cowDataImage := flag.Bool("cow-data-image", false, "opt in to Linux COW data images")
 	flag.Parse()
 	if *iterations < 1 || *iterations > 10000 || *maxActive < 1 || *maxActive > 64 {
 		return errors.New("invalid iteration or max-active value")
@@ -139,7 +141,7 @@ func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	setupStarted := time.Now()
-	handler, err := service.New(ctx, wasm, manifest, manager, *maxActive)
+	handler, err := service.New(ctx, wasm, manifest, manager, *maxActive, service.Options{COWDataImage: *cowDataImage})
 	serviceSetupNS := time.Since(setupStarted).Nanoseconds()
 	if err != nil {
 		_ = manager.Close()
@@ -168,7 +170,7 @@ func run() error {
 
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(metadata{
+	if err := encoder.Encode(metadata{COWDataImage: *cowDataImage,
 		Type: "metadata", Artifact: *guest, ArtifactSHA256: hex.EncodeToString(digest[:]), ArtifactBytes: len(wasm),
 		GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, GoVersion: runtime.Version(), MaxActive: *maxActive,
 		Iterations: *iterations, ServiceSetupNS: serviceSetupNS, HTTPSetupNS: httpSetupNS,

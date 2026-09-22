@@ -9,12 +9,15 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
 	"github.com/bkmashiro/agent-python-runtime/durable"
 	durableservice "github.com/bkmashiro/agent-python-runtime/service/durable"
 )
+
+const durableServicePreparationSeed = "pysolate-durable-service-v1"
 
 func main() {
 	if err := run(); err != nil {
@@ -32,7 +35,15 @@ func run() error {
 	maxResident := flag.Int("max-resident", 4, "maximum live Guests including external I/O waits")
 	maxInflightTools := flag.Int("max-inflight-tools", 4, "maximum opted-in external Tool calls")
 	maxQueued := flag.Int("max-queued", 16, "maximum queued attempts")
+	cowDataImage := flag.Bool("cow-data-image", false, "opt in to the Linux COW data-image preparation path")
+	preparationSeed := flag.String("cow-data-image-seed", durableServicePreparationSeed, "seed required by runs when COW data-image is enabled")
 	flag.Parse()
+	if *cowDataImage && runtime.GOOS != "linux" {
+		return errors.New("COW data-image requires Linux")
+	}
+	if *cowDataImage && *preparationSeed == "" {
+		return errors.New("COW data-image seed must not be empty")
+	}
 
 	wasm, err := os.ReadFile(*guest)
 	if err != nil {
@@ -49,7 +60,13 @@ func run() error {
 	defer store.Close()
 	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancelStartup()
-	runner, err := durable.NewRunner(startupCtx, store, wasm, *environment, nil)
+	var preparation []durable.Preparation
+	var serviceOptions []durableservice.Options
+	if *cowDataImage {
+		preparation = []durable.Preparation{{Seed: *preparationSeed, COW: true, COWDataImage: true}}
+		serviceOptions = []durableservice.Options{{PreparationSeed: *preparationSeed}}
+	}
+	runner, err := durable.NewRunner(startupCtx, store, wasm, *environment, nil, preparation...)
 	if err != nil {
 		return err
 	}
@@ -57,7 +74,7 @@ func run() error {
 	handler, err := durableservice.New(runner, *environment, durable.Limits{
 		MaxRunning: *maxRunning, MaxResident: *maxResident,
 		MaxInflightTools: *maxInflightTools, MaxQueued: *maxQueued,
-	})
+	}, serviceOptions...)
 	if err != nil {
 		return err
 	}

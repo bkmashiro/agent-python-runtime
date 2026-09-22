@@ -17,6 +17,14 @@ Linux uses the private COW prepared-image backend. Other platforms use the full-
 
 The standalone binary grants no Host tools. Applications that need filesystem services, databases, HTTP APIs, stock prices, or MCP tools construct a `Manifest` from trusted providers and pass it to `service.New`. The same artifact can expose a different catalog without relinking CPython/NumPy or rebuilding `pysolate.wasm`. The catalog is fixed for one service instance, so changing it requires rebuilding the prepared service state, not the Guest artifact.
 
+## Optional Linux data-image preparation
+
+Add `-cow-data-image` to `pysolate-server` to skip redundant initial-data copying. It is off by default, requires Linux and a compatible artifact, and rejects unsupported configurations rather than falling back. It applies to both ordinary and workspace requests.
+
+Embedding applications pass `service.Options{COWDataImage: true}` as the optional final argument to `service.New`. The service still supplies a fresh Guest per Run. Read [the measured setup, latency and memory tradeoffs](cow-data-image.md) before enabling it; lower latency does not imply lower peak process memory.
+
+The HTTP benchmark accepts the same `-cow-data-image` flag and records it in metadata. Omit the flag to measure the unchanged baseline.
+
 ## HTTP API
 
 All request and response bodies are JSON. Request bodies are capped at 1 MiB. `[]byte` fields use standard JSON base64 encoding.
@@ -44,6 +52,19 @@ Successful Runs return the Python value, captured stdout, transformed source whe
 Python failures return HTTP 422 and preserve any private workspace changes in the response's after-revision and diff. Invalid requests return 400. An unknown workspace returns 404. When all execution slots are occupied, admission is non-blocking and returns 429 instead of growing an unbounded queue.
 
 Workspace publication remains a Host decision. The service never accepts an arbitrary Host source or destination path and never writes changes back into a project tree.
+
+## Linux HTTP data-image comparison
+
+Three alternating process pairs each ran 50 plain and 50 workspace requests at concurrency 1 after warm-up: 600 measured responses, all HTTP 200. The real loopback service used two execution slots and `GOMAXPROCS=2` inside a Slurm allocation requesting two CPUs and 2 GiB. Setup is excluded; this is not a remote-network or capacity benchmark.
+
+Median of process p50s, baseline versus opt-in:
+
+- Plain: **25.36 → 6.02 ms**; median paired speedup **4.22×**. Median process p95: **29.04 → 6.33 ms**.
+- Workspace: **26.47 → 7.57 ms**; median paired speedup **3.40×**. Median process p95: **30.60 → 8.14 ms**.
+
+Paired speedup is not the ratio of the two displayed medians. This campaign uses a different workload/host observation from the standalone Runner results; do not subtract them to estimate HTTP overhead. The option's retained-memory and startup tradeoffs still apply.
+
+[Raw rows and metadata](performance-data/service-data-image-292712/), [summary](performance-data/service-data-image-292712/summary.json) and [Linux acceptance output](performance-data/service-data-image-292712/verification.txt) are retained. Acceptance covered both default and optimized ordinary/workspace services, overload rejection, real process-kill recovery and history privacy. Both service CLIs were separately started and called over HTTP. `tools/run-service-data-image.py` contains the bounded reproduction campaign.
 
 ## Measure the hot path
 

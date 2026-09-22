@@ -128,6 +128,12 @@ Measured examples:
   [Run the restart demo](demos/13-durable-restart.sh); provider idempotency remains
   part of the recovery contract.
 
+For a long-running application, both service commands support opt-in Linux
+`-cow-data-image` preparation. The durable service also exposes paginated,
+payload-free `GET /v1/durable/runs/{id}/history`. See the
+[ordinary service](docs/service.md) and [durable service](docs/durable-service.md)
+for commands, seed requirements and measured HTTP results.
+
 See the [`docs/` index](docs/README.md) for supported workflows, measured
 performance, scheduling studies and recent deliveries. See
 [Execution-derived durability](docs/execution-derived-durability.md) for the

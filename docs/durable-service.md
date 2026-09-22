@@ -24,6 +24,16 @@ a `durable.Runner` with its trusted, versioned Tool catalog and passes it to
 `service/durable.New`; this is how HTTP, databases or MCP-backed effects enter
 the service without enlarging the Guest artifact.
 
+## Optional Linux COW data images
+
+Start with `-cow-data-image -cow-data-image-seed demo-seed` to opt in to a prepared deterministic image. The default remains fresh execution. When enabled, new Runs must use the configured seed; a different seed receives HTTP 400 before persistence. If the seed flag is omitted, its value is `pysolate-durable-service-v1`.
+
+Existing Runs also need matching artifact/environment and seed. Reopening a database does not migrate seeds. Choose the original seed for recovery or use the unprepared default. Non-Linux hosts, empty preparation seeds and unsupported artifacts are rejected.
+
+Embedding applications use `durable.Preparation{Seed: seed, COW: true, COWDataImage: true}` for the Runner and `durableservice.Options{PreparationSeed: seed}` for the HTTP service. The HTTP seed check gives an early error; the Runner's own deterministic-state check remains authoritative.
+
+See [COW data-image tradeoffs](cow-data-image.md), including extra retained memory. No arbitrary provider gains exactly-once semantics from this option.
+
 ## API
 
 Create a Run. The service pins the active artifact digest and the configured
@@ -53,6 +63,18 @@ HTTP 429; conflicting lifecycle operations return 409; closed service capacity
 returns 503. The attempt response represents completed, parked, blocked,
 Python-failed and cancelled outcomes as structured data. Go/internal failures
 remain HTTP errors.
+
+## Read-only call history
+
+```sh
+curl -sS 'http://127.0.0.1:8081/v1/durable/runs/demo-1/history?from_sequence=0&limit=32'
+```
+
+The response has `calls`, `next_sequence`, and `has_more`. Each call exposes only `sequence`, `tool`, `version`, `state`, and `outcome_class`. Continue from `next_sequence` when `has_more` is true. The default page is 32 calls; the backing Store caps pages at 64. These are engineering limits, not Wasm limits.
+
+Arguments, raw results, call IDs and operation keys are never included, even if a query requests payloads. Internal history-read failures return a generic error. Persisted call state cannot tell you which earlier attempt dispatched, replayed or looked up an outcome; this endpoint does not invent that timeline.
+
+Unknown Runs return 404, malformed pagination returns 400 and writes to this route return 405. Embedding runtimes that do not implement the optional history-reader interface return 501. This is still a trusted local control plane, not a new authentication or tenant boundary.
 
 ## Crash recovery contract
 

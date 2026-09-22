@@ -1,0 +1,34 @@
+=== RUN   TestHTTPWorkspaceLifecycleAndOverload
+=== RUN   TestHTTPWorkspaceLifecycleAndOverload/default
+=== RUN   TestHTTPWorkspaceLifecycleAndOverload/cow-data-image
+--- PASS: TestHTTPWorkspaceLifecycleAndOverload (15.24s)
+    --- PASS: TestHTTPWorkspaceLifecycleAndOverload/default (7.66s)
+    --- PASS: TestHTTPWorkspaceLifecycleAndOverload/cow-data-image (7.58s)
+=== RUN   TestServiceRejectsMultipleOptions
+--- PASS: TestServiceRejectsMultipleOptions (0.00s)
+=== RUN   TestServiceRejectsInvalidCOWDataImageArtifact
+--- PASS: TestServiceRejectsInvalidCOWDataImageArtifact (0.00s)
+PASS
+=== RUN   TestHistoryInternalErrorsDoNotLeak
+--- PASS: TestHistoryInternalErrorsDoNotLeak (0.01s)
+=== RUN   TestDurableServiceRestartHelper
+--- PASS: TestDurableServiceRestartHelper (0.00s)
+=== RUN   TestHTTPServiceRecoversAfterRealProcessKill
+=== RUN   TestHTTPServiceRecoversAfterRealProcessKill/default
+=== RUN   TestHTTPServiceRecoversAfterRealProcessKill/cow-data-image
+--- PASS: TestHTTPServiceRecoversAfterRealProcessKill (33.17s)
+    --- PASS: TestHTTPServiceRecoversAfterRealProcessKill/default (16.80s)
+    --- PASS: TestHTTPServiceRecoversAfterRealProcessKill/cow-data-image (16.37s)
+=== RUN   TestDurableHTTPRunLifecycle
+--- PASS: TestDurableHTTPRunLifecycle (0.00s)
+=== RUN   TestDurableHTTPRejectsInvalidRequests
+--- PASS: TestDurableHTTPRejectsInvalidRequests (0.00s)
+=== RUN   TestNewRejectsInvalidConfiguration
+--- PASS: TestNewRejectsInvalidConfiguration (0.00s)
+=== RUN   TestDurableHTTPHistoryIsPagedAndPrivacySafe
+--- PASS: TestDurableHTTPHistoryIsPagedAndPrivacySafe (0.00s)
+=== RUN   TestDurableHTTPEnforcesPreparedSeed
+--- PASS: TestDurableHTTPEnforcesPreparedSeed (0.00s)
+PASS
+server CLI HTTP acceptance passed
+durable CLI HTTP acceptance passed

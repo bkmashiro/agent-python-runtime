@@ -15,10 +15,12 @@ import (
 )
 
 type fakeRuntime struct {
-	mu        sync.Mutex
-	runs      map[string]durable.Run
-	decisions map[string]durable.Decision
-	result    durable.Result
+	mu             sync.Mutex
+	runs           map[string]durable.Run
+	decisions      map[string]durable.Decision
+	result         durable.Result
+	history        durable.ReplayHistoryPage
+	historyOptions durable.ReplayHistoryOptions
 }
 
 func newFakeRuntime() *fakeRuntime {
@@ -70,6 +72,16 @@ func (runtime *fakeRuntime) Decide(_ context.Context, waitID string, decision du
 	runtime.decisions[waitID] = decision
 	runtime.mu.Unlock()
 	return nil
+}
+
+func (runtime *fakeRuntime) ReplayHistory(_ context.Context, id string, options durable.ReplayHistoryOptions) (durable.ReplayHistoryPage, error) {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	if _, ok := runtime.runs[id]; !ok {
+		return durable.ReplayHistoryPage{}, durable.ErrNotFound
+	}
+	runtime.historyOptions = options
+	return runtime.history, nil
 }
 
 func TestDurableHTTPRunLifecycle(t *testing.T) {
@@ -167,6 +179,88 @@ func TestNewRejectsInvalidConfiguration(t *testing.T) {
 	_, err = New(newFakeRuntime(), "", durable.Limits{MaxRunning: 1})
 	if err == nil {
 		t.Fatal("expected empty environment rejection")
+	}
+}
+
+func TestDurableHTTPHistoryIsPagedAndPrivacySafe(t *testing.T) {
+	runtime := newFakeRuntime()
+	runtime.history = durable.ReplayHistoryPage{
+		Calls: []durable.ReplayCall{{
+			Sequence: 1, CallID: "secret-call-id", Capability: "catalog.lookup", Version: "v3",
+			State: durable.CallCompleted, OperationKey: "secret-operation-key",
+			OutcomeClass: durable.OutcomeError, Arguments: json.RawMessage(`{"token":"secret"}`), Outcome: json.RawMessage(`{"error":"secret"}`),
+		}},
+		NextSequence: 2, HasMore: true,
+	}
+	server, err := New(runtime, "env-v1", durable.Limits{MaxRunning: 1, MaxResident: 1, MaxInflightTools: 1, MaxQueued: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close(context.Background())
+	httpServer := httptest.NewServer(server)
+	defer httpServer.Close()
+
+	if _, err := runtime.Create(context.Background(), durable.Definition{ID: "history-run", Code: "result = 1", Seed: "seed", Inputs: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+	status, body := durableRequest(t, httpServer.Client(), http.MethodGet, httpServer.URL+"/v1/durable/runs/history-run/history?from_sequence=1&limit=1", nil)
+	if status != http.StatusOK {
+		t.Fatalf("history status=%d body=%#v", status, body)
+	}
+	if body["has_more"] != true || body["next_sequence"] != float64(2) {
+		t.Fatalf("history paging=%#v", body)
+	}
+	calls, ok := body["calls"].([]any)
+	if !ok || len(calls) != 1 {
+		t.Fatalf("history calls=%#v", body["calls"])
+	}
+	call, ok := calls[0].(map[string]any)
+	if !ok || call["sequence"] != float64(1) || call["tool"] != "catalog.lookup" || call["version"] != "v3" || call["state"] != durable.CallCompleted || call["outcome_class"] != string(durable.OutcomeError) {
+		t.Fatalf("history projection=%#v", call)
+	}
+	for _, forbidden := range []string{"call_id", "operation_key", "arguments", "outcome", "capability"} {
+		if _, present := call[forbidden]; present {
+			t.Fatalf("history leaked %q: %#v", forbidden, call)
+		}
+	}
+	if runtime.historyOptions.FromSequence != 1 || runtime.historyOptions.Limit != 1 || runtime.historyOptions.IncludePayloads {
+		t.Fatalf("history options=%+v", runtime.historyOptions)
+	}
+
+	status, _ = durableRequest(t, http.DefaultClient, http.MethodPost, httpServer.URL+"/v1/durable/runs/history-run/history", nil)
+	if status != http.StatusMethodNotAllowed {
+		t.Fatalf("history write status=%d", status)
+	}
+	status, _ = durableRequest(t, http.DefaultClient, http.MethodGet, httpServer.URL+"/v1/durable/runs/history-run/history?limit=bad", nil)
+	if status != http.StatusBadRequest {
+		t.Fatalf("invalid history query status=%d", status)
+	}
+	status, _ = durableRequest(t, http.DefaultClient, http.MethodGet, httpServer.URL+"/v1/durable/runs/unknown/history", nil)
+	if status != http.StatusNotFound {
+		t.Fatalf("unknown history status=%d", status)
+	}
+}
+
+func TestDurableHTTPEnforcesPreparedSeed(t *testing.T) {
+	runtime := newFakeRuntime()
+	server, err := New(runtime, "env-v1", durable.Limits{MaxRunning: 1, MaxResident: 1, MaxInflightTools: 1, MaxQueued: 1}, Options{PreparationSeed: "prepared-seed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close(context.Background())
+	httpServer := httptest.NewServer(server)
+	defer httpServer.Close()
+	request := func(seed string) int {
+		status, _ := durableRequest(t, httpServer.Client(), http.MethodPost, httpServer.URL+"/v1/durable/runs", map[string]any{
+			"id": "run-" + seed, "source": "result = 1", "seed": seed,
+		})
+		return status
+	}
+	if status := request("other-seed"); status != http.StatusBadRequest {
+		t.Fatalf("mismatched seed status=%d", status)
+	}
+	if status := request("prepared-seed"); status != http.StatusCreated {
+		t.Fatalf("prepared seed status=%d", status)
 	}
 }
 

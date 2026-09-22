@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,7 +18,18 @@ import (
 )
 
 func TestHTTPWorkspaceLifecycleAndOverload(t *testing.T) {
-	wasm, err := os.ReadFile(filepath.Join("..", "dist", "pysolate.wasm"))
+	t.Run("default", func(t *testing.T) { testHTTPWorkspace(t, false) })
+	if runtime.GOOS == "linux" {
+		t.Run("cow-data-image", func(t *testing.T) { testHTTPWorkspace(t, true) })
+	}
+}
+
+func testHTTPWorkspace(t *testing.T, dataImage bool) {
+	guest := os.Getenv("PYSOLATE_GUEST")
+	if guest == "" {
+		guest = filepath.Join("..", "dist", "pysolate.wasm")
+	}
+	wasm, err := os.ReadFile(guest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +54,11 @@ func TestHTTPWorkspaceLifecycleAndOverload(t *testing.T) {
 	}}}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	service, err := New(ctx, wasm, manifest, manager, 1)
+	var options []Options
+	if dataImage {
+		options = []Options{{COWDataImage: true}}
+	}
+	service, err := New(ctx, wasm, manifest, manager, 1, options...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,6 +146,41 @@ func TestHTTPWorkspaceLifecycleAndOverload(t *testing.T) {
 	status, _ = requestJSON(t, client, http.MethodGet, httpServer.URL+"/v1/workspaces/"+ref+"/snapshot", nil)
 	if status != http.StatusNotFound {
 		t.Fatalf("snapshot after destroy status=%d", status)
+	}
+}
+
+func TestServiceRejectsMultipleOptions(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "workspaces")
+	if err := os.Mkdir(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := workspacepkg.NewManager(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	_, err = New(context.Background(), nil, nil, manager, 1, Options{}, Options{})
+	if err == nil || err.Error() != "service accepts at most one options value" {
+		t.Fatalf("options error=%v", err)
+	}
+}
+
+func TestServiceRejectsInvalidCOWDataImageArtifact(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("COW data-image is Linux-only")
+	}
+	base := filepath.Join(t.TempDir(), "workspaces")
+	if err := os.Mkdir(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := workspacepkg.NewManager(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	_, err = New(context.Background(), []byte("not wasm"), nil, manager, 1, Options{COWDataImage: true})
+	if err == nil || !strings.Contains(err.Error(), "COW data image") {
+		t.Fatalf("invalid artifact error=%v", err)
 	}
 }
 

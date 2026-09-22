@@ -1,0 +1,23 @@
+[
+  {
+    "case": "csv-json",
+    "measured_requests": 3,
+    "run_ns": 36276682,
+    "import_ns": 33085561,
+    "compute_ns": 208434
+  },
+  {
+    "case": "numpy-matrix",
+    "measured_requests": 3,
+    "run_ns": 7009713685,
+    "import_ns": 7004771102,
+    "compute_ns": 703945
+  },
+  {
+    "case": "numpy-small",
+    "measured_requests": 3,
+    "run_ns": 7016023039,
+    "import_ns": 7012063223,
+    "compute_ns": 133093
+  }
+]

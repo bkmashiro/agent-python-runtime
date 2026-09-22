@@ -1,0 +1,14 @@
+package pysolate
+import("context";"encoding/json";"os";"sort";"testing";"time")
+func TestPureImportControls(t *testing.T){
+ wasm,err:=readGuestArtifact();if err!=nil{t.Fatal(err)};ctx:=context.Background()
+ for _,image:=range []bool{false,true}{
+  r,err:=NewPreparedCOW(ctx,wasm,nil,COWOptions{DataImage:image});if err!=nil{t.Fatal(err)}
+  for i:=0;i<5;i++{if _,err:=r.Run(ctx,"result=7",nil);err!=nil{t.Fatal(err)}}
+  samples:=make([]int64,100)
+  for i:=range samples{start:=time.Now();out,err:=r.Run(ctx,"result=7",nil);samples[i]=time.Since(start).Nanoseconds();if err!=nil||string(out.Value)!="7"{t.Fatalf("%s %v",out.Value,err)}}
+  sort.Slice(samples,func(i,j int)bool{return samples[i]<samples[j]})
+  json.NewEncoder(os.Stdout).Encode(map[string]any{"data_image":image,"n":100,"p50_ns":samples[49],"p95_ns":samples[94]})
+  if err:=r.Close(ctx);err!=nil{t.Fatal(err)}
+ }
+}

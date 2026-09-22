@@ -1,24 +1,25 @@
-# Pysolate: product clarity and measured runtime improvements
+# Pysolate: execution budgets and offline reproducibility
 
-Approved goal: make existing execution capabilities easy to explain and use; finish the opt-in COW optimization, then improve at most two measured hotspots. Preserve isolation, recovery semantics and defaults. No engine fork, heavy dependencies, new platform, UI dashboard or speculative scheduler.
+Approved continuation from `a32e5bb5`. Prior product/COW work is complete and its evidence remains in `cow-data-image.md`, `service.md` and Git history.
 
 ## Current pointer
 
-**Complete.** P0–P4 met the approved scope. No additional autonomous work is scheduled.
+**Complete.** Services, strict private offline replay, and optional scientific bytecode caching are delivered. Default artifact and runtime behavior remain unchanged. No further autonomous work is scheduled.
 
-## Outcomes
+## Desired outcomes
 
-- [x] P0: COW data-image opt-in, admission checks, Linux isolation/replay/workspace validation, paired performance results and explicit memory tradeoff. See [cow-data-image.md](cow-data-image.md). Runtime API median gains: 6.14× short Python, 7.45× immediate Tool, 4.67× durable completion. Default unchanged; the follow-up identifies reclaimable Go heap and records the retained seed cost.
-- [x] P1: README now leads with practical Python and four clear capability groups plus measured evidence. Five existing core demos include safe early reads; workspace and replay remain separate. Real `run-core.sh` passed.
-- [x] P2a: explicit data-image options and CLI flags; Linux default/optimized HTTP acceptance and both real CLI probes passed. Six-process loopback comparison completed 600 successful requests; see `service.md`.
-- [x] P2b: read-only paginated history with payload/key exclusion and generic internal errors. Real kill/restart reads history after recovery; malformed pagination, missing runs and seed enforcement covered.
-- [x] P3: profiled optimized Python/Tool/durable execution and diagnosed elevated PSS as reclaimable Go heap, not an observed mapping leak. No additional runtime change justified: per-request GC rejected; instance-bound engine-object sharing deferred. See the follow-up in `cow-data-image.md`.
-- [x] P4: docs and evidence aligned; real five-step core demo, Linux service/recovery acceptance, `make check`, targeted history race and link checks passed. Deliver final signed commit and verify remote HEAD, then stop.
+- [x] P1a: service-configured maximum execution duration, default unchanged; requests may shorten but never exceed the configured cap. Respect an earlier caller deadline. Bound a durable attempt rather than Run lifetime; do not weaken intent/outcome persistence. Verify timeout releases Guest and execution capacity. Workspace per-attempt ownership must be released while the persistent workspace remains usable.
+- [x] P1b: explicit default-off early reads for ordinary HTTP Run only. Existing Host `AllowEarlyRead` remains authoritative. Do not combine with recorded/durable or silently claim workspace support.
+- [x] P2: sensitive local JSON export and strict offline replay of ended durable Runs. No workspace, pending waits or unresolved effects; preserve seed, artifact identity and ordered calls. No network export API, no physical tool fallback, no guessing missing tool namespace metadata. Explicit local output path, private permissions and no overwrite. Reproduce output or original Python error; reject changed artifact, changed calls or missing/excess outcomes.
+- [x] P3: bounded real Python/NumPy workload diagnosis, separating import from execution. Retain an optimization only with measurable end-to-end benefit and acceptable setup/memory cost. No forced per-request GC or broad package preloading by default.
+- [x] P4: actual Guest and HTTP validation, offline replay after closing original DB, invalid/tampered cases, docs, signed commits/push with remote verification and clean worktree.
 
-## Execution constraints
+## Protected boundaries
 
-One owner per mutable path. Each milestone needs runnable evidence, not a subagent completion claim. Distinguish setup from requests, API from HTTP, sampled PSS from sealed-file allocation, tool waiting from Python CPU time. Preserve intent-before-effect and outcome-before-return. No unsafe retries, cross-request Guest reuse or implicit optimization fallback.
+No new default timeout or execution strategy, engine fork, heavy dependency, generic workflow/recording platform, mutable Guest reuse, new authority, automated external effects or paid service. Host tools must cooperate with context; do not claim arbitrary Go callbacks can be forcibly interrupted. Do not alter existing database schema merely to make export universal; support a provable subset and reject unsupported metadata.
 
-Unexpected fixed-memory cost is not a reason to hide numbers or force GC on each request. Re-profile before choosing the next optimization. If a fork, public contract change beyond the agreed additive flags/history route, payment or major architecture choice becomes necessary, stop for a decision. Otherwise continue across milestones without requesting approval for routine choices.
+Export is not anonymization or authenticity verification. Source, inputs and tool results may contain secrets. An explicitly selected local bundle is untrusted data and must stay inside normal sandbox/tool boundaries. Never upload it automatically. Core lifecycle APIs and persistent workspace ownership remain unchanged.
 
-The original accepted specification is the local `.hermes/plans/2026-09-23_003550-pysolate-next-megagoal.md`; this document is the sole live execution pointer. Do not create a parallel progress ledger.
+## Execution and completion
+
+One writer per overlapping path. Small reusable modules only where needed; no extra demo suite or dashboard. Each completed slice gets relevant real tests and a signed commit; parent verifies remote HEAD. If an experiment has no net benefit, document the negative result and stop that lane. Continue until the goal is complete or a product/authority/resource decision needs the user.

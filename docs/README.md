@@ -42,6 +42,8 @@ for the execution model and build commands.
 
 ## Performance and scheduling
 
+- [`scientific-bytecode-cache.md`](scientific-bytecode-cache.md) — optional build-time NumPy/CSV caches, import speedups and the measured short-script cost.
+
 - [`cow-data-image.md`](cow-data-image.md) — opt-in COW data images, measured speedups, one-time guard cost and memory tradeoffs.
 - [`roadmap.md`](roadmap.md) — current approved work and delivery status.
 

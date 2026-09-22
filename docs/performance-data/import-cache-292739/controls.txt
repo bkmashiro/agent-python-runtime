@@ -1,0 +1,36 @@
+repeat=0 variant=old
+=== RUN   TestPureImportControls
+{"data_image":false,"n":100,"p50_ns":16364460,"p95_ns":16751279}
+{"data_image":true,"n":100,"p50_ns":1761528,"p95_ns":1801243}
+--- PASS: TestPureImportControls (15.74s)
+PASS
+repeat=0 variant=new
+=== RUN   TestPureImportControls
+{"data_image":false,"n":100,"p50_ns":17272540,"p95_ns":18574504}
+{"data_image":true,"n":100,"p50_ns":1800173,"p95_ns":1846550}
+--- PASS: TestPureImportControls (15.84s)
+PASS
+repeat=1 variant=new
+=== RUN   TestPureImportControls
+{"data_image":false,"n":100,"p50_ns":17565214,"p95_ns":20901893}
+{"data_image":true,"n":100,"p50_ns":1803010,"p95_ns":1834165}
+--- PASS: TestPureImportControls (15.77s)
+PASS
+repeat=1 variant=old
+=== RUN   TestPureImportControls
+{"data_image":false,"n":100,"p50_ns":16319009,"p95_ns":16448452}
+{"data_image":true,"n":100,"p50_ns":1800880,"p95_ns":1835286}
+--- PASS: TestPureImportControls (15.81s)
+PASS
+repeat=2 variant=old
+=== RUN   TestPureImportControls
+{"data_image":false,"n":100,"p50_ns":16517516,"p95_ns":16710307}
+{"data_image":true,"n":100,"p50_ns":1755431,"p95_ns":1798209}
+--- PASS: TestPureImportControls (15.65s)
+PASS
+repeat=2 variant=new
+=== RUN   TestPureImportControls
+{"data_image":false,"n":100,"p50_ns":17469186,"p95_ns":17733453}
+{"data_image":true,"n":100,"p50_ns":1588372,"p95_ns":3194813}
+--- PASS: TestPureImportControls (15.92s)
+PASS

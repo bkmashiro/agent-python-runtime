@@ -1,0 +1,12 @@
+{"case": "csv-json", "compute_ns": 224076, "import_ns": 33514389, "run_ns": 38129225, "sample": 0, "value": 6, "warmup": true}
+{"case": "csv-json", "compute_ns": 208031, "import_ns": 33174271, "run_ns": 36375352, "sample": 1, "value": 6, "warmup": false}
+{"case": "csv-json", "compute_ns": 208434, "import_ns": 33085561, "run_ns": 36276682, "sample": 2, "value": 6, "warmup": false}
+{"case": "csv-json", "compute_ns": 208434, "import_ns": 32890792, "run_ns": 36010158, "sample": 3, "value": 6, "warmup": false}
+{"case": "numpy-small", "compute_ns": 96383, "import_ns": 7017974180, "run_ns": 7021420896, "sample": 0, "value": 2016, "warmup": true}
+{"case": "numpy-small", "compute_ns": 133093, "import_ns": 7012063223, "run_ns": 7016023039, "sample": 1, "value": 2016, "warmup": false}
+{"case": "numpy-small", "compute_ns": 142232, "import_ns": 7012638561, "run_ns": 7016548259, "sample": 2, "value": 2016, "warmup": false}
+{"case": "numpy-small", "compute_ns": 95426, "import_ns": 7007026208, "run_ns": 7011040776, "sample": 3, "value": 2016, "warmup": false}
+{"case": "numpy-matrix", "compute_ns": 762577, "import_ns": 7013415761, "run_ns": 7018002343, "sample": 0, "value": 8575959040, "warmup": true}
+{"case": "numpy-matrix", "compute_ns": 705455, "import_ns": 7004771102, "run_ns": 7009713685, "sample": 1, "value": 8575959040, "warmup": false}
+{"case": "numpy-matrix", "compute_ns": 702344, "import_ns": 7010080524, "run_ns": 7014660969, "sample": 2, "value": 8575959040, "warmup": false}
+{"case": "numpy-matrix", "compute_ns": 703945, "import_ns": 7004722834, "run_ns": 7009334728, "sample": 3, "value": 8575959040, "warmup": false}

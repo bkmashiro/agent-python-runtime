@@ -2,6 +2,7 @@
 """Run with the Guest build's host CPython; compile, never import, selected modules."""
 from pathlib import Path
 import py_compile
+import os
 import sys
 
 if sys.version_info[:2] != (3, 14):
@@ -11,6 +12,15 @@ stage = Path(sys.argv[1]).resolve()
 modules = ('encodings codecs json re enum copy copyreg weakref ast _ast_unparse types collections '
            'functools operator contextlib _collections_abc pysolate_bootstrap plm '
            'site-packages/yaml').split()
+scientific = os.environ.get('PYSOLATE_PRECOMPILE_SCIENTIFIC', '0')
+if scientific not in ('0', '1'):
+    raise SystemExit('PYSOLATE_PRECOMPILE_SCIENTIFIC must be 0 or 1')
+if scientific == '1':
+    # Observed NumPy/CSV import hot paths; compile without importing.
+    modules += ('site-packages/numpy csv inspect typing pickle threading '
+                'pathlib dis annotationlib platform ctypes random _py_warnings glob '
+                'tokenize base64 textwrap hmac numbers _compat_pickle linecache '
+                '_opcode_metadata fnmatch _weakrefset opcode token').split()
 files = set()
 for name in modules:
     source = stage / (name + '.py')

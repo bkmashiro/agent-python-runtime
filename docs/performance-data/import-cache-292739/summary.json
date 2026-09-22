@@ -1,0 +1,50 @@
+[
+  {
+    "case": "csv-json",
+    "old_process_medians_ns": [
+      36391343,
+      35609113,
+      36228134
+    ],
+    "new_process_medians_ns": [
+      7632233,
+      7615023,
+      7620171
+    ],
+    "old_median_ns": 36228134,
+    "new_median_ns": 7620171,
+    "paired_speedup": 4.754241604289458
+  },
+  {
+    "case": "numpy-small",
+    "old_process_medians_ns": [
+      7048246142,
+      6961220614,
+      7041412509
+    ],
+    "new_process_medians_ns": [
+      447797575,
+      445163839,
+      445811877
+    ],
+    "old_median_ns": 7041412509,
+    "new_median_ns": 445811877,
+    "paired_speedup": 15.73980417826068
+  },
+  {
+    "case": "numpy-matrix",
+    "old_process_medians_ns": [
+      7039825356,
+      6969753593,
+      7034192058
+    ],
+    "new_process_medians_ns": [
+      448469240,
+      445783762,
+      446754027
+    ],
+    "old_median_ns": 7034192058,
+    "new_median_ns": 446754027,
+    "paired_speedup": 15.697454202210167
+  }
+]

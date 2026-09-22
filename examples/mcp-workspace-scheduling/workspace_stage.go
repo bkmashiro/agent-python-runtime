@@ -59,7 +59,19 @@ func runWorkspaceStage(ctx context.Context, runner *pysolate.Runner, manager *wo
 	if guestResult.SKU != record.SKU || len(guestResult.Changed) != 2 {
 		return 0, false, errors.New("workspace Guest returned unexpected result")
 	}
-	bundle, err := lease.ExportChanges(before, 1<<20)
+	checkpoint, err := lease.Checkpoint()
+	if err != nil {
+		return 0, false, err
+	}
+	if err := lease.Release(); err != nil {
+		return 0, false, err
+	}
+	reviewer, err := manager.AcquireCheckpoint(checkpoint, owner+"-review")
+	if err != nil {
+		return 0, false, err
+	}
+	defer reviewer.Release()
+	bundle, err := reviewer.ExportChanges(before, 1<<20)
 	if err != nil {
 		return 0, false, err
 	}

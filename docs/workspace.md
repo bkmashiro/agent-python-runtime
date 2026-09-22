@@ -9,7 +9,8 @@
 3. Acquire an exclusive writer `Lease` using an opaque `Ref`.
 4. Take a pre-run `Snapshot` when change review is needed.
 5. Execute with `RunWorkspace` using a fresh or workspace-prepared Runner.
-6. Take a post-run snapshot and call `workspace.Diff`.
+6. Take a post-run snapshot and call `workspace.Diff`, or create a `Checkpoint`
+   when another bounded attempt must adopt the exact local revision.
 7. Export a bounded `ChangeSet` when changed contents need Host review.
 8. Check its touched paths against the original Host tree, then release the lease and close the manager.
 
@@ -27,6 +28,34 @@ changes := workspace.Diff(before, after)
 ```
 
 A Python error does not roll back file writes. The private workspace remains inspectable until the Host releases and destroys it. Publication or apply-back to the original source is intentionally separate and is not implemented by `RunWorkspace`.
+
+## Attempt handoff checkpoints
+
+`Lease.Checkpoint` returns a versioned `{workspace, revision}` token. After the
+current owner releases its lease, a harness can persist that token with its own
+task state and use `Manager.AcquireCheckpoint` to transfer the same workspace
+revision to a later attempt:
+
+```go
+checkpoint, err := lease.Checkpoint()
+if err != nil { return err }
+if err := lease.Release(); err != nil { return err }
+
+next, err := manager.AcquireCheckpoint(checkpoint, "review-attempt")
+if err != nil { return err }
+defer next.Release()
+```
+
+Re-acquisition takes the exclusive lease first and then re-hashes the bounded
+tree. A missing workspace returns `ErrWorkspaceNotFound`; changed bytes return
+`ErrCheckpointMismatch`; malformed or unknown token versions return
+`ErrInvalidCheckpoint`. Failed verification releases the temporary lease.
+
+The token contains no files and is not a portable snapshot. The manager and
+private bytes must still exist on the same Host. This keeps durable Tool history
+separate from mutable filesystem storage while giving the harness an explicit,
+checked boundary between attempts. Long-term backup, migration and publication
+remain harness/storage responsibilities.
 
 ## Snapshots and diffs
 
@@ -82,8 +111,33 @@ remain Host responsibilities rather than Guest authority.
 - One lease permits at most one active Guest run.
 - Tools and exported bundles do not receive the workspace backing path.
 - Writable workspaces are excluded from durable replay.
+- Checkpoints identify local state; they do not embed or durably replicate it.
 
 The API does not claim transactional rollback, publication, merge or automatic conflict resolution.
+
+## Checkpoint cost
+
+The checked-in benchmark separates ordinary lease acquisition, checkpoint
+creation, and revision-verified acquisition:
+
+```sh
+go test ./runtime/workspace -run '^$' \
+  -bench '^BenchmarkCheckpointHandoff$' -benchtime=20x -count=3
+```
+
+An exploratory Apple M4/macOS arm64 run measured these medians:
+
+- 32 files / 128 KiB: checkpoint `1.109 ms`, ordinary acquire `0.109 ms`,
+  checked acquire `1.103 ms`;
+- 128 files / 4 MiB: checkpoint `5.142 ms`, ordinary acquire `0.414 ms`,
+  checked acquire `5.415 ms`.
+
+These are local implementation measurements, not service SLOs. Both checkpoint
+creation and checked acquisition hash file contents, so a complete handoff pays
+roughly two bounded tree reads. The result is small enough for attempt
+boundaries in these agent-shaped fixtures, but not for every Tool call or inner
+loop. Re-run on the deployment filesystem before selecting retention or
+migration policy.
 
 ## Executable acceptance
 

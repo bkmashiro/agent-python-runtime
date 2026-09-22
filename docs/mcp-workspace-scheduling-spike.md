@@ -6,7 +6,9 @@ This spike exercises a common agent-shaped workflow without an LLM in the timed 
 2. the Host compares inline calls with `ExternalIO` slot yielding;
 3. each validated MCP result is passed into a separate private-workspace Guest;
 4. Python edits JSON and Markdown;
-5. the Host exports a bounded `ChangeSet` and verifies the original source is conflict-free.
+5. the editing attempt checkpoints and releases the exact local revision;
+6. a review attempt verifies and acquires that checkpoint, exports a bounded
+   `ChangeSet`, and checks that the original source is conflict-free.
 
 The code and inputs are deterministic. Every sample checks the exact MCP values, call count, changed-file count, conflict report and Guest result.
 
@@ -16,7 +18,8 @@ Writable workspaces are deliberately excluded from durable replay. `ExternalIO` 
 
 ```text
 MCP stdio -> durable fetch/normalize -> validated JSON
-                                      -> workspace Guest -> ChangeSet
+                                      -> edit Guest -> local checkpoint
+                                                    -> review -> ChangeSet
 ```
 
 This is an observed product boundary, not hidden benchmark setup. The experiment answers whether real MCP calls retain the live-I/O scheduling benefit and measures how much of the complete workflow remains outside that optimizable phase. It does not claim that a workspace Guest currently yields its running slot during a Tool call.
@@ -42,7 +45,8 @@ The JSON report includes every raw sample and a p50 summary for each scheduling 
 
 - `create_ns`: durable control-plane row creation, outside the fetch timer;
 - `fetch_batch_ns`: admission through completion of all MCP-backed Runs;
-- `workspace_batch_ns`: private workspace provisioning, Guest edits, export and conflict checks;
+- `workspace_batch_ns`: private workspace provisioning, Guest edits, checked
+  attempt handoff, export and conflict checks;
 - `total_ns`: creation, fetch and workspace stages together;
 - `tool_queue_ns`, `tool_service_ns`, `continuation_resume_ns`: sums of observed Tool phases;
 - `peak_mcp_calls`: concurrent real MCP client calls;

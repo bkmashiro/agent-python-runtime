@@ -16,6 +16,7 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 ./demos/11-mcp-stdio.sh
 ./demos/12-mcp-workspace-scheduling.sh
 ./demos/13-durable-restart.sh
+./demos/14-agent-workloads.sh
 ./demos/run-all.sh
 ```
 
@@ -32,10 +33,11 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 - `11-mcp-stdio.sh` starts an official-SDK MCP stdio subprocess, discovers its catalog tool, injects `catalog.lookup(...)`, and executes it from the real Guest.
 - `12-mcp-workspace-scheduling.sh` compares inline and `ExternalIO` execution of a dependent real-MCP tool chain, then hands the validated data to private-workspace Guests and exports conflict-checked `ChangeSet`s.
 - `13-durable-restart.sh` commits an idempotent Host effect, kills the service process before completion, restarts from SQLite and proves replay does not duplicate the effect.
+- `14-agent-workloads.sh` runs 20 fixed common Python/Tool cases with phase timings, then real workspace, MCP stdio and durable process-restart lanes.
 
 `run-all.sh` intentionally runs the short product demonstrations `01`–`05`.
 The measurement-oriented `06`–`10` scripts and dependency-oriented MCP demos
-`11`–`13` remain explicit.
+`11`–`14` remain explicit.
 
 ## Short code-reading route
 

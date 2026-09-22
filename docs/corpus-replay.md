@@ -7,6 +7,8 @@
 - **HumanEval reference lane:** executes the dataset's canonical solution and tests. It measures Python compatibility and execution correctness, not code-generation accuracy.
 - **BFCL replay lane:** turns ground-truth calls into fixed namespaced Python calls, then matches each canonical tool identity and canonical JSON arguments against a frozen result. It measures dynamic tool injection, the single Host-call ABI and normal/PLM execution. It does not measure function selection by a model, and BFCL does not provide real tool return values.
 - **Repository demo lane:** a small committed fixture for presentations and smoke tests.
+- **Agent workload lane:** 20 fixed common Python and Tool-enriched programs in
+  `examples/corpus/agent-workloads.jsonl`; see [`workload-pack.md`](workload-pack.md).
 
 Keeping generation outside the timed run separates model variance from runtime regressions. A later model evaluation can generate code once, review/freeze the accepted program and add it as another corpus case.
 
@@ -22,6 +24,11 @@ go run ./cmd/pysolate-corpus \
 ```
 
 The command prints one JSON object per sample and a final summary. `setup_ns` is separate from `run_ns`; a nonzero exit means setup, execution, replay consumption or expected-output validation failed.
+
+Run the broader fixed workload lane with `make workloads`. Workspace mutation,
+real MCP transport and durable process recovery remain separate acceptance
+lanes because schema-v1 replay fixtures intentionally model exact read-only
+lookups rather than ordered effects.
 
 ## Import pinned upstream data
 

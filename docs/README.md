@@ -29,6 +29,8 @@ for the execution model and build commands.
   lifecycle, bounded admission, process-crash recovery, and ownership limits.
 - [`corpus-replay.md`](corpus-replay.md) — deterministic HumanEval/BFCL
   adapters and exact Tool-result replay without an LLM in the timed loop.
+- [`workload-pack.md`](workload-pack.md) — 20 frozen common Agent Python/Tool
+  cases plus workspace, real MCP and process-recovery acceptance lanes.
 
 ## Performance and scheduling
 
@@ -102,6 +104,10 @@ The recent runtime work now covers:
 12. **Artifact workflow:** `make bootstrap`, `guest`, `repack`,
     `verify-artifact`, `artifact-bundle`, and `artifact-install` separate the
     expensive pinned Linux build from verified prebuilt artifact consumption.
+13. **Agent workload pack:** 20 fixed common Python and exact Tool-replay cases
+    now emit artifact-bound setup/run timings. Separate real-workspace, MCP
+    stdio and process-kill lanes preserve boundaries that unordered fixtures
+    cannot represent honestly.
 
 The next scheduling work remains evidence-led: repeat calibrated replay and the
 MCP workflow on Linux, add matching real batches for read-then-compute and any
@@ -126,7 +132,8 @@ The scripts under [`../demos/`](../demos/) provide presentation-ready paths:
 - `11` official MCP Go SDK over stdio into a generated Guest Python tool.
 - `12` real MCP tool-chain scheduling followed by workspace ChangeSet export.
 - `13` process-kill durable recovery with an idempotent Host effect.
+- `14` the complete fixed Agent workload pack.
 
 `demos/run-all.sh` runs the short product demonstrations (`01`–`05`). The
-measurement-oriented `06`–`10` scripts and dependency-oriented demos `11`–`13`
+measurement-oriented `06`–`10` scripts and dependency-oriented demos `11`–`14`
 remain explicit so setup time is not hidden inside the short demo suite.

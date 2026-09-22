@@ -173,6 +173,7 @@ For presentation-ready end-to-end examples, use the scripts under [`demos/`](dem
 ./demos/11-mcp-stdio.sh
 ./demos/12-mcp-workspace-scheduling.sh
 ./demos/13-durable-restart.sh
+./demos/14-agent-workloads.sh
 # Or run all demos:
 ./demos/run-all.sh
 ```
@@ -210,6 +211,10 @@ See [the qualified common-usecase boundary](docs/common-usecases.md) for reposit
 ### Deterministic corpus replay
 
 `cmd/pysolate-corpus` executes frozen programs against exact Host-tool fixtures through the real Guest. The stdlib-only importer currently adapts pinned HumanEval canonical programs and BFCL ground-truth calls without putting an LLM in the measurement loop. See [the corpus schema, adapter semantics and reproducible commands](docs/corpus-replay.md), or run `./demos/05-corpus-replay.sh`.
+
+`make workloads` runs the maintained 20-case common Agent workload lane plus
+real workspace, MCP stdio and durable process-restart acceptance. See the
+[workload pack scope and interpretation](docs/workload-pack.md).
 
 ### Long-running service
 

@@ -1,4 +1,4 @@
-.PHONY: bootstrap guest repack verify-artifact artifact-bundle artifact-install check build
+.PHONY: bootstrap guest repack verify-artifact artifact-bundle artifact-install workloads check build
 
 GUEST ?= dist/pysolate.wasm
 MANIFEST ?= dist/pysolate.manifest.json
@@ -27,6 +27,9 @@ artifact-bundle: verify-artifact
 artifact-install:
 	@test -n "$(BUNDLE)" || { echo 'set BUNDLE to a local .tar.gz path or HTTPS URL' >&2; exit 2; }
 	python3 tools/artifact_bundle.py install --source "$(BUNDLE)" --dist "$(dir $(GUEST))"
+
+workloads: verify-artifact
+	PYSOLATE_GUEST="$(abspath $(GUEST))" ./demos/14-agent-workloads.sh
 
 check: verify-artifact
 	PYSOLATE_GUEST="$(abspath $(GUEST))" go test ./... -count=1

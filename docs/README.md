@@ -6,6 +6,8 @@ for the execution model and build commands.
 
 ## Supported workflows
 
+- [`offline-replay.md`](offline-replay.md) — explicitly export an ended Run to a private local file and replay its ordered tool results without live dispatch.
+
 - [`artifact-profiles.md`](artifact-profiles.md) — the supported `agent-core`
   Guest contents, qualification probes, native relink versus VFS repack, and
   artifact manifests.

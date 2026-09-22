@@ -117,9 +117,38 @@ func OperationKey(ctx context.Context) (string, bool) {
 type operationKeyContextKey struct{}
 
 type toolDeclaration struct {
+	Name       string       `json:"name"`
+	Version    string       `json:"version"`
+	Recovery   RecoveryMode `json:"recovery"`
+	PythonPath string       `json:"python_path,omitempty"`
+}
+
+// legacyToolDeclaration is the exact tool snapshot format persisted before
+// Python paths were added. It is used only to recognize immutable definitions
+// already stored by that format; new definitions always use toolDeclaration.
+type legacyToolDeclaration struct {
 	Name     string       `json:"name"`
 	Version  string       `json:"version"`
 	Recovery RecoveryMode `json:"recovery"`
+}
+
+func matchesToolSnapshot(snapshot, current json.RawMessage) bool {
+	if bytes.Equal(snapshot, current) {
+		return true
+	}
+
+	var declarations []toolDeclaration
+	if err := json.Unmarshal(current, &declarations); err != nil {
+		return false
+	}
+	legacy := make([]legacyToolDeclaration, len(declarations))
+	for index, declaration := range declarations {
+		legacy[index] = legacyToolDeclaration{
+			Name: declaration.Name, Version: declaration.Version, Recovery: declaration.Recovery,
+		}
+	}
+	encoded, err := json.Marshal(legacy)
+	return err == nil && bytes.Equal(snapshot, encoded)
 }
 
 // Runner owns the durable store, compiled artifact, and tool declarations.
@@ -218,7 +247,16 @@ func NewRunner(ctx context.Context, store *Store, artifact []byte, environmentVe
 	manifest := make(pysolate.Manifest, len(toolMap))
 	for _, tool := range toolMap {
 		spec := toolSpecs[tool.Name]
-		snapshot = append(snapshot, toolDeclaration{Name: tool.Name, Version: tool.Version, Recovery: tool.Recovery})
+		pythonPath := spec.PythonPath
+		if pythonPath == "" {
+			// Legacy Tool declarations use the runtime's documented default path:
+			// a valid canonical name is presented unchanged by normalizeManifest.
+			pythonPath = tool.Name
+		}
+		snapshot = append(snapshot, toolDeclaration{
+			Name: tool.Name, Version: tool.Version, Recovery: tool.Recovery,
+			PythonPath: pythonPath,
+		})
 		spec.Call = scheduledTool(tool)
 		manifest[tool.Name] = spec
 	}
@@ -331,7 +369,7 @@ func (runner *Runner) Create(ctx context.Context, definition Definition) (Run, e
 	if runner == nil || runner.store == nil || len(runner.toolSnapshot) == 0 {
 		return Run{}, ErrInvalidRunner
 	}
-	if len(definition.Tools) != 0 && !bytes.Equal(definition.Tools, runner.toolSnapshot) {
+	if len(definition.Tools) != 0 && !matchesToolSnapshot(definition.Tools, runner.toolSnapshot) {
 		return Run{}, fmt.Errorf("%w: tool declaration snapshot does not match runner", ErrInvalidRunner)
 	}
 	definition.Tools = append(json.RawMessage(nil), runner.toolSnapshot...)
@@ -353,7 +391,7 @@ func (runner *Runner) validateDefinition(definition Definition) error {
 	if len(definition.Inputs) == 0 || !json.Valid(definition.Inputs) {
 		return fmt.Errorf("%w: invalid inputs", ErrInvalidRunner)
 	}
-	if len(definition.Tools) == 0 || !bytes.Equal(definition.Tools, runner.toolSnapshot) {
+	if len(definition.Tools) == 0 || !matchesToolSnapshot(definition.Tools, runner.toolSnapshot) {
 		return fmt.Errorf("%w: tool declaration snapshot does not match runner", ErrInvalidRunner)
 	}
 	return nil

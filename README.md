@@ -132,7 +132,10 @@ For a long-running application, both service commands support opt-in Linux
 `-cow-data-image` preparation. The durable service also exposes paginated,
 payload-free `GET /v1/durable/runs/{id}/history`. See the
 [ordinary service](docs/service.md) and [durable service](docs/durable-service.md)
-for commands, seed requirements and measured HTTP results.
+for commands, seed requirements and measured HTTP results. Both services can
+set an execution-time cap; ordinary HTTP Runs can opt into safe early reads.
+For debugging, [export an ended durable Run and replay it offline](docs/offline-replay.md)
+without credentials or live tool calls. Exported inputs and results remain private.
 
 See the [`docs/` index](docs/README.md) for supported workflows, measured
 performance, scheduling studies and recent deliveries. See

@@ -29,16 +29,38 @@ The command executes representative JSON, JSONL, CSV, text, regex, datetime, SHA
 
 The report records the exact artifact byte size and SHA-256. It is runtime evidence, not a committed mutable “latest” result.
 
+## Build and prebuilt consumption
+
+The supported entry points are intentionally small:
+
+```sh
+make bootstrap        # one-time pinned Linux x86_64 CPython/WASI + NumPy inputs
+make guest            # native relink plus VFS packaging
+make repack           # reuse raw-core.wasm; update only packaged Python content
+make verify-artifact  # verify manifest, digest, size, profile and Wasm header
+make artifact-bundle  # create a deterministic two-file .tar.gz bundle
+make artifact-install BUNDLE=/path/or/https-url/pysolate-agent-core.tar.gz
+```
+
+`artifact-install` accepts only a local path or HTTPS URL. It rejects links,
+path traversal, additional archive entries, oversized files and a mismatched
+manifest before replacing `dist/pysolate.wasm` and its manifest. This allows a
+consumer to use a qualified prebuilt without installing the compiler toolchain.
+The repository does not silently select a mutable “latest” build; a release or
+internal distribution channel must provide an explicit bundle URL.
+
+The setup scripts use `curl`, so conventional `http_proxy`, `https_proxy` and
+`no_proxy` environment variables are inherited. For example, a WSL build can
+point them at an explicitly reachable Clash Verge listener before running
+`make bootstrap`. No proxy address or credentials are persisted by Pysolate.
+
 ## Native link versus repack
 
 `build-guest.sh` has two explicit stages controlled by `PYSOLATE_RELINK`:
 
 ```sh
-# Recompile runtime.c and relink CPython/NumPy, then pack the Python tree.
-PYSOLATE_RELINK=1 bash build-guest.sh
-
-# Reuse the existing raw core and only rebuild/precompile/pack the Python tree.
-PYSOLATE_RELINK=0 bash build-guest.sh
+make guest   # PYSOLATE_RELINK=1
+make repack  # PYSOLATE_RELINK=0
 ```
 
 Guest bootstrap changes and pure-Python package changes use the repack path; they do not require relinking CPython or NumPy. The build still checks that the pinned PyYAML source, package metadata and license are present before packing.

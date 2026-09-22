@@ -34,10 +34,16 @@ tar -xzf "${DOWNLOAD_DIR}/numpy-source.tar.gz" -C "${NUMPY_SOURCE_DIR}" --strip-
 tar -xzf "${DOWNLOAD_DIR}/cython-source.tar.gz" -C "${CYTHON_SOURCE_DIR}" --strip-components=1
 python3 "${ROOT_DIR}/tools/namespace_numpy_legacy.py" "${NUMPY_SOURCE_DIR}"
 
-"${HOST_PYTHON}" -m venv "${BUILD_VENV}"
-"${BUILD_VENV}/bin/python" -m pip install --disable-pip-version-check --no-cache-dir --no-index --no-deps \
+"${HOST_PYTHON}" -m venv --without-pip "${BUILD_VENV}"
+mapfile -t PIP_WHEELS < <(printf '%s\n' "${CPYTHON_DIR}"/Lib/ensurepip/_bundled/pip-*.whl)
+if [[ ${#PIP_WHEELS[@]} -ne 1 || ! -f ${PIP_WHEELS[0]} ]]; then
+  echo "expected one bundled CPython pip wheel" >&2
+  exit 38
+fi
+PIP_PYTHONPATH="${PIP_WHEELS[0]}"
+PYTHONPATH="${PIP_PYTHONPATH}" "${BUILD_VENV}/bin/python" -m pip install --disable-pip-version-check --no-cache-dir --no-index --no-deps \
   "${DOWNLOAD_DIR}/setuptools-71.1.0-py3-none-any.whl"
-"${BUILD_VENV}/bin/python" -m pip install --disable-pip-version-check --no-cache-dir --no-index --no-build-isolation --no-deps \
+PYTHONPATH="${PIP_PYTHONPATH}" "${BUILD_VENV}/bin/python" -m pip install --disable-pip-version-check --no-cache-dir --no-index --no-build-isolation --no-deps \
   "${DOWNLOAD_DIR}/cython-source.tar.gz"
 
 FAKE_CXX="${BUILD_ROOT}/fake_cxx.sh"

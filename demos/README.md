@@ -15,6 +15,7 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 ./demos/10-calibrated-scheduling.sh
 ./demos/11-mcp-stdio.sh
 ./demos/12-mcp-workspace-scheduling.sh
+./demos/13-durable-restart.sh
 ./demos/run-all.sh
 ```
 
@@ -30,10 +31,11 @@ Run from any directory. By default the scripts use `dist/pysolate.wasm`; set `PY
 - `10-calibrated-scheduling.sh` measures a real single-Run phase trace, deterministically replays it, and compares prediction error with real 2/4-Run Executor batches.
 - `11-mcp-stdio.sh` starts an official-SDK MCP stdio subprocess, discovers its catalog tool, injects `catalog.lookup(...)`, and executes it from the real Guest.
 - `12-mcp-workspace-scheduling.sh` compares inline and `ExternalIO` execution of a dependent real-MCP tool chain, then hands the validated data to private-workspace Guests and exports conflict-checked `ChangeSet`s.
+- `13-durable-restart.sh` commits an idempotent Host effect, kills the service process before completion, restarts from SQLite and proves replay does not duplicate the effect.
 
 `run-all.sh` intentionally runs the short product demonstrations `01`–`05`.
 The measurement-oriented `06`–`10` scripts and dependency-oriented MCP demos
-`11`–`12` remain explicit.
+`11`–`13` remain explicit.
 
 ## Short code-reading route
 
@@ -47,7 +49,8 @@ The measurement-oriented `06`–`10` scripts and dependency-oriented MCP demos
 8. `service/server.go`: bounded HTTP admission and persistent workspace leases.
 9. `corpus/` and `cmd/pysolate-corpus/`: strict dataset cases and exact tool replay through the real Guest.
 10. `durable/runner.go` and `durable/executor.go`: replay/effect semantics, explicit attempt states, bounded admission and live-I/O slot reuse.
-11. `cmd/pysolate-phase-bench/` and `cmd/pysolate-queue-bench/`: fixed phase and scheduling measurements.
-12. `scheduling/`, `cmd/pysolate-schedule-sim/`, and `cmd/pysolate-calibrate/`: deterministic population-policy evaluation and measured-trace calibration.
+11. `service/durable/` and `cmd/pysolate-durable-server/`: the persisted HTTP lifecycle and real process-restart acceptance.
+12. `cmd/pysolate-phase-bench/` and `cmd/pysolate-queue-bench/`: fixed phase and scheduling measurements.
+13. `scheduling/`, `cmd/pysolate-schedule-sim/`, and `cmd/pysolate-calibrate/`: deterministic population-policy evaluation and measured-trace calibration.
 
 This branch is a direct continuation of the interview `spine/` implementation, not a wrapper around the old large runtime. The same short `Runner -> Wasm CPython -> Host bridge` path remains, while prepared/COW execution, PLM/prefix, dynamic tool providers, durable replay, workspaces and the HTTP service have been added around it.

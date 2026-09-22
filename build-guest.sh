@@ -17,7 +17,7 @@ AGENT_PROFILE="${ROOT}/guest/build/profiles/agent-core.json"
 PROFILE="${ROOT}/guest/build/native_package_profile.py"
 
 [[ $(uname -s) == Linux && $(uname -m) == x86_64 ]] || { echo 'build-guest.sh requires Linux x86_64' >&2; exit 2; }
-[[ -d ${INPUTS} ]] || { echo "missing PYSOLATE_BUILD_INPUTS: ${INPUTS}" >&2; exit 3; }
+[[ -d ${INPUTS} ]] || { echo "missing PYSOLATE_BUILD_INPUTS: ${INPUTS}; run 'make bootstrap' first" >&2; exit 3; }
 [[ -n ${NUMPY_PACKAGE} && -d ${NUMPY_PACKAGE} ]] || { echo 'set PYSOLATE_NUMPY_PACKAGE_ROOT to the qualified NumPy package tree' >&2; exit 5; }
 [[ -d ${PYYAML_SOURCE} ]] || { echo 'missing pinned PyYAML pure-Python package under build inputs' >&2; exit 10; }
 [[ -f ${PYYAML_ROOT}/LICENSE && -f ${PYYAML_ROOT}/PKG-INFO ]] || { echo 'missing PyYAML package metadata or license' >&2; exit 11; }

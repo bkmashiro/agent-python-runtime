@@ -25,6 +25,8 @@ for the execution model and build commands.
   Pysolate versus goals, model turns, events and global policy in the harness.
 - [`service.md`](service.md) — the long-running local HTTP service, hot
   prepared execution, workspace endpoints, admission behavior, and benchmark.
+- [`durable-service.md`](durable-service.md) — persisted Run and attempt HTTP
+  lifecycle, bounded admission, process-crash recovery, and ownership limits.
 - [`corpus-replay.md`](corpus-replay.md) — deterministic HumanEval/BFCL
   adapters and exact Tool-result replay without an LLM in the timed loop.
 
@@ -93,6 +95,13 @@ The recent runtime work now covers:
     the live-I/O scheduling benefit before validated JSON is handed to a
     separate writable-workspace Guest. The split makes the current durable /
     writable-workspace boundary explicit rather than coupling their state.
+11. **Durable service:** a trusted-local HTTP control plane now persists Run
+    definitions, executes bounded attempts and survives a real process kill.
+    Acceptance commits an idempotent external effect, kills the process before
+    completion, restarts from SQLite, and proves replay produces one effect.
+12. **Artifact workflow:** `make bootstrap`, `guest`, `repack`,
+    `verify-artifact`, `artifact-bundle`, and `artifact-install` separate the
+    expensive pinned Linux build from verified prebuilt artifact consumption.
 
 The next scheduling work remains evidence-led: repeat calibrated replay and the
 MCP workflow on Linux, add matching real batches for read-then-compute and any
@@ -116,7 +125,8 @@ The scripts under [`../demos/`](../demos/) provide presentation-ready paths:
 - `10` measured phase replay versus real bounded batches.
 - `11` official MCP Go SDK over stdio into a generated Guest Python tool.
 - `12` real MCP tool-chain scheduling followed by workspace ChangeSet export.
+- `13` process-kill durable recovery with an idempotent Host effect.
 
 `demos/run-all.sh` runs the short product demonstrations (`01`–`05`). The
-measurement-oriented `06`–`10` scripts and dependency-oriented MCP demos `11`–`12`
+measurement-oriented `06`–`10` scripts and dependency-oriented demos `11`–`13`
 remain explicit so setup time is not hidden inside the short demo suite.

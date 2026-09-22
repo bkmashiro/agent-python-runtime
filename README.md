@@ -123,15 +123,31 @@ No Broker/Plan hierarchy, plugin catalog, receipts, source certificates, workspa
 
 ## Run
 
-Requires Go 1.25+ and a built `dist/pysolate.wasm`. On Linux x86_64 with a C compiler, make, Python 3.11+, curl, tar and unzip:
+Requires Go 1.25+ and a verified `dist/pysolate.wasm`. The quickest path is an
+explicit qualified bundle from your release/internal distribution channel:
 
 ```sh
-python3 tools/setup-build-inputs.py  # one-time pinned CPython/WASI build
-python3 tools/setup-numpy.py         # pinned static NumPy build
-bash build-guest.sh                  # relink this project's Guest
+make artifact-install BUNDLE=/path/or/https-url/pysolate-agent-core.tar.gz
+make verify-artifact
 ```
 
-`PYSOLATE_BUILD_INPUTS` selects an existing CPython/WASI cache. The link script also accepts `PYSOLATE_NUMPY_NATIVE_ROOT` and `PYSOLATE_NUMPY_PACKAGE_ROOT` to reuse NumPy inputs. The supported `agent-core` artifact contains CPython, NumPy and one pinned pure-Python package, PyYAML. Changing user Python or Host tool catalogs does not require rebuilding the Guest; bootstrap or pure-Python package changes need only a VFS repack. The build separates legacy RandomState symbols from Generator symbols because their integer ABIs differ in a static WASI link.
+To build from source on Linux x86_64 with a C compiler, make, Python 3.11+,
+curl, tar and unzip:
+
+```sh
+make bootstrap  # one-time pinned CPython/WASI and static NumPy inputs
+make guest      # native relink and package
+# Later bootstrap/pure-Python changes only:
+make repack
+```
+
+`PYSOLATE_BUILD_INPUTS` selects an existing CPython/WASI cache. The setup
+downloads honor standard `http_proxy`, `https_proxy` and `no_proxy` variables.
+The link script also accepts `PYSOLATE_NUMPY_NATIVE_ROOT` and
+`PYSOLATE_NUMPY_PACKAGE_ROOT` to reuse NumPy inputs. Changing user Python or
+Host tool catalogs does not rebuild the Guest. See
+[artifact profiles](docs/artifact-profiles.md) for the verified bundle format
+and exact relink/repack boundary.
 
 ```sh
 printf 'result = inputs["value"] + 1\n' | go run ./cmd/pysolate -inputs '{"value":41}'
@@ -156,6 +172,7 @@ For presentation-ready end-to-end examples, use the scripts under [`demos/`](dem
 ./demos/10-calibrated-scheduling.sh
 ./demos/11-mcp-stdio.sh
 ./demos/12-mcp-workspace-scheduling.sh
+./demos/13-durable-restart.sh
 # Or run all demos:
 ./demos/run-all.sh
 ```
@@ -203,6 +220,27 @@ go run ./cmd/pysolate-server -guest dist/pysolate.wasm -listen 127.0.0.1:8080 -m
 ```
 
 The standalone binary intentionally grants no Host tools. An embedding application passes its trusted provider/MCP-derived `Manifest` to `service.New`; changing that catalog rebuilds service preparation but not the Guest artifact. See [the service API, trust boundary and loopback benchmark](docs/service.md).
+
+### Durable local service
+
+`cmd/pysolate-durable-server` adds persisted Run definitions, bounded attempt
+admission, waits, cancellation and crash recovery around the durable Runner:
+
+```sh
+go run ./cmd/pysolate-durable-server \
+  -guest dist/pysolate.wasm -db /tmp/pysolate-runs.db -listen 127.0.0.1:8081
+```
+
+The process-restart demo uses a real idempotent Host effect and verifies that a
+crash after effect commit does not duplicate it during replay:
+
+```sh
+./demos/13-durable-restart.sh
+```
+
+The standalone command has no Host tools; embedding applications supply a
+versioned durable Tool catalog. See [the durable service API and recovery
+contract](docs/durable-service.md).
 
 ## Optional execution modes
 

@@ -499,6 +499,14 @@ func (runner *Runner) blockAttempt(runID, reason string) error {
 	return fmt.Errorf("%w: %s", ErrBlocked, reason)
 }
 
+// Get returns the current durable state without executing Guest code.
+func (runner *Runner) Get(ctx context.Context, runID string) (Run, error) {
+	if runner == nil || runner.store == nil || runID == "" {
+		return Run{}, ErrInvalidRunner
+	}
+	return runner.store.Get(ctx, runID)
+}
+
 // Decide records a wait decision. It never executes Guest code.
 func (runner *Runner) Decide(ctx context.Context, waitID string, decision Decision) error {
 	if runner == nil || runner.store == nil || waitID == "" {

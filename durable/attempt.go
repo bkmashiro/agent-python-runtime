@@ -54,11 +54,11 @@ const (
 // Park describes a released attempt. It contains durable identity, not a live
 // Guest or resumable Python stack.
 type Park struct {
-	Kind     ParkKind
-	RunID    string
-	WaitID   string
-	Sequence uint32
-	Reason   string
+	Kind     ParkKind `json:"kind"`
+	RunID    string   `json:"run_id"`
+	WaitID   string   `json:"wait_id,omitempty"`
+	Sequence uint32   `json:"sequence"`
+	Reason   string   `json:"reason,omitempty"`
 }
 
 // Result is the stable harness-facing result of one fresh deterministic

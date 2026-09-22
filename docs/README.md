@@ -63,9 +63,7 @@ The recent runtime work now covers:
 2. **Private workspaces:** a bounded `/workspace` supports normal file editing,
    local imports, snapshots, deterministic diffs, bounded change export, and
    read-only touched-path conflict checks without mounting or modifying the
-   source repository from the Guest. Versioned local checkpoint tokens allow a
-   harness to hand an exact revision to a later attempt without putting mutable
-   filesystem bytes into durable Tool replay.
+   source repository from the Guest.
 3. **Agent-core artifact:** CPython, NumPy, PyYAML, common stdlib workflows,
    qualification probes, and separate native-relink/VFS-repack paths are
    documented and tested.

@@ -68,14 +68,10 @@ not decide which user's goal is most valuable or place work across a fleet.
 - Mount only a runtime-owned private workspace at `/workspace`.
 - Enforce path, link, file-count, byte and depth boundaries.
 - Produce snapshots, deterministic diffs and bounded change bundles.
-- Produce a versioned local checkpoint token so a later attempt can acquire the
-  same workspace only if its revision still matches.
 
 The harness decides which source revision creates the workspace, whether to
 accept a change, how to resolve conflicts, and whether to commit, push or open a
-pull request. It also persists the checkpoint token with task state and decides
-where private workspace bytes live. The token is not a backup or migration
-format.
+pull request.
 
 ## Harness owns
 

@@ -26,6 +26,11 @@ A concise product statement is:
 The broader ownership split is documented in
 [`runtime-harness-boundary.md`](runtime-harness-boundary.md).
 
+Provider discovery now produces one normalized `Capability` definition used by
+ordinary and durable execution. Durable binding remains a separate Host-owned
+policy step: `durable.ToolsFromProviders` requires an approved version,
+recovery mode and scheduling class for every discovered capability.
+
 ## Contrast with workflow-first systems
 
 Temporal requires developers to define Workflow code and move external I/O into

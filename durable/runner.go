@@ -48,6 +48,10 @@ const (
 // are persisted with a run; changing either one makes that run non-resumable.
 // Scheduling is Host-local resource policy and is deliberately not persisted.
 type Tool struct {
+	// Definition carries the canonical capability identity, Python presentation
+	// and Host implementation shared with ordinary execution. Legacy callers may
+	// continue to set Name and Call directly.
+	Definition pysolate.Capability
 	Name       string
 	Version    string
 	Call       pysolate.Tool
@@ -151,7 +155,20 @@ func NewRunner(ctx context.Context, store *Store, artifact []byte, environmentVe
 		return nil, ErrInvalidRunner
 	}
 	toolMap := make(map[string]Tool, len(tools))
+	toolSpecs := make(map[string]pysolate.ToolSpec, len(tools))
 	for _, tool := range tools {
+		spec := pysolate.ToolSpec{Call: tool.Call}
+		if tool.Definition.Name != "" {
+			if tool.Name != "" && tool.Name != tool.Definition.Name {
+				return nil, fmt.Errorf("%w: capability identity %q conflicts with tool name %q", ErrInvalidRunner, tool.Definition.Name, tool.Name)
+			}
+			if tool.Call != nil {
+				return nil, fmt.Errorf("%w: capability %q also supplies a legacy call", ErrInvalidRunner, tool.Definition.Name)
+			}
+			tool.Name = tool.Definition.Name
+			spec = tool.Definition.Spec
+			tool.Call = spec.Call
+		}
 		if tool.Name == "" || tool.Version == "" {
 			return nil, fmt.Errorf("%w: tool name and version are required", ErrInvalidRunner)
 		}
@@ -190,14 +207,18 @@ func NewRunner(ctx context.Context, store *Store, artifact []byte, environmentVe
 		default:
 			return nil, fmt.Errorf("%w: tool %q has no recovery declaration", ErrInvalidRunner, tool.Name)
 		}
+		spec.Call = tool.Call
 		toolMap[tool.Name] = tool
+		toolSpecs[tool.Name] = spec
 	}
 
 	snapshot := make([]toolDeclaration, 0, len(toolMap))
 	manifest := make(pysolate.Manifest, len(toolMap))
 	for _, tool := range toolMap {
+		spec := toolSpecs[tool.Name]
 		snapshot = append(snapshot, toolDeclaration{Name: tool.Name, Version: tool.Version, Recovery: tool.Recovery})
-		manifest[tool.Name] = pysolate.ToolSpec{Call: scheduledTool(tool)}
+		spec.Call = scheduledTool(tool)
+		manifest[tool.Name] = spec
 	}
 	sort.Slice(snapshot, func(left, right int) bool { return snapshot[left].Name < snapshot[right].Name })
 	encoded, err := json.Marshal(snapshot)

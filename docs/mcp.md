@@ -25,6 +25,28 @@ provider := mcpadapter.Provider{
 manifest, err := pysolate.ManifestFromProviders(ctx, provider)
 ```
 
+For durable execution, discovery uses the same `Capability` definitions but
+requires an explicit Host policy for each one:
+
+```go
+tools, err := durable.ToolsFromProviders(ctx, func(
+    ctx context.Context,
+    capability pysolate.Capability,
+) (durable.CapabilityPolicy, error) {
+    if !capability.Spec.Annotations.ReadOnlyHint {
+        return durable.CapabilityPolicy{}, errors.New("capability not approved")
+    }
+    return durable.CapabilityPolicy{
+        Version:    "catalog-v1",
+        Recovery:   durable.RetrySafe,
+        Scheduling: durable.ExternalIO,
+    }, nil
+}, provider)
+```
+
+The callback is Host policy. MCP annotations can inform it but never approve
+recovery, speculative execution or authority by themselves.
+
 `ConnectCommand` starts the subprocess, performs MCP initialization through the official SDK, and owns the resulting session until `Close`. `mcpadapter.Provider` then paginates `tools/list`, validates the normalized manifest and binds each generated Python function to `tools/call`.
 
 The resulting one-shot Guest code is ordinary Python:

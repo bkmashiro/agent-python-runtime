@@ -56,8 +56,10 @@ The recent runtime work now covers:
 1. **Dynamic Tool ABI:** Host providers expose canonical tool identities as
    generated namespaced Python functions through one JSON Host-call bridge.
    An official-Go-SDK adapter now exercises real MCP stdio initialization,
-   discovery and calls. Tool catalogs remain Host-side and do not enlarge or
-   rebuild the Guest artifact.
+   discovery and calls. Ordinary and durable paths now share one normalized
+   `Capability` definition; durable provider catalogs require an explicit Host
+   policy for version, recovery and scheduling. Tool catalogs remain Host-side
+   and do not enlarge or rebuild the Guest artifact.
 2. **Private workspaces:** a bounded `/workspace` supports normal file editing,
    local imports, snapshots, deterministic diffs, bounded change export, and
    read-only touched-path conflict checks without mounting or modifying the
@@ -71,9 +73,10 @@ The recent runtime work now covers:
    test runtime and Tool ABI compatibility without repeatedly generating code.
 6. **Execution-derived durability:** ordinary Python calls Host-declared Tools;
    the runtime records those calls as effect boundaries and replays persisted
-   outcomes. Provider-owned recovery contracts handle unresolved effects. Park
-   and completion are explicit control states; a durable park destroys the
-   Guest, then re-admission reconstructs the attempt.
+   outcomes. Provider-owned recovery contracts handle unresolved effects.
+   Completed, parked, blocked, Python-failed and cancelled attempts are
+   structured results; only infrastructure failures remain Go errors. A durable
+   park destroys the Guest, then re-admission reconstructs the attempt.
 7. **Live external-I/O scheduling:** an opted-in `ExternalIO` Tool releases its
    running slot while retaining the live Guest. Running, resident, external
    Tool, and queued limits are independent. The initial two-Run pilot reduced

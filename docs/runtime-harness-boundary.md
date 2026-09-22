@@ -95,17 +95,21 @@ Harness selects a ready task
      event, or asks a user/operator for a decision
 ```
 
-## Tool provider owns
+## Capability provider and Host policy
 
-The Tool provider forms the stable boundary between the two layers. It owns:
+The provider supplies the stable implementation boundary:
 
 - implementation, transport and credentials;
-- canonical identity, version and input/output contract;
-- operation-key handling;
-- idempotency and lookup behavior;
-- recovery and local scheduling declarations.
+- canonical identity, Python path and input/output metadata;
+- operation-key, idempotency and lookup support.
 
-Remote metadata such as MCP annotations may inform configuration but does not
+The embedding Host then approves the capability for a Runner and owns:
+
+- the semantic version pinned into durable history;
+- recovery mode and any lookup/wait callback;
+- early-read authority and local scheduling class.
+
+Remote metadata such as MCP annotations may inform this policy but does not
 independently grant authority or prove safe retry behavior.
 
 ## Intended API shape
@@ -117,14 +121,39 @@ attempt, err := executor.Admit(ctx, runID)
 result, err := attempt.Result(ctx)
 
 switch result.State {
-case durable.Completed:
+case durable.StateCompleted:
     // Feed the value back to the agent or finish the goal.
-case durable.Parked:
+case durable.StateParked:
     // Register the returned wait with the harness event system.
-case durable.Blocked:
+case durable.StateBlocked:
     // Request an operator/provider recovery decision.
+case durable.StateFailed:
+    // Feed the structured Python failure back to the agent.
+case durable.StateCancelled:
+    // Stop this harness turn.
 }
 ```
+
+Provider-backed Tools use the same normalized capability metadata for ordinary
+and durable execution. A durable Host must explicitly approve runtime semantics:
+
+```go
+tools, err := durable.ToolsFromProviders(ctx, func(
+    ctx context.Context,
+    capability pysolate.Capability,
+) (durable.CapabilityPolicy, error) {
+    return durable.CapabilityPolicy{
+        Version:    "catalog-v1",
+        Recovery:   durable.RetrySafe,
+        Scheduling: durable.ExternalIO,
+    }, nil
+}, provider)
+```
+
+Discovery annotations remain descriptive. The policy callback is the authority
+boundary that accepts a version, recovery mode and local scheduling behavior.
+The Host must bump the version when execution-visible behavior or the Python
+presentation changes.
 
 The runtime contract can be summarized as:
 

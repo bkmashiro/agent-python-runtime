@@ -27,11 +27,16 @@ type ToolAnnotations struct {
 	OpenWorldHint   bool `json:"open_world_hint,omitempty"`
 }
 
-// ToolDefinition is one canonical Host tool discovered from a provider.
-type ToolDefinition struct {
+// Capability is one canonical Host tool discovered from a provider. Spec
+// carries presentation metadata and the Host implementation; authority and
+// durable recovery policy remain Host-owned decisions.
+type Capability struct {
 	Name string
 	Spec ToolSpec
 }
+
+// ToolDefinition preserves the original provider API name.
+type ToolDefinition = Capability
 
 // ToolProvider discovers a bounded set of Host-owned tools before Runner
 // construction. Providers retain their connections and credentials; only
@@ -40,10 +45,12 @@ type ToolProvider interface {
 	Tools(context.Context) ([]ToolDefinition, error)
 }
 
-// ManifestFromProviders discovers and merges providers. Duplicate canonical
-// names fail closed instead of being resolved by provider order.
-func ManifestFromProviders(ctx context.Context, providers ...ToolProvider) (Manifest, error) {
-	manifest := make(Manifest)
+// DiscoverCapabilities discovers, validates, copies and sorts provider output.
+// Duplicate canonical names fail closed instead of being resolved by provider
+// order. Discovery metadata never grants execution or recovery authority.
+func DiscoverCapabilities(ctx context.Context, providers ...ToolProvider) ([]Capability, error) {
+	discovered := make([]Capability, 0)
+	seen := make(map[string]bool)
 	for index, provider := range providers {
 		if provider == nil {
 			return nil, fmt.Errorf("tool provider %d is nil", index)
@@ -53,14 +60,52 @@ func ManifestFromProviders(ctx context.Context, providers ...ToolProvider) (Mani
 			return nil, fmt.Errorf("discover tool provider %d: %w", index, err)
 		}
 		for _, definition := range definitions {
-			if _, exists := manifest[definition.Name]; exists {
+			if seen[definition.Name] {
 				return nil, fmt.Errorf("duplicate tool from providers: %s", definition.Name)
 			}
-			manifest[definition.Name] = definition.Spec
+			seen[definition.Name] = true
+			discovered = append(discovered, definition)
 		}
+	}
+	manifest, err := ManifestFromCapabilities(discovered)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(manifest))
+	for name := range manifest {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	capabilities := make([]Capability, 0, len(names))
+	for _, name := range names {
+		capabilities = append(capabilities, Capability{Name: name, Spec: manifest[name]})
+	}
+	return capabilities, nil
+}
+
+// ManifestFromCapabilities validates a Host-approved catalog and returns the
+// normalized execution manifest consumed by Runner.
+func ManifestFromCapabilities(capabilities []Capability) (Manifest, error) {
+	manifest := make(Manifest, len(capabilities))
+	for _, capability := range capabilities {
+		if _, exists := manifest[capability.Name]; exists {
+			return nil, fmt.Errorf("duplicate capability: %s", capability.Name)
+		}
+		manifest[capability.Name] = capability.Spec
 	}
 	normalized, _, err := normalizeManifest(manifest)
 	return normalized, err
+}
+
+// ManifestFromProviders discovers providers and builds an ordinary execution
+// manifest. Use DiscoverCapabilities when a Host must first attach durable
+// policy to each discovered capability.
+func ManifestFromProviders(ctx context.Context, providers ...ToolProvider) (Manifest, error) {
+	capabilities, err := DiscoverCapabilities(ctx, providers...)
+	if err != nil {
+		return nil, err
+	}
+	return ManifestFromCapabilities(capabilities)
 }
 
 // NewFromProviders discovers a Host-owned catalog and constructs a Runner.

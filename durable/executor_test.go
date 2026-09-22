@@ -180,6 +180,46 @@ func TestExecutorQueuedCancellationReleasesCapacity(t *testing.T) {
 	}
 }
 
+func TestExecutorExplicitQueuedCancelReturnsStructuredState(t *testing.T) {
+	started := make(chan string, 1)
+	release := make(chan struct{})
+	e := fakeExecutor(t, Limits{MaxActive: 1, MaxQueued: 1}, func(ctx context.Context, id string) (pysolate.Output, error) {
+		started <- id
+		select {
+		case <-release:
+			return pysolate.Output{}, nil
+		case <-ctx.Done():
+			return pysolate.Output{}, ctx.Err()
+		}
+	})
+	active, err := e.Admit(context.Background(), "active")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitStarted(t, started, "active")
+	queued, err := e.Admit(context.Background(), "queued")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = e.Cancel(context.Background(), "queued"); err != nil {
+		t.Fatal(err)
+	}
+	result, err := queued.Result(context.Background())
+	if err != nil || result.State != StateCancelled || result.Failure == nil || result.Failure.Kind != FailureCancellation {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	if _, err = queued.Wait(context.Background()); !errors.Is(err, ErrCancelled) {
+		t.Fatalf("legacy wait error=%v", err)
+	}
+	close(release)
+	if _, err = active.Result(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err = e.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestExecutorCancelPersistsBeforeActiveLocalCancel(t *testing.T) {
 	persisted := make(chan string, 1)
 	started := make(chan struct{})

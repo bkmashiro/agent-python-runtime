@@ -3,6 +3,7 @@ package durable
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	pysolate "github.com/bkmashiro/agent-python-runtime"
@@ -52,7 +53,7 @@ type Attempt struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 	stop   func() bool
-	result AdvanceResult
+	result Result
 	err    error
 	state  attemptState
 	permit chan struct{}
@@ -158,12 +159,12 @@ func (e *Executor) Submit(ctx context.Context, runID string) (*Attempt, error) {
 
 // Result returns the control-plane result of one attempt. Returned output
 // bytes and Park metadata are copied so repeated calls are independent.
-func (a *Attempt) Result(ctx context.Context) (AdvanceResult, error) {
+func (a *Attempt) Result(ctx context.Context) (Result, error) {
 	if a == nil {
-		return AdvanceResult{}, ErrInvalidRunner
+		return Result{}, ErrInvalidRunner
 	}
 	if ctx == nil {
-		return AdvanceResult{}, errors.New("nil result context")
+		return Result{}, errors.New("nil result context")
 	}
 	select {
 	case <-a.done:
@@ -173,9 +174,13 @@ func (a *Attempt) Result(ctx context.Context) (AdvanceResult, error) {
 			park := *result.Park
 			result.Park = &park
 		}
+		if result.Failure != nil {
+			failure := *result.Failure
+			result.Failure = &failure
+		}
 		return result, a.err
 	case <-ctx.Done():
-		return AdvanceResult{}, ctx.Err()
+		return Result{}, ctx.Err()
 	}
 }
 
@@ -186,10 +191,24 @@ func (a *Attempt) Wait(ctx context.Context) (pysolate.Output, error) {
 	if err != nil {
 		return result.Output, err
 	}
-	if result.State == AttemptParked {
+	switch result.State {
+	case StateParked:
 		return result.Output, parkError(result.Park)
+	case StateBlocked:
+		return result.Output, fmt.Errorf("%w: %s", ErrBlocked, failureMessage(result.Failure))
+	case StateFailed:
+		return result.Output, &pysolate.PythonError{Message: failureMessage(result.Failure)}
+	case StateCancelled:
+		return result.Output, ErrCancelled
 	}
 	return result.Output, nil
+}
+
+func failureMessage(failure *Failure) string {
+	if failure == nil || failure.Message == "" {
+		return "attempt failed"
+	}
+	return failure.Message
 }
 
 func (e *Executor) Cancel(ctx context.Context, runID string) error {
@@ -209,7 +228,10 @@ func (e *Executor) Cancel(ctx context.Context, runID string) error {
 		return nil
 	}
 	if a.state == attemptQueued {
-		e.dropQueuedLocked(a, ErrCancelled)
+		e.dropQueuedResultLocked(a, Result{
+			State:   StateCancelled,
+			Failure: &Failure{Kind: FailureCancellation, Message: ErrCancelled.Error()},
+		}, nil)
 		e.maybeDrainLocked()
 		e.mu.Unlock()
 		return nil
@@ -260,7 +282,7 @@ func (e *Executor) run(a *Attempt) {
 	e.finish(a, result, err)
 }
 
-func (e *Executor) finish(a *Attempt, result AdvanceResult, err error) {
+func (e *Executor) finish(a *Attempt, result Result, err error) {
 	e.mu.Lock()
 	if a.state == attemptDone || a.state == attemptQueued {
 		e.mu.Unlock()
@@ -440,7 +462,7 @@ func (e *Executor) Stats() ExecutorStats {
 	return stats
 }
 
-func (a *Attempt) complete(result AdvanceResult, err error) {
+func (a *Attempt) complete(result Result, err error) {
 	// All terminal transitions hold the Executor mutex.
 	a.stop()
 	a.result, a.err = result, err
@@ -470,11 +492,15 @@ func (e *Executor) removeQueuedLocked(target *Attempt) {
 }
 
 func (e *Executor) dropQueuedLocked(a *Attempt, err error) {
+	e.dropQueuedResultLocked(a, Result{}, err)
+}
+
+func (e *Executor) dropQueuedResultLocked(a *Attempt, result Result, err error) {
 	e.removeQueuedLocked(a)
 	a.state = attemptDone
 	delete(e.attempts, a.runID)
 	a.cancel()
-	a.complete(AdvanceResult{}, err)
+	a.complete(result, err)
 }
 
 func (e *Executor) maybeDrainLocked() {

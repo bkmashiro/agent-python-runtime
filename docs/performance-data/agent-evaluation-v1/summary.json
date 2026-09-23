@@ -1,0 +1,249 @@
+{
+  "episodes": 16,
+  "model_requests": 38,
+  "statuses": {
+    "completed": 16
+  },
+  "groups": [
+    {
+      "task": "join",
+      "arm": "code",
+      "n": 2,
+      "correct": 2,
+      "statuses": {
+        "completed": 2
+      },
+      "model_turns": [
+        3,
+        3
+      ],
+      "domain_calls": [
+        4,
+        4
+      ],
+      "total_tokens": [
+        5291,
+        4427
+      ],
+      "median_tokens_per_attempt": 4859.0,
+      "wall_seconds": [
+        3.902629042,
+        4.487020958
+      ],
+      "median_seconds_per_attempt": 4.194825,
+      "returned_models": [
+        "deepseek-flash"
+      ]
+    },
+    {
+      "task": "join",
+      "arm": "direct",
+      "n": 2,
+      "correct": 2,
+      "statuses": {
+        "completed": 2
+      },
+      "model_turns": [
+        2,
+        2
+      ],
+      "domain_calls": [
+        2,
+        2
+      ],
+      "total_tokens": [
+        2218,
+        2278
+      ],
+      "median_tokens_per_attempt": 2248.0,
+      "wall_seconds": [
+        3.4010505,
+        3.474067625
+      ],
+      "median_seconds_per_attempt": 3.4375590625,
+      "returned_models": [
+        "deepseek-flash"
+      ]
+    },
+    {
+      "task": "lookup",
+      "arm": "code",
+      "n": 2,
+      "correct": 2,
+      "statuses": {
+        "completed": 2
+      },
+      "model_turns": [
+        2,
+        2
+      ],
+      "domain_calls": [
+        1,
+        1
+      ],
+      "total_tokens": [
+        1497,
+        1468
+      ],
+      "median_tokens_per_attempt": 1482.5,
+      "wall_seconds": [
+        2.142338042,
+        1.96019025
+      ],
+      "median_seconds_per_attempt": 2.051264146,
+      "returned_models": [
+        "deepseek-flash"
+      ]
+    },
+    {
+      "task": "lookup",
+      "arm": "direct",
+      "n": 2,
+      "correct": 2,
+      "statuses": {
+        "completed": 2
+      },
+      "model_turns": [
+        2,
+        2
+      ],
+      "domain_calls": [
+        1,
+        1
+      ],
+      "total_tokens": [
+        1118,
+        1144
+      ],
+      "median_tokens_per_attempt": 1131.0,
+      "wall_seconds": [
+        1.8699865,
+        1.951750125
+      ],
+      "median_seconds_per_attempt": 1.9108683124999999,
+      "returned_models": [
+        "deepseek-flash"
+      ]
+    },
+    {
+      "task": "paginated_sum",
+      "arm": "code",
+      "n": 2,
+      "correct": 2,
+      "statuses": {
+        "completed": 2
+      },
+      "model_turns": [
+        3,
+        2
+      ],
+      "domain_calls": [
+        12,
+        6
+      ],
+      "total_tokens": [
+        8687,
+        2174
+      ],
+      "median_tokens_per_attempt": 5430.5,
+      "wall_seconds": [
+        4.41070525,
+        2.936769875
+      ],
+      "median_seconds_per_attempt": 3.6737375625000004,
+      "returned_models": [
+        "deepseek-flash"
+      ]
+    },
+    {
+      "task": "paginated_sum",
+      "arm": "direct",
+      "n": 2,
+      "correct": 2,
+      "statuses": {
+        "completed": 2
+      },
+      "model_turns": [
+        2,
+        2
+      ],
+      "domain_calls": [
+        6,
+        6
+      ],
+      "total_tokens": [
+        4999,
+        5348
+      ],
+      "median_tokens_per_attempt": 5173.5,
+      "wall_seconds": [
+        4.600733125,
+        5.511827083
+      ],
+      "median_seconds_per_attempt": 5.056280104,
+      "returned_models": [
+        "deepseek-flash"
+      ]
+    },
+    {
+      "task": "transient",
+      "arm": "code",
+      "n": 2,
+      "correct": 2,
+      "statuses": {
+        "completed": 2
+      },
+      "model_turns": [
+        3,
+        2
+      ],
+      "domain_calls": [
+        2,
+        2
+      ],
+      "total_tokens": [
+        2819,
+        1776
+      ],
+      "median_tokens_per_attempt": 2297.5,
+      "wall_seconds": [
+        3.783400417,
+        11.292536417
+      ],
+      "median_seconds_per_attempt": 7.537968417,
+      "returned_models": [
+        "deepseek-flash"
+      ]
+    },
+    {
+      "task": "transient",
+      "arm": "direct",
+      "n": 2,
+      "correct": 2,
+      "statuses": {
+        "completed": 2
+      },
+      "model_turns": [
+        3,
+        3
+      ],
+      "domain_calls": [
+        2,
+        2
+      ],
+      "total_tokens": [
+        1860,
+        2014
+      ],
+      "median_tokens_per_attempt": 1937.0,
+      "wall_seconds": [
+        2.957855375,
+        2.999067042
+      ],
+      "median_seconds_per_attempt": 2.9784612084999997,
+      "returned_models": [
+        "deepseek-flash"
+      ]
+    }
+  ]
+}

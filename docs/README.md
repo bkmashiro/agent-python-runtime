@@ -44,6 +44,7 @@ for the execution model and build commands.
 
 ## Performance and scheduling
 
+- [`agent-evaluation.md`](agent-evaluation.md) — controlled DeepSeek direct-tool versus Python comparison, with independent answer grading and all scored traces.
 - [`scientific-bytecode-cache.md`](scientific-bytecode-cache.md) — optional build-time NumPy/CSV caches, import speedups and the measured short-script cost.
 
 - [`cow-data-image.md`](cow-data-image.md) — opt-in COW data images, measured speedups, one-time guard cost and memory tradeoffs.

@@ -1,0 +1,21 @@
+{
+  "started_utc": "2026-09-23T06:35:11.918118+00:00",
+  "model": "deepseek-flash",
+  "base_url": "https://api.deepseek.com",
+  "platform": "macOS-26.4.1-arm64-arm-64bit",
+  "preparation": "copy, per-case prepared Runner reused across episodes; fresh Guest each execution",
+  "cases": [
+    "lookup",
+    "paginated_sum",
+    "join",
+    "transient"
+  ],
+  "repeats": 2,
+  "planned_episodes": 16,
+  "max_turns": 12,
+  "max_model_requests": 96,
+  "max_tokens_per_request": 4096,
+  "artifact_sha256": "2c63ce407eae626c89fcd1dd918c713b1f8b75a35a6cf6ca6861466168d0faf8",
+  "harness_sha256": "a4833c1df06677f52571690b1e0eee942bcac0cf185cd06a62d5b06896112be3",
+  "binary_sha256": "61410d42c524f60ecfe1aef1a0474b9e82c0110e08e0e1ea2c524549270aa6fc"
+}

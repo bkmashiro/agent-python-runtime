@@ -1,30 +1,20 @@
-# Pysolate task-level validation
+# Pysolate development recording and dependency validation
 
-**Complete.** Both arms scored 8/8 correct, but the code arm used 34.1% more reported tokens overall in this small frozen pilot. Raw answers, traces and independent regrading are retained in `docs/agent-evaluation.md`. No prompts were retuned after seeing results and no runtime changes were made.
+## Current pointer
 
-## Question and arms
+Complete. Default-on full private capture passed a real-provider smoke and no-key offline replay. All 12 dependency episodes were correct and subsequently replayed with no live provider/tool dispatch. Full archives stay local; see development-recording.md and dependency-evaluation.md. Prior v1 results remain unchanged and are not full recordings.
 
-Does code-mediated use of the same approved tools improve task correctness, model round trips or model context use on a few controlled tasks? Compare direct model tool calls against Pysolate-executed Python using the same DeepSeek endpoint/model and domain capabilities. Do not attribute a general Code Mode benefit uniquely to this runtime.
+## Standing development policy
 
-## Contract before live runs
+See `AGENTS.md`: full private recording is default for model-driven experiments. Keep provider-returned fields, actual request/response bytes, generated and executed code, ordered domain and wire outcomes, seed/artifact/tool bindings, Guest output/errors, failed attempts and partial captures. Strip transport credentials and configured keys, not debugging evidence. Public summaries are separate reviewed projections.
 
-- Four synthetic, fully specified tasks: single lookup (negative control), paginated integer-cent aggregation, row/catalog join, and one explicitly retryable read failure.
-- Same task data, answer schema, domain tool definitions/permissions, completion-token request and episode budgets in both arms. Direct calls may be batched within a model turn.
-- The code arm can compute in Python but cannot access the model key, Host filesystem, network or extra domain tools. No real external side effects.
-- Only schema-valid `submit_answer` ends a task; oracle grading occurs afterward and is never fed to the model. Shape/protocol failures and numerically wrong answers remain distinguishable.
-- Independent oracle checks and fake-provider protocol tests precede live use. First run a separate lookup smoke in both arms, then freeze cases/prompts/budgets for scoring.
-- Scored pilot: 4 tasks × 2 arms × 2 repeats = 16 planned episodes. Alternate arm order between repeats. Retain every failure and explicitly classify unrun rows if a shared budget stops the campaign.
-- At most 12 model turns and 32 permitted domain calls per episode; at most 96 model requests for the scored campaign. No automatic transport retries. A failed smoke is diagnosed before another attempt; it is not quietly treated as scored success.
-- Record actual nullable provider token usage, requested/returned model names, model requests, model-facing tool calls, underlying domain calls, total episode time, model wait, Guest execution and domain callback time. Nested durations are not additive; do not manufacture token or cost estimates.
-- Use prepared execution with setup recorded separately. State host/artifact and warm lifecycle. Do not hide initialization cost or call this a cold-start comparison.
-- Keep credentials and provider reasoning out of persisted/public traces. Fixtures are synthetic, but still review generated code/results before publishing evidence.
+## Scope
 
-## Completion
+- [x] Default-on private recording and strict offline replay for the no-workspace `agent-eval` path. No new database, UI, provider calls during replay or live-tool fallback.
+- [x] Deterministic fixtures for opaque cursor pagination and dependency/branch chains. Cursor state matches the prior 120-row ledger; both overdue and credit branches have checked answers.
+- [x] Real smoke proves recording completeness, provider playback and seeded execution replay before scoring.
+- [x] New independent dependency cohort: `cursor_sum`, `dependent_due`, `dependent_credit`, direct/code, two repeats each = 12 planned episodes. Same DeepSeek model, capabilities and limits; alternate arm order. Keep raw private records and all failures.
+- [x] Compare correctness and model intervention counts first, then domain calls, token usage and elapsed time. Keep v1 as a separate baseline; do not rewrite its prompts or results.
+- [x] Relevant checks, documentation, signed commits/push and verified clean worktree.
 
-[x] Harness/oracles verified; no new runtime authority.
-[x] Live smoke exercises both actual paths.
-[x] Frozen 16-episode cohort accounted for, or clearly reported budget/provider blocker.
-[x] Results report correctness first, costs second, failures and sample limitations included.
-[x] Relevant checks, signed commit/push and remote verification complete.
-
-This is a pilot, not a statistical ranking or a production success-rate claim. No smolagents integration, release publication, scheduler rewrite or additional runtime optimization is authorized by this validation task.
+This remains development validation. No smolagents integration, release publication, arbitrary Host callbacks, workspace checkpointing, new runtime authority or automatic routing policy. Partial or unsupported recordings must fail visibly rather than masquerade as complete replay. Per-run limits remain enabled, with truncation/error boundaries recorded.

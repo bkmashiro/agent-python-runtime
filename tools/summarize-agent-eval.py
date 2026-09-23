@@ -15,14 +15,19 @@ EXPECTED = {
 }
 
 
+DEPENDENCIES = {"cursor_sum": {"record_count": 20, "sum_cents": 46050}, "dependent_due": {"kind": "payment_due", "amount_cents": 5825}, "dependent_credit": {"kind": "credit_available", "amount_cents": 4375}}
+
 def summarize(rows, expected_count):
     if len(rows) != expected_count:
         raise ValueError(f'expected {expected_count} rows, got {len(rows)}')
+    if any(r.get('replayed') for r in rows):
+        raise ValueError('offline replay rows are not live observations')
     identities = [(r['task'], r['arm'], r['repeat']) for r in rows]
     if len(set(identities)) != len(identities):
         raise ValueError('duplicate episode')
-    if expected_count == 16:
-        planned = {(task, arm, repeat) for task in EXPECTED for arm in ('direct', 'code') for repeat in (1, 2)}
+    if expected_count in (12, 16):
+        cohort = EXPECTED if expected_count == 16 else DEPENDENCIES
+        planned = {(task, arm, repeat) for task in cohort for arm in ('direct', 'code') for repeat in (1, 2)}
         if set(identities) != planned:
             raise ValueError('cohort differs from the frozen matrix')
     groups = defaultdict(list)
@@ -33,7 +38,7 @@ def summarize(rows, expected_count):
             submissions = [event for event in row.get('trace', []) if event['tool'] == 'submit_answer']
             if not submissions or json.loads(submissions[-1]['arguments'], parse_float=Fraction) != answer:
                 raise ValueError('saved answer differs from submitted tool arguments')
-            correct = answer == EXPECTED[row['task']]
+            correct = answer == (EXPECTED | DEPENDENCIES)[row['task']]
             if correct != row['correctness'] or correct != (row['completion_status'] == 'completed'):
                 raise ValueError(f'oracle disagreement: {row["task"]} {row["arm"]}')
         if row['usage_complete'] and row['model_requests'] and row['provider_usage'] is None:

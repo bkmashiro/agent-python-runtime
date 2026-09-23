@@ -18,6 +18,10 @@ Python-callable Host tool is the readonly, fixed local
 It does not perform network or external writes. CSV and tool results are data,
 not instructions.
 
+For new development experiments requiring complete provider/tool recordings
+and strict offline playback, use [agent-eval](development-recording.md). This
+walkthrough's optional `-trace` is a partial diagnostic, not a replay archive.
+
 ## Run
 
 For the selected DeepSeek live acceptance, the generic adapter can use the

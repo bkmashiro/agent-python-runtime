@@ -139,7 +139,38 @@ in the output. The command performs no provider retries. Tests use a fake
 provider and do not make paid or network model calls. The live command requires
 an explicitly supplied key and endpoint.
 
-`-cases` accepts a comma-separated subset of `lookup,paginated_sum,join,transient`.
+See [the recording contract](development-recording.md) for completeness, credential filtering and replay limits. The original v1 pilot above predates this format and is not retrospectively upgraded.
+
+Every live run also creates a **private development recording** by default at
+`<out-without-.jsonl>.private.jsonl` (or at `-private-record`). The file is
+created with `O_CREATE|O_EXCL`, mode `0600`, and is append-synced at request/execution/tool boundaries. It is not a scored artifact and must stay local. It contains the full
+provider continuation, including `reasoning_content`, exact request and
+response transport bodies, HTTP status, provider error text/body, generated
+Python, every execution result, and every direct/Python tool argument and
+wire outcome. Request/response bodies are Go `[]byte` values and therefore
+base64 in JSONL; they are not re-marshaled `json.RawMessage` values, so body
+whitespace, invalid JSON, and HTML escaping are retained byte-for-byte. API
+keys and authorization headers are never recorded.
+
+The same recording can be replayed without credentials or network access:
+
+```sh
+go run ./examples/agent-eval \
+  -replay /private/path/agent-eval.private.jsonl \
+  -guest dist/pysolate.wasm \
+  -out /tmp/agent-eval-offline.jsonl
+```
+
+Offline replay uses a fresh deterministic Guest, a strict provider playback
+that matches each request, and strict direct/Python tool journals. It never
+constructs an HTTP provider and never invokes the fixture callbacks. Changed
+provider requests, generated code, tool names/arguments/order, execution
+outputs, or Guest artifact identity fail closed. Captures that were interrupted,
+partial, or truncated by an existing provider body limit are retained for
+inspection but are rejected as replay inputs. Wall-clock timeout outcomes are also not replayable in this version. `-replay` does not require
+`-api-key-env`; the output path is still new-only.
+
+`-cases` accepts a comma-separated subset of `lookup,paginated_sum,join,transient,cursor_sum,dependent_due,dependent_credit`.
 `-max-model-requests` is a shared hard campaign cap and cannot exceed 96. If a
 complete arm pair cannot receive at least one request per arm, both rows are
 written as `skipped`; rows are never silently dropped. A request reservation
@@ -160,7 +191,7 @@ are not guaranteed to repeat. Rows include:
 - nullable `provider_usage`. If any provider response lacks usage, the episode
   total is `null` and `usage_complete` is false; usage from provider errors is
   counted when the error response supplies it;
-- Submitted `answer` and bounded tool traces, including generated Python and its output, for independent grading. Provider reasoning is not recorded.
+- Submitted `answer` and bounded tool traces, including generated Python and its output, for independent grading. Provider reasoning is kept only in the separate private recording.
 - `total_ns`, `model_roundtrip_ns`, `pysolate_ns`, `domain_callback_ns`, and separate
   `setup_ns`. Setup is the per-case warm Runner preparation and is not included
   in per-execution Pysolate time. Direct rows have zero setup/Pysolate time;

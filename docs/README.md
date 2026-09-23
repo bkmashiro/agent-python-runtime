@@ -6,6 +6,8 @@ for the execution model and build commands.
 
 ## Supported workflows
 
+- [`development-recording.md`](development-recording.md) — default-on private experiment capture and no-network replay.
+
 - [`agent-loop.md`](agent-loop.md) — a small model → isolated Python → report example, verified with DeepSeek.
 
 - [`offline-replay.md`](offline-replay.md) — explicitly export an ended Run to a private local file and replay its ordered tool results without live dispatch.
@@ -43,6 +45,8 @@ for the execution model and build commands.
   real-Guest controlled-delay demo and explicit exclusions.
 
 ## Performance and scheduling
+
+- [`dependency-evaluation.md`](dependency-evaluation.md) — opaque cursors and dependent branches, with full private recordings replayed offline.
 
 - [`agent-evaluation.md`](agent-evaluation.md) — controlled DeepSeek direct-tool versus Python comparison, with independent answer grading and all scored traces.
 - [`scientific-bytecode-cache.md`](scientific-bytecode-cache.md) — optional build-time NumPy/CSV caches, import speedups and the measured short-script cost.

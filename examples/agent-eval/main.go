@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -13,8 +14,10 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,6 +25,7 @@ import (
 	"time"
 
 	pysolate "github.com/bkmashiro/agent-python-runtime"
+	"github.com/bkmashiro/agent-python-runtime/internal/perfdiag"
 )
 
 const (
@@ -46,8 +50,8 @@ const (
 var errGlobalBudget = errors.New("shared model-request budget exhausted")
 
 // Message and the following OpenAI-compatible types deliberately retain
-// reasoning_content in the in-memory continuation. Traces and JSONL rows never
-// contain it.
+// reasoning_content in the in-memory continuation. Public traces and scored
+// rows omit it; the private recording preserves it.
 type Message struct {
 	Role             string     `json:"role"`
 	ReasoningContent string     `json:"reasoning_content,omitempty"`
@@ -86,9 +90,21 @@ type ProviderUsage struct {
 }
 
 type ProviderResponse struct {
-	Message Message
-	Model   string
-	Usage   *ProviderUsage
+	Message Message        `json:"message"`
+	Model   string         `json:"model"`
+	Usage   *ProviderUsage `json:"usage,omitempty"`
+	// RawBody is transport-owned and is never included in the public row. A
+	// private recorder stores it as []byte (base64 in JSON), preserving the
+	// provider response byte-for-byte rather than round-tripping JSON.
+	RawBody []byte `json:"-"`
+}
+
+type providerCallDetails struct {
+	DiagnosticError   string
+	RequestBody       []byte
+	ResponseBody      []byte
+	StatusCode        int
+	ResponseTruncated bool
 }
 
 type ChatProvider interface {
@@ -112,31 +128,33 @@ type OpenAIProvider struct {
 }
 
 func (p *OpenAIProvider) Complete(ctx context.Context, messages []Message, tools []ToolDefinition, maxTokens int) (ProviderResponse, error) {
+	response, _, err := p.completeWithDetails(ctx, messages, tools, maxTokens)
+	return response, err
+}
+
+func (p *OpenAIProvider) completeWithDetails(ctx context.Context, messages []Message, tools []ToolDefinition, maxTokens int) (ProviderResponse, providerCallDetails, error) {
+	var details providerCallDetails
 	if p == nil || p.Client == nil {
-		return ProviderResponse{}, &ProviderError{Message: "model provider is not configured"}
+		return ProviderResponse{}, details, &ProviderError{Message: "model provider is not configured"}
 	}
 	base := strings.TrimRight(p.BaseURL, "/")
 	if base == "" {
-		return ProviderResponse{}, &ProviderError{Message: "model base URL is empty"}
+		return ProviderResponse{}, details, &ProviderError{Message: "model base URL is empty"}
 	}
 	if maxTokens <= 0 || maxTokens > maxTokensPerRequest {
-		return ProviderResponse{}, &ProviderError{Message: "invalid max_tokens"}
+		return ProviderResponse{}, details, &ProviderError{Message: "invalid max_tokens"}
 	}
-	body, err := json.Marshal(struct {
-		Model     string           `json:"model"`
-		Messages  []Message        `json:"messages"`
-		Tools     []ToolDefinition `json:"tools"`
-		MaxTokens int              `json:"max_tokens"`
-	}{p.Model, messages, tools, maxTokens})
+	body, err := encodeProviderRequestBody(p.Model, messages, tools, maxTokens)
 	if err != nil {
-		return ProviderResponse{}, &ProviderError{Message: "encode model request failed"}
+		return ProviderResponse{}, details, &ProviderError{Message: "encode model request failed"}
 	}
+	details.RequestBody = append([]byte(nil), body...)
 	if len(body) > maxRequestBodyBytes {
-		return ProviderResponse{}, &ProviderError{Message: "model request exceeded body limit", Model: p.Model}
+		return ProviderResponse{}, details, &ProviderError{Message: "model request exceeded body limit", Model: p.Model}
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return ProviderResponse{}, &ProviderError{Message: "create model request failed"}
+		return ProviderResponse{}, details, &ProviderError{Message: "create model request failed"}
 	}
 	request.Header.Set("Content-Type", "application/json")
 	if p.APIKey != "" {
@@ -148,13 +166,28 @@ func (p *OpenAIProvider) Complete(ctx context.Context, messages []Message, tools
 	}
 	response, err := p.Client.Do(request)
 	if err != nil {
-		return ProviderResponse{}, &ProviderError{Message: "model request failed", Model: p.Model}
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			details.DiagnosticError = urlErr.Err.Error()
+		} else {
+			details.DiagnosticError = err.Error()
+		}
+		return ProviderResponse{}, details, &ProviderError{Message: "model request failed", Model: p.Model}
 	}
 	defer response.Body.Close()
+	details.StatusCode = response.StatusCode
 	data, readErr := io.ReadAll(io.LimitReader(response.Body, int64(limit)+1))
-	if readErr != nil || len(data) > limit {
-		return ProviderResponse{}, &ProviderError{Message: "model response exceeded body limit", Model: p.Model}
+	details.ResponseBody = append([]byte(nil), data...)
+	if len(data) > limit || readErr != nil {
+		details.ResponseTruncated = true
 	}
+	if readErr != nil {
+		details.DiagnosticError = readErr.Error()
+	}
+	if readErr != nil || len(data) > limit {
+		return ProviderResponse{RawBody: append([]byte(nil), data...)}, details, &ProviderError{Message: "model response exceeded body limit", Model: p.Model}
+	}
+	details.ResponseBody = append([]byte(nil), data...)
 	var envelope struct {
 		Model   string `json:"model"`
 		Choices []struct {
@@ -166,15 +199,24 @@ func (p *OpenAIProvider) Complete(ctx context.Context, messages []Message, tools
 	decodeErr := json.Unmarshal(data, &envelope)
 	usage := decodeUsage(envelope.Usage)
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return ProviderResponse{Model: envelope.Model, Usage: usage}, &ProviderError{Message: "model returned a non-success HTTP status", Model: envelope.Model, Usage: usage}
+		return ProviderResponse{Model: envelope.Model, Usage: usage, RawBody: append([]byte(nil), data...)}, details, &ProviderError{Message: "model returned a non-success HTTP status", Model: envelope.Model, Usage: usage}
 	}
 	if decodeErr != nil || len(envelope.Choices) != 1 {
-		return ProviderResponse{Model: envelope.Model, Usage: usage}, &ProviderError{Message: "model response was not one valid choice", Model: envelope.Model, Usage: usage}
+		return ProviderResponse{Model: envelope.Model, Usage: usage, RawBody: append([]byte(nil), data...)}, details, &ProviderError{Message: "model response was not one valid choice", Model: envelope.Model, Usage: usage}
 	}
 	if envelope.Choices[0].FinishReason == "length" || envelope.Choices[0].FinishReason == "content_filter" {
-		return ProviderResponse{Model: envelope.Model, Usage: usage}, &ProviderError{Message: "model response was incomplete", Model: envelope.Model, Usage: usage}
+		return ProviderResponse{Model: envelope.Model, Usage: usage, RawBody: append([]byte(nil), data...)}, details, &ProviderError{Message: "model response was incomplete", Model: envelope.Model, Usage: usage}
 	}
-	return ProviderResponse{Message: envelope.Choices[0].Message, Model: envelope.Model, Usage: usage}, nil
+	return ProviderResponse{Message: envelope.Choices[0].Message, Model: envelope.Model, Usage: usage, RawBody: append([]byte(nil), data...)}, details, nil
+}
+
+func encodeProviderRequestBody(model string, messages []Message, tools []ToolDefinition, maxTokens int) ([]byte, error) {
+	return json.Marshal(struct {
+		Model     string           `json:"model"`
+		Messages  []Message        `json:"messages"`
+		Tools     []ToolDefinition `json:"tools"`
+		MaxTokens int              `json:"max_tokens"`
+	}{model, messages, tools, maxTokens})
 }
 
 // A declaration is the sole source for the direct function schema, the
@@ -251,9 +293,45 @@ type episodeRuntime struct {
 	hostCalls     int
 	callbackNanos int64
 	toolLimit     bool
+	playback      bool
+	replayErr     error
+	playbackCalls []privateDomainCall
+	playbackIndex int
 }
 
 func (e *episodeRuntime) callDomain(name string, ctx context.Context, raw json.RawMessage) (any, error) {
+	if e.playback {
+		if e.playbackIndex >= len(e.playbackCalls) {
+			e.replayErr = errors.New("offline direct tool replay exhausted")
+			return nil, e.replayErr
+		}
+		call := e.playbackCalls[e.playbackIndex]
+		if call.Tool != name || call.Sequence != e.playbackIndex || !bytes.Equal(call.Arguments, raw) {
+			e.replayErr = errors.New("offline direct tool replay mismatch")
+			return nil, e.replayErr
+		}
+		e.playbackIndex++
+		if e.hostCalls >= maxHostCalls {
+			e.toolLimit = true
+		} else if _, ok := e.fixture.domain(name); ok {
+			e.hostCalls++
+			e.domainCalls++
+		}
+		var wire struct {
+			Error *string `json:"error"`
+		}
+		if err := json.Unmarshal(call.Result, &wire); err == nil && wire.Error != nil {
+			return nil, errors.New(*wire.Error)
+		}
+		var value any
+		decoder := json.NewDecoder(bytes.NewReader(call.Result))
+		decoder.UseNumber()
+		if err := decoder.Decode(&value); err != nil {
+			e.replayErr = errors.New("offline direct tool result invalid")
+			return nil, e.replayErr
+		}
+		return value, nil
+	}
 	if e.hostCalls >= maxHostCalls {
 		e.toolLimit = true
 		return nil, errors.New("Host-call budget exhausted")
@@ -297,10 +375,13 @@ func executePythonDefinition() ToolDefinition {
 
 func allTasks() map[string]taskCase {
 	return map[string]taskCase{
-		"lookup":        lookupTask(),
-		"paginated_sum": paginatedSumTask(),
-		"join":          joinTask(),
-		"transient":     transientTask(),
+		"lookup":           lookupTask(),
+		"paginated_sum":    paginatedSumTask(),
+		"join":             joinTask(),
+		"transient":        transientTask(),
+		"cursor_sum":       cursorSumTask(),
+		"dependent_due":    dependentBranchTask(false),
+		"dependent_credit": dependentBranchTask(true),
 	}
 }
 
@@ -606,6 +687,7 @@ type usageTotals struct {
 }
 
 type episodeRow struct {
+	Replayed          bool            `json:"replayed,omitempty"`
 	TotalNS           int64           `json:"total_ns"`
 	ExecutionAttempts int             `json:"execution_attempts"`
 	Answer            json.RawMessage `json:"answer,omitempty"`
@@ -651,7 +733,7 @@ func (r *episodeRow) recordProvider(response ProviderResponse) {
 }
 
 func initialRow(task, arm string, repeat, sequence int, requested string, setupNS int64) episodeRow {
-	return episodeRow{FixtureVersion: "agent-eval-v1", Task: task, Arm: arm, Repeat: repeat, Sequence: sequence, CompletionStatus: "provider_error", RequestedModel: requested, SetupNS: setupNS, UsageComplete: true}
+	return episodeRow{FixtureVersion: "agent-eval-v2", Task: task, Arm: arm, Repeat: repeat, Sequence: sequence, CompletionStatus: "provider_error", RequestedModel: requested, SetupNS: setupNS, UsageComplete: true}
 }
 
 func domainContext(domains []domainDeclaration) string {
@@ -668,15 +750,47 @@ func runEpisode(ctx context.Context, provider ChatProvider, budget *requestBudge
 	episodeStarted := time.Now()
 	fixture := task.NewEpisode()
 	runtime := &episodeRuntime{fixture: fixture}
+	private := recordingEpisodeOf(provider)
+	playback, replaying := provider.(*playbackProvider)
+	capturing := private != nil && !replaying
+	if capturing {
+		private.Kind = "episode"
+		private.FixtureVersion = "agent-eval-v2"
+		private.Task, private.Arm = task.ID, arm
+		private.Repeat, private.Sequence = repeat, sequence
+		private.Seed = recordingSeed(task.ID)
+		private.MaxTurns, private.MaxTokens = maxTurns, maxTokensPerRequest
+		private.ReserveRequests = reserve
+		for _, d := range fixture.Domains {
+			private.DomainBindings = append(private.DomainBindings, privateToolBinding{Name: d.Name, PythonPath: d.PythonPath, Description: d.Description, Schema: append(json.RawMessage(nil), d.Schema...)})
+		}
+	}
+	if replaying {
+		runtime.playback = true
+		for _, call := range playback.episode.DomainCalls {
+			if call.Scope == "direct" {
+				runtime.playbackCalls = append(runtime.playbackCalls, call)
+			}
+		}
+	}
 	row = initialRow(task.ID, arm, repeat, sequence, requestedModel, setupNS)
 	defer func() {
 		row.TotalNS = time.Since(episodeStarted).Nanoseconds()
 		row.DomainToolCalls = runtime.domainCalls
 		row.DomainCallbackNS = runtime.callbackNanos
+		if replaying && (runtime.replayErr != nil || (arm == "direct" && runtime.playbackIndex != len(runtime.playbackCalls)) || (arm == "code" && row.ExecutionAttempts != len(private.Executions))) {
+			row.CompletionStatus = "replay_mismatch"
+		}
 		if !row.UsageComplete {
 			row.ProviderUsage = nil
 		}
 	}()
+	if capturing {
+		if err := private.checkpoint(); err != nil {
+			row.CompletionStatus = "recording_error"
+			return
+		}
+	}
 	if arm == "code" && runner == nil {
 		row.CompletionStatus = "provider_error"
 		return
@@ -706,8 +820,15 @@ func runEpisode(ctx context.Context, provider ChatProvider, budget *requestBudge
 		system += "\nDomain declarations (schemas and descriptions are authoritative): " + domainContext(fixture.Domains)
 	}
 	messages := []Message{{Role: "system", Content: system}, {Role: "user", Content: task.Prompt}}
+	if replaying && len(private.ProviderCalls) > 0 {
+		messages = cloneMessages(private.ProviderCalls[0].Messages)
+		tools = cloneTools(private.ProviderCalls[0].Tools)
+	}
 	reply := func(call ToolCall, name, content string) {
 		row.Trace = append(row.Trace, toolTrace{Turn: row.Turns, Tool: name, Arguments: call.Function.Arguments, Result: content})
+		if capturing {
+			appendModelToolCall(private, row.Turns, call, content)
+		}
 		messages = append(messages, toolMessage(call, name, content))
 	}
 	protocolFailure := false
@@ -732,7 +853,7 @@ func runEpisode(ctx context.Context, provider ChatProvider, budget *requestBudge
 		row.ModelRoundtripNS += time.Since(started).Nanoseconds()
 		row.recordProvider(response)
 		if callErr != nil {
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled) {
 				row.CompletionStatus = "timeout"
 			} else if errors.Is(callErr, errGlobalBudget) {
 				row.CompletionStatus = "globalbudget"
@@ -770,6 +891,10 @@ func runEpisode(ctx context.Context, provider ChatProvider, budget *requestBudge
 			continue
 		}
 		for _, call := range response.Message.ToolCalls {
+			if ctx.Err() != nil {
+				row.CompletionStatus = "timeout"
+				return
+			}
 			if call.ID == "" {
 				protocolFailure = true
 				messages = append(messages, Message{Role: "user", Content: "Controlled error: every function call needs a call id."})
@@ -789,6 +914,9 @@ func runEpisode(ctx context.Context, provider ChatProvider, budget *requestBudge
 				}
 				row.Answer = append(json.RawMessage(nil), call.Function.Arguments...)
 				row.Trace = append(row.Trace, toolTrace{Turn: row.Turns, Tool: "submit_answer", Arguments: call.Function.Arguments})
+				if capturing {
+					appendModelToolCall(private, row.Turns, call, "")
+				}
 				row.Correctness = boolPtr(correct)
 				if correct {
 					row.CompletionStatus = "completed"
@@ -798,12 +926,34 @@ func runEpisode(ctx context.Context, provider ChatProvider, budget *requestBudge
 				return
 			}
 			if arm == "direct" {
+				index := -1
+				if capturing {
+					index = len(private.DomainCalls)
+					private.DomainCalls = append(private.DomainCalls, privateDomainCall{Scope: "direct", Sequence: index, Tool: call.Function.Name, Arguments: []byte(call.Function.Arguments)})
+					if err := private.checkpoint(); err != nil {
+						row.CompletionStatus = "recording_error"
+						return
+					}
+				}
 				value, invokeErr := runtime.callDomain(call.Function.Name, ctx, json.RawMessage(call.Function.Arguments))
+				content := domainResult(value, invokeErr)
+				if capturing {
+					private.DomainCalls[index].Result = []byte(content)
+					private.DomainCalls[index].Completed = true
+					if err := private.checkpoint(); err != nil {
+						row.CompletionStatus = "recording_error"
+						return
+					}
+				}
+				if runtime.replayErr != nil {
+					row.CompletionStatus = "replay_mismatch"
+					return
+				}
 				if runtime.toolLimit {
 					row.CompletionStatus = "tool_limit"
 					return
 				}
-				reply(call, call.Function.Name, domainResult(value, invokeErr))
+				reply(call, call.Function.Name, content)
 				continue
 			}
 			if call.Function.Name != "execute_python" {
@@ -816,11 +966,65 @@ func runEpisode(ctx context.Context, provider ChatProvider, budget *requestBudge
 				continue
 			}
 			execCtx, cancel := context.WithTimeout(ctx, codeExecutionTimeout)
+			execCtx, guestIO := perfdiag.WithGuestIO(execCtx)
 			startedCode := time.Now()
 			row.ExecutionAttempts++
-			output, runErr := runner.Run(execCtx, source, nil)
+			var output pysolate.Output
+			var runErr error
+			if capturing {
+				private.Executions = append(private.Executions, privateExecution{Attempt: row.ExecutionAttempts, Source: source, Inputs: []byte("null")})
+				if err := private.checkpoint(); err != nil {
+					cancel()
+					row.CompletionStatus = "recording_error"
+					return
+				}
+				journal := &recordingToolJournal{ep: private, attempt: row.ExecutionAttempts}
+				journal.attachExecution(&private.Executions[row.ExecutionAttempts-1])
+				output, runErr = runner.RunRecorded(execCtx, source, nil, private.Seed, journal)
+			} else if replaying {
+				index := row.ExecutionAttempts - 1
+				if index >= len(private.Executions) {
+					cancel()
+					row.CompletionStatus = "replay_mismatch"
+					return
+				}
+				saved := private.Executions[index]
+				if !saved.Completed || saved.Attempt != row.ExecutionAttempts || saved.Source != source || !bytes.Equal(saved.Inputs, []byte("null")) {
+					cancel()
+					row.CompletionStatus = "replay_mismatch"
+					return
+				}
+				journal := &playbackToolJournal{runtime: runtime, calls: saved.ToolCalls}
+				output, runErr = runner.RunRecorded(execCtx, source, nil, private.Seed, journal)
+				errorText := ""
+				if runErr != nil {
+					errorText = runErr.Error()
+				}
+				if runtime.replayErr != nil || journal.index != len(saved.ToolCalls) || !bytes.Equal(saved.Value, output.Value) || !bytes.Equal(saved.Stdout, guestIO.Stdout) || !bytes.Equal(saved.Stderr, guestIO.Stderr) || saved.Transformed != output.Transformed || saved.Error != errorText {
+					cancel()
+					row.CompletionStatus = "replay_mismatch"
+					return
+				}
+			} else {
+				output, runErr = runner.RunRecorded(execCtx, source, nil, recordingSeed(task.ID), passthroughJournal{})
+			}
 			row.PysolateNS += time.Since(startedCode).Nanoseconds()
 			cancel()
+			if capturing {
+				execution := &private.Executions[row.ExecutionAttempts-1]
+				execution.Value = append([]byte(nil), output.Value...)
+				execution.Stdout = append([]byte(nil), guestIO.Stdout...)
+				execution.Stderr = append([]byte(nil), guestIO.Stderr...)
+				execution.Transformed = output.Transformed
+				execution.Completed = true
+				if runErr != nil {
+					execution.Error = runErr.Error()
+				}
+				if err := private.checkpoint(); err != nil {
+					row.CompletionStatus = "recording_error"
+					return
+				}
+			}
 			if runtime.toolLimit {
 				row.CompletionStatus = "tool_limit"
 				return
@@ -903,9 +1107,17 @@ func validateExecuteArguments(raw string) (string, error) {
 func prepareRunner(ctx context.Context, wasm []byte, task taskCase, host *episodeHost) (*pysolate.Runner, int64, error) {
 	fixture := task.NewEpisode()
 	started := time.Now()
-	runner, err := pysolate.NewPrepared(ctx, wasm, fixture.manifest(host))
+	runner, err := pysolate.NewPreparedRecorded(ctx, wasm, fixture.manifest(host), recordingSeed(task.ID))
 	return runner, time.Since(started).Nanoseconds(), err
 }
+
+type passthroughJournal struct{}
+
+func (passthroughJournal) Call(ctx context.Context, _ string, _ json.RawMessage, next func(context.Context) []byte) ([]byte, error) {
+	return next(ctx), nil
+}
+
+func recordingSeed(task string) string { return "agent-eval-recorded-v1/" + task }
 
 func selectedTasks(cases string) ([]taskCase, error) {
 	catalog := allTasks()
@@ -939,6 +1151,8 @@ func main() {
 	keyEnv := flag.String("api-key-env", defaultKeyEnv, "environment variable containing the API key: OPENAI_API_KEY or DEEPSEEK_API_KEY")
 	guest := flag.String("guest", defaultGuest, "Pysolate Guest artifact")
 	outPath := flag.String("out", "", "new JSONL output path; never overwritten")
+	privatePath := flag.String("private-record", "", "private lossless provider/execution/tool JSONL (default: alongside -out)")
+	replayPath := flag.String("replay", "", "offline replay of a private recording; no API key or network is used")
 	cases := flag.String("cases", "", "optional comma-separated cases: lookup,paginated_sum,join,transient")
 	repeats := flag.Int("repeats", 2, "number of paired repeats (4 cases x 2 arms x 2 repeats = 16 episodes)")
 	maxTurns := flag.Int("max-turns", defaultMaxTurns, "maximum model turns per episode")
@@ -957,6 +1171,22 @@ func main() {
 		fmt.Fprintln(os.Stderr, "agent-eval:", err)
 		os.Exit(2)
 	}
+	if *replayPath != "" {
+		selected = nil
+		for _, task := range allTasks() {
+			selected = append(selected, task)
+		}
+		wasm, readErr := os.ReadFile(*guest)
+		if readErr != nil {
+			fmt.Fprintln(os.Stderr, "agent-eval: read Guest:", readErr)
+			os.Exit(2)
+		}
+		if replayErr := replayPrivateCampaign(context.Background(), *replayPath, *outPath, wasm, selected, *maxTurns, *maxRequests); replayErr != nil {
+			fmt.Fprintln(os.Stderr, "agent-eval: offline replay failed")
+			os.Exit(1)
+		}
+		return
+	}
 	apiKey := os.Getenv(*keyEnv)
 	if apiKey == "" {
 		fmt.Fprintln(os.Stderr, "agent-eval: selected API-key environment variable is empty")
@@ -973,6 +1203,21 @@ func main() {
 		fmt.Fprintln(os.Stderr, "agent-eval: read Guest:", err)
 		os.Exit(2)
 	}
+	if *privatePath == "" {
+		*privatePath = defaultPrivateRecordingPath(*outPath)
+	}
+	privateWriter, err := newPrivateRecordingWriter(*privatePath, privateRecordingHeader{
+		Kind: "header", Version: privateRecordingVersion, PrivacyWarning: privateRecordingWarning,
+		FixtureVersion: "agent-eval-v2", GuestSHA256: fmt.Sprintf("sha256:%x", sha256.Sum256(wasm)),
+		RequestedModel: *model, MaxTurns: *maxTurns, MaxRequests: *maxRequests,
+		Endpoint: recordingEndpoint(*baseURL), Runtime: runtime.Version() + "/" + runtime.GOOS + "/" + runtime.GOARCH,
+		RecordingOverhead: "included in this private trace; timing rows are not replay equality fields", Network: "live capture only; offline replay forbids network",
+	}, apiKey)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "agent-eval: create private recording:", err)
+		os.Exit(2)
+	}
+	defer privateWriter.Close()
 	provider := &OpenAIProvider{Client: &http.Client{}, BaseURL: *baseURL, APIKey: apiKey, Model: *model, MaxResponseBytes: maxResponseBodyBytes}
 	campaignCtx, cancel := context.WithTimeout(context.Background(), time.Duration((*repeats)*len(selected)*2)*episodeTimeout)
 	defer cancel()
@@ -1008,8 +1253,21 @@ func main() {
 					if arm == "code" {
 						row.SetupNS = setup[task.ID]
 					}
-					if err := encoder.Encode(row); err != nil {
+					safeRow, sanitizeErr := privateWriter.safeRow(row)
+					if sanitizeErr != nil {
+						fmt.Fprintln(os.Stderr, "agent-eval: score sanitization failed")
+						os.Exit(1)
+					}
+					if err := encoder.Encode(safeRow); err != nil {
 						fmt.Fprintln(os.Stderr, "agent-eval: write:", err)
+						os.Exit(1)
+					}
+					if err := privateWriter.Append(privateEpisodeRecording{Kind: "episode_start", FixtureVersion: "agent-eval-v2", Task: task.ID, Arm: arm, Repeat: repeat, Sequence: sequence, Seed: recordingSeed(task.ID), MaxTurns: *maxTurns, MaxTokens: maxTokensPerRequest, Partial: true, PartialReason: "episode interrupted before completion record"}); err != nil {
+						fmt.Fprintln(os.Stderr, "agent-eval: write private recording:", err)
+						os.Exit(1)
+					}
+					if err := privateWriter.Append(privateEpisodeRecording{Kind: "episode", FixtureVersion: "agent-eval-v2", Task: task.ID, Arm: arm, Repeat: repeat, Sequence: sequence, Seed: recordingSeed(task.ID), MaxTurns: *maxTurns, MaxTokens: maxTokensPerRequest, Row: row}); err != nil {
+						fmt.Fprintln(os.Stderr, "agent-eval: write private recording:", err)
 						os.Exit(1)
 					}
 				}
@@ -1021,17 +1279,38 @@ func main() {
 				if arm == order[0] {
 					reserve = 1
 				}
-				row := runEpisode(rowCtx, provider, budget, task, repeat, sequence, arm, prepared[task.ID], setup[task.ID], hosts[task.ID], *model, *maxTurns, reserve)
+				privateEpisode := &privateEpisodeRecording{Kind: "episode", FixtureVersion: "agent-eval-v2", Task: task.ID, Arm: arm, Repeat: repeat, Sequence: sequence, Seed: recordingSeed(task.ID), MaxTurns: *maxTurns, MaxTokens: maxTokensPerRequest}
+				privateEpisode.writer = privateWriter
+				episodeProvider := &recordingProvider{inner: provider, episode: privateEpisode}
+				row := runEpisode(rowCtx, episodeProvider, budget, task, repeat, sequence, arm, prepared[task.ID], setup[task.ID], hosts[task.ID], *model, *maxTurns, reserve)
 				rowCancel()
+				if err := episodeProvider.recordingError(); err != nil {
+					fmt.Fprintln(os.Stderr, "agent-eval: private capture failed")
+					os.Exit(1)
+				}
 				if arm == "direct" {
 					row.SetupNS = 0
 				}
-				if err := encoder.Encode(row); err != nil {
+				privateEpisode.Row = row
+				safeRow, sanitizeErr := privateWriter.safeRow(row)
+				if sanitizeErr != nil {
+					fmt.Fprintln(os.Stderr, "agent-eval: score sanitization failed")
+					os.Exit(1)
+				}
+				if err := encoder.Encode(safeRow); err != nil {
 					fmt.Fprintln(os.Stderr, "agent-eval: write:", err)
+					os.Exit(1)
+				}
+				if err := privateWriter.Append(*privateEpisode); err != nil {
+					fmt.Fprintln(os.Stderr, "agent-eval: write private recording:", err)
 					os.Exit(1)
 				}
 			}
 		}
 	}
-	fmt.Fprintf(os.Stderr, "agent-eval: wrote %s (%d model requests)\n", filepath.Clean(*outPath), budget.count())
+	if err := privateWriter.Finish(len(selected) * 2 * (*repeats)); err != nil {
+		fmt.Fprintln(os.Stderr, "agent-eval: recording incomplete")
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "agent-eval: wrote %s (%d model requests)\n", *outPath, budget.count())
 }

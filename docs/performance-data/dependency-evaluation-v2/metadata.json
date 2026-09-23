@@ -1,0 +1,24 @@
+{
+  "started_utc": "2026-09-23T09:01:39.000454+00:00",
+  "tasks": [
+    "cursor_sum",
+    "dependent_due",
+    "dependent_credit"
+  ],
+  "repeats": 2,
+  "planned_episodes": 12,
+  "max_turns": 12,
+  "max_model_requests": 96,
+  "model": "deepseek-flash",
+  "artifact_sha256": "2c63ce407eae626c89fcd1dd918c713b1f8b75a35a6cf6ca6861466168d0faf8",
+  "source_sha256": {
+    "dependency_branch.go": "fb70a22fc66b06c19bed5ff008ddf54f761637cdead648034efb674182805ce8",
+    "recording.go": "5f6226af5ed3cae52a05d90e931d7562e980008878cc6954cdc7c76659cfa025",
+    "dependency_cases.go": "aa9b91c79a0d0a81095707b1051e5261e0b9ea60a1c6cf4337dfd17bdc1179c9",
+    "recording_metadata.go": "8ef1ef0f0078b0cabf740c20e410af3077a6647b45f4b3b5843faa92227950c7",
+    "replay.go": "88a563bef49caa31b287e02b583afc9e6027c84e6af109c17176bf8d2c791a16",
+    "replay_episode_validation.go": "f8f3b18b075c037f6937fb8c64227fce08c93a6e688caf22553ebffbc9f0325a",
+    "replay_validation.go": "23eea8db7aa12cdda63d881cbfc1f0748bce431b8b2c3f910383eba8caf67077",
+    "main.go": "cf239e84e158989d900b12b6e1dc75ad1ddb68ea5f26b9cf35a391c93a10045d"
+  }
+}

@@ -203,6 +203,7 @@ func (r *Runner) run(ctx context.Context, source string, inputs any, earlyReads 
 		return Output{}, err
 	}
 	stdout, stderr := &boundedText{}, &boundedText{}
+	defer func() { perfdiag.CaptureGuestIO(ctx, stdout.String(), stderr.String()) }()
 	// No host directories, environment, stdin, network or process capabilities.
 	m, err := r.newGuest(ctx, stdout, stderr)
 	if err != nil {

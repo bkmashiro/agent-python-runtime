@@ -1,0 +1,14 @@
+{
+  "episodes": 12,
+  "provider_exchanges": 64,
+  "executions": 24,
+  "python_wire_calls": 43,
+  "direct_domain_calls": 28,
+  "snapshots_and_markers": 344,
+  "record_bytes": 15109118,
+  "replayed_episodes": 12,
+  "live_replay_provider_calls": 0,
+  "live_replay_domain_dispatches": 0,
+  "credentials_scan_passed": true,
+  "all_completed_and_untruncated": true
+}

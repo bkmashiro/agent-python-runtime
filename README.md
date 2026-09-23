@@ -142,6 +142,12 @@ performance, scheduling studies and recent deliveries. See
 [Execution-derived durability](docs/execution-derived-durability.md) for the
 precise comparison with workflow-first systems such as Temporal.
 
+For a small real model integration, see [the standalone agent loop](docs/agent-loop.md):
+DeepSeek generates Python, Pysolate executes it against a private CSV workspace,
+and the model uses execution feedback to produce a report. It is an optional
+example requiring provider credentials, not part of the execution core or the
+default demo suite.
+
 ## Host responsibilities and boundaries
 
 Pysolate controls the Guest lifecycle and the narrow boundary between Python and

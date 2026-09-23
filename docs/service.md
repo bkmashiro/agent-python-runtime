@@ -71,6 +71,39 @@ Paired speedup is not the ratio of the two displayed medians. This campaign uses
 
 [Raw rows and metadata](performance-data/service-data-image-292712/), [summary](performance-data/service-data-image-292712/summary.json) and [Linux acceptance output](performance-data/service-data-image-292712/verification.txt) are retained. Acceptance covered both default and optimized ordinary/workspace services, overload rejection, real process-kill recovery and history privacy. Both service CLIs were separately started and called over HTTP. `tools/run-service-data-image.py` contains the bounded reproduction campaign.
 
+## Bounded mixed-load lifecycle check
+
+`TestMixedLoadReleasesResources` reuses one service through short Python,
+controlled slow Tools, Python failures, execution timeouts, and workspace
+create/edit/read/destroy cycles. A slow Tool holds one of two slots while the
+other requests run. Every cycle checks that slots and leases return to zero,
+workspace directories are removed, and Linux Guest COW mappings are released.
+After service close, sealed-image descriptors must also be gone.
+
+The normal test runs eight cycles. A Linux check ran 64 cycles per preparation
+mode: 1,024 HTTP requests, including 128 expected Python failures and 128
+expected timeout responses. FD counts stayed at 14 for default COW and 16 for
+data-image COW. Without forced GC, sampled PSS fell from about 465 to 238 MiB
+and 460 to 140 MiB respectively, with six and ten natural GC cycles observed
+between the first and last snapshots. Data-image PSS first peaked near 593 MiB;
+a rising early sample alone was not evidence of a leak.
+
+This checks finite lifecycle/resource invariants, not production capacity,
+long-term leak freedom or scheduler fairness under saturation. The two modes
+ran sequentially in one process; do not treat their memory samples as an
+independent A/B performance ranking. Go heap and sampled process PSS have
+different accounting, and neither is an exact peak measurement.
+
+```sh
+PYSOLATE_MIXED_CYCLES=64 PYSOLATE_GUEST="$PWD/dist/pysolate.wasm" \
+  go test ./service -run '^TestMixedLoadReleasesResources$' -count=1 -v
+```
+
+The test-only cycle limit is 1–128. [Raw samples](performance-data/mixed-load-292806/samples.jsonl),
+[summary](performance-data/mixed-load-292806/summary.json) and
+[verification](performance-data/mixed-load-292806/verification.txt) are retained.
+No runtime GC or scheduling changes were needed.
+
 ## Measure the hot path
 
 `pysolate-service-bench` starts the real Handler on a loopback TCP listener, excludes service construction and one warmup per worker from request samples, and emits JSON Lines with every sample plus p50/p95 summaries:

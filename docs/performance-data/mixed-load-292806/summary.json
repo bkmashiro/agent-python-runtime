@@ -1,0 +1,34 @@
+{
+  "cycles_per_mode": 64,
+  "http_requests": 1024,
+  "execution_requests": 768,
+  "expected_python_errors": 128,
+  "expected_timeouts": 128,
+  "forced_gc": false,
+  "modes": {
+    "default": {
+      "fds": [
+        14
+      ],
+      "pss_first_kib": 475968,
+      "pss_last_kib": 243956,
+      "pss_peak_kib": 479024,
+      "natural_gc_cycles": 6
+    },
+    "data_image": {
+      "fds": [
+        16
+      ],
+      "pss_first_kib": 470936,
+      "pss_last_kib": 143340,
+      "pss_peak_kib": 607016,
+      "natural_gc_cycles": 10
+    }
+  },
+  "baseline_revision": "97f5adca",
+  "artifact_sha256": "2c63ce407eae626c89fcd1dd918c713b1f8b75a35a6cf6ca6861466168d0faf8",
+  "platform": "linux-amd64",
+  "gomaxprocs": 2,
+  "slurm_requested_cpus": 2,
+  "slurm_requested_memory_gib": 2
+}

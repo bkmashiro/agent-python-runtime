@@ -267,7 +267,7 @@ func ReplayBundle(ctx context.Context, bundle RunBundle, guest []byte) (pysolate
 	}
 	actualArtifact := fmt.Sprintf("sha256:%x", sha256.Sum256(guest))
 	if actualArtifact != bundle.Run.ArtifactSHA256 {
-		return pysolate.Output{}, fmt.Errorf("%w: Guest artifact identity differs", ErrBundleMismatch)
+		return pysolate.Output{}, replayMismatch(ReplayMismatchLocationArtifact, ReplayMismatchReasonArtifactIdentity, nil)
 	}
 
 	manifest, err := offlineManifest(bundle.Run.Tools)
@@ -281,8 +281,23 @@ func ReplayBundle(ctx context.Context, bundle RunBundle, guest []byte) (pysolate
 	defer runner.Close(context.Background())
 	journal := &offlineJournal{runID: bundle.Run.ID, calls: bundle.Calls}
 	output, runErr := runner.RunRecorded(ctx, bundle.Run.Code, json.RawMessage(bundle.Run.Inputs), bundle.Run.Seed, journal)
+	// RunRecorded may already carry the first typed journal mismatch. Preserve
+	// it rather than replacing it with the broader "unconsumed" condition.
+	var mismatch *ReplayMismatchError
+	if errors.As(runErr, &mismatch) {
+		return output, mismatch
+	}
+	if errors.Is(runErr, ErrBundleMismatch) {
+		return output, ErrBundleMismatch
+	}
+	if runErr != nil {
+		var pythonErr *pysolate.PythonError
+		if !errors.As(runErr, &pythonErr) {
+			return output, runErr
+		}
+	}
 	if journal.index != len(bundle.Calls) {
-		return output, fmt.Errorf("%w: recorded call history was not fully consumed", ErrBundleMismatch)
+		return output, replayMismatchAt(ReplayMismatchLocationCall, ReplayMismatchReasonCallUnconsumed, uint32(journal.index))
 	}
 	if err := compareReplay(bundle.Run, output, runErr); err != nil {
 		return output, err
@@ -476,13 +491,25 @@ type offlineJournal struct {
 }
 
 func (journal *offlineJournal) Call(_ context.Context, tool string, args json.RawMessage, _ func(context.Context) []byte) ([]byte, error) {
+	sequence := uint32(journal.index)
 	if journal.index >= len(journal.calls) {
-		return nil, fmt.Errorf("%w: excess tool call", ErrBundleMismatch)
+		return nil, replayMismatchAt(ReplayMismatchLocationCall, ReplayMismatchReasonCallExcess, sequence)
 	}
 	call := journal.calls[journal.index]
-	sequence := uint32(journal.index)
-	if call.Sequence != sequence || call.Tool != tool || !sameJSON(call.Arguments, args) || call.OperationKey != operationKey(journal.runID, sequence) {
-		return nil, fmt.Errorf("%w: call identity differs", ErrBundleMismatch)
+	if call.Sequence != sequence {
+		return nil, replayMismatchAt(ReplayMismatchLocationCall, ReplayMismatchReasonCallSequence, sequence)
+	}
+	if call.CallID != fmt.Sprintf("call-%d", sequence) {
+		return nil, replayMismatchAt(ReplayMismatchLocationCall, ReplayMismatchReasonCallID, sequence)
+	}
+	if call.Tool != tool {
+		return nil, replayMismatchAt(ReplayMismatchLocationCall, ReplayMismatchReasonCallTool, sequence)
+	}
+	if call.OperationKey != operationKey(journal.runID, sequence) {
+		return nil, replayMismatchAt(ReplayMismatchLocationCall, ReplayMismatchReasonCallOperationKey, sequence)
+	}
+	if !sameJSON(call.Arguments, args) {
+		return nil, replayMismatchAt(ReplayMismatchLocationCall, ReplayMismatchReasonCallArguments, sequence)
 	}
 	journal.index++
 	return append([]byte(nil), call.Outcome...), nil
@@ -493,18 +520,24 @@ func compareReplay(run BundleRun, output pysolate.Output, runErr error) error {
 	if err := json.Unmarshal(run.Outcome, &expected); err != nil {
 		return fmt.Errorf("%w: terminal output is invalid", ErrBundleInvalid)
 	}
-	if !sameJSON(expected.Value, output.Value) || expected.Stdout != output.Stdout || expected.Transformed != output.Transformed {
-		return fmt.Errorf("%w: result or stdout differs", ErrBundleMismatch)
+	if !sameJSON(expected.Value, output.Value) {
+		return replayMismatch(ReplayMismatchLocationTerminal, ReplayMismatchReasonTerminalValue, nil)
+	}
+	if expected.Stdout != output.Stdout {
+		return replayMismatch(ReplayMismatchLocationTerminal, ReplayMismatchReasonTerminalStdout, nil)
+	}
+	if expected.Transformed != output.Transformed {
+		return replayMismatch(ReplayMismatchLocationTerminal, ReplayMismatchReasonTerminalTransformed, nil)
 	}
 	switch run.Status {
 	case StatusCompleted:
 		if runErr != nil {
-			return fmt.Errorf("%w: replay ended with an error", ErrBundleMismatch)
+			return replayMismatch(ReplayMismatchLocationTerminal, ReplayMismatchReasonTerminalError, nil)
 		}
 	case StatusFailed:
 		var pythonErr *pysolate.PythonError
 		if runErr == nil || !errors.As(runErr, &pythonErr) || pythonErr.Message != run.Reason {
-			return fmt.Errorf("%w: replay error differs", ErrBundleMismatch)
+			return replayMismatch(ReplayMismatchLocationTerminal, ReplayMismatchReasonTerminalError, nil)
 		}
 	default:
 		return fmt.Errorf("%w: unsupported terminal status", ErrBundleInvalid)

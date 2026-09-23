@@ -100,14 +100,24 @@ func TestReplayRejectsArtifactAndCallTampering(t *testing.T) {
 	}
 	badArtifact := bundle
 	badArtifact.Run.ArtifactSHA256 = "sha256:tampered"
-	if _, err := ReplayBundle(context.Background(), badArtifact, guest); !errors.Is(err, ErrBundleMismatch) {
-		t.Fatalf("artifact tamper err=%v", err)
+	artifactErr := error(nil)
+	if _, artifactErr = ReplayBundle(context.Background(), badArtifact, guest); !errors.Is(artifactErr, ErrBundleMismatch) {
+		t.Fatalf("artifact tamper err=%v", artifactErr)
+	}
+	var artifactMismatch *ReplayMismatchError
+	if !errors.As(artifactErr, &artifactMismatch) || artifactMismatch.Location != ReplayMismatchLocationArtifact || artifactMismatch.Reason != ReplayMismatchReasonArtifactIdentity {
+		t.Fatalf("artifact mismatch details=%+v err=%v", artifactMismatch, artifactErr)
 	}
 	badCall := bundle
 	badCall.Calls = append([]BundleCall(nil), bundle.Calls...)
 	badCall.Calls[0].Arguments = json.RawMessage(`{"changed":true}`)
-	if _, err := ReplayBundle(context.Background(), badCall, guest); !errors.Is(err, ErrBundleMismatch) {
-		t.Fatalf("call tamper err=%v", err)
+	callErr := error(nil)
+	if _, callErr = ReplayBundle(context.Background(), badCall, guest); !errors.Is(callErr, ErrBundleMismatch) {
+		t.Fatalf("call tamper err=%v", callErr)
+	}
+	var callMismatch *ReplayMismatchError
+	if !errors.As(callErr, &callMismatch) || callMismatch.Location != ReplayMismatchLocationCall || callMismatch.Reason != ReplayMismatchReasonCallArguments || !callMismatch.HasSequence || callMismatch.Sequence != 0 {
+		t.Fatalf("call mismatch details=%+v err=%v", callMismatch, callErr)
 	}
 }
 

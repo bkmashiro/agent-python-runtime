@@ -88,6 +88,15 @@ mismatching field (`call_id`, `capability`, `operation_key`, `arguments`, or
 the default failure path does not leak tool payloads. Use a payload-enabled
 history page only when raw persisted data is explicitly authorized.
 
+Strict local bundle replay uses a separate `*durable.ReplayMismatchError`.
+Its typed `Location` (`artifact`, `call`, or `result`) and typed `Reason`
+identify the first divergence using fixed structural labels, without including
+private source, arguments,
+outcomes, stdout, or exception text. Call mismatches also carry only the
+zero-based call sequence. The `pysolate-replay` CLI maps these locations to
+stable `artifact`, `call`, and `result` failure categories and keeps generic
+bundle/runtime failures separate; it never prints the underlying error text.
+
 ## Workload evidence
 
 The first `agent-workloads@v1` run on the current macOS host and artifact

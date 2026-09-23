@@ -63,11 +63,33 @@ result/error/stdout differences fail closed. A Python `try/except` cannot turn
 a journal mismatch into a successful replay. Replay never opens the durable
 database and never mutates the bundle.
 
+Replay mismatches return `*durable.ReplayMismatchError` and still satisfy
+`errors.Is(err, durable.ErrBundleMismatch)`. The error contains only a typed
+`Location` (`artifact`, `call`, or `result`), a typed `Reason` (for example
+`arguments`, `operation_key`, `unconsumed`, `stdout`, or `error`), and a call
+sequence when the location is a call. Reasons are fixed structural labels such
+as `artifact`, `sequence`, `tool`, `arguments`, `stdout`, and `result`; they do
+not echo JSON keys, arguments, outcomes, or other values. It never includes
+source, arguments, outcomes, stdout, or Python exception text. This makes it
+safe to classify in a service or log while keeping the private bundle as the
+source for authorized payload inspection.
+
+The CLI keeps the same privacy boundary. Successful operations emit JSON; a
+failure emits a stable category and, for a typed mismatch, a fixed reason
+and zero-based call sequence on stderr. For example, an argument mismatch in
+the second call is:
+
+```text
+pysolate-replay: operation failed (category=call reason=arguments sequence=1)
+```
+
+Categories are `usage`, `bundle`, `artifact`, `call`, `result`, and
+`runtime`. Only whitelisted structural reasons are printed; arbitrary error
+text and private values remain suppressed. An execution deadline is a runtime
+failure, not evidence of divergent calls. A first concrete call mismatch is
+preserved instead of being replaced by the secondary unconsumed-history check.
+
 No workspace is mounted. Source that uses filesystem/workspace access or an
 import that depends on workspace state fails under the Guest instead of being
 silently granted a filesystem. Writable workspace continuation is a different
 feature and is not part of this bundle format.
-
-CLI failure paths intentionally print only `pysolate-replay: operation failed`;
-private source, inputs, arguments, outcomes and Python exception text are not
-printed by the command.

@@ -11,6 +11,27 @@ import (
 	"github.com/bkmashiro/agent-python-runtime/durable"
 )
 
+func TestCLIFailureCategoriesExposeOnlySafeKinds(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		err  error
+		want durable.ReplayErrorCategory
+	}{
+		{"usage", nil, usageError("private flag value"), durable.ReplayErrorCategoryUsage},
+		{"artifact", []string{"replay"}, &durable.ReplayMismatchError{Location: durable.ReplayMismatchLocationArtifact, Reason: durable.ReplayMismatchReasonArtifactIdentity}, durable.ReplayErrorCategoryArtifact},
+		{"call", []string{"replay"}, &durable.ReplayMismatchError{Location: durable.ReplayMismatchLocationCall, Reason: durable.ReplayMismatchReasonCallArguments, Sequence: 4, HasSequence: true}, durable.ReplayErrorCategoryCall},
+		{"result", []string{"replay"}, &durable.ReplayMismatchError{Location: durable.ReplayMismatchLocationResult, Reason: durable.ReplayMismatchReasonTerminalStdout}, durable.ReplayErrorCategoryResult},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			if got := cliFailureCategory(test.args, test.err); got != test.want {
+				t.Fatalf("category=%q want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestLocalExportAndOfflineReplayCLI(t *testing.T) {
 	guest := os.Getenv("PYSOLATE_GUEST")
 	if guest == "" {

@@ -4,7 +4,7 @@ Approved continuation from `a32e5bb5`. Prior product/COW work is complete and it
 
 ## Current pointer
 
-**Complete.** Services, strict private offline replay, and optional scientific bytecode caching are delivered. Default artifact and runtime behavior remain unchanged. No further autonomous work is scheduled.
+**Complete, including follow-up.** Offline replay now reports privacy-safe first-mismatch locations and separates runtime failures. The mixed-load check passed 64 cycles per Linux preparation mode (1,024 HTTP requests), with natural GC, stable descriptors, and released execution/workspace resources. See `offline-replay.md` and `service.md`. No runtime GC or scheduler changes were needed.
 
 ## Desired outcomes
 

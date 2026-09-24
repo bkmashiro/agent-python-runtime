@@ -1,0 +1,68 @@
+{
+  "scope": "data-image, 100 ms arrivals, short workload; medians per process, measured from scheduled arrival to first Host callback; not a CPU profile",
+  "processes": [
+    {
+      "arm": "sequential",
+      "repeat": 0,
+      "pre_tool_p50_ns": 6561630.5,
+      "tool_queue_p50_ns": 36206.5,
+      "tool_service_p50_ns": 50813870.0
+    },
+    {
+      "arm": "sequential",
+      "repeat": 1,
+      "pre_tool_p50_ns": 5932504.5,
+      "tool_queue_p50_ns": 36115.5,
+      "tool_service_p50_ns": 50639717.5
+    },
+    {
+      "arm": "sequential",
+      "repeat": 2,
+      "pre_tool_p50_ns": 6501022.0,
+      "tool_queue_p50_ns": 36577.0,
+      "tool_service_p50_ns": 50714787.0
+    },
+    {
+      "arm": "early",
+      "repeat": 0,
+      "pre_tool_p50_ns": 37034040.5,
+      "tool_queue_p50_ns": 31738.0,
+      "tool_service_p50_ns": 50262468.5
+    },
+    {
+      "arm": "early",
+      "repeat": 1,
+      "pre_tool_p50_ns": 37113181.5,
+      "tool_queue_p50_ns": 31837.5,
+      "tool_service_p50_ns": 50271623.5
+    },
+    {
+      "arm": "early",
+      "repeat": 2,
+      "pre_tool_p50_ns": 36960267.0,
+      "tool_queue_p50_ns": 34206.0,
+      "tool_service_p50_ns": 50269063.5
+    },
+    {
+      "arm": "spare-capacity",
+      "repeat": 0,
+      "pre_tool_p50_ns": 37021715.0,
+      "tool_queue_p50_ns": 30571.0,
+      "tool_service_p50_ns": 50262990.0
+    },
+    {
+      "arm": "spare-capacity",
+      "repeat": 1,
+      "pre_tool_p50_ns": 36923656.5,
+      "tool_queue_p50_ns": 31148.5,
+      "tool_service_p50_ns": 50264033.5
+    },
+    {
+      "arm": "spare-capacity",
+      "repeat": 2,
+      "pre_tool_p50_ns": 37008515.5,
+      "tool_queue_p50_ns": 32950.0,
+      "tool_service_p50_ns": 50273789.5
+    }
+  ]
+}

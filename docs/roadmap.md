@@ -1,6 +1,16 @@
 # Pysolate development roadmap
 
-## Current delivery: shared-tool contention
+## Current delivery: contention validation (tests only)
+
+Complete. The existing benchmark ran 54 fresh Linux processes across default COW
+and COW data-image. An independent HTTP-process test covered cooperative and
+non-cooperative remote work under manual cancellation and deadlines, including
+race checks. Full local checks passed. The results retain the short-task latency
+regression and the distinction between Guest cancellation and remote completion.
+No runtime functionality, interface, default or scheduling rule changed. See
+[`early-read-validation.md`](early-read-validation.md).
+
+## Previous delivery: shared-tool contention
 
 Complete. A small real-Guest open-loop harness compares sequential execution,
 early reads and an experimental host-side spare-capacity rule. Full local traces

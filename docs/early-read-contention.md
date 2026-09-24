@@ -4,6 +4,10 @@ This bounded pilot asks whether early reads improve logical task completion when
 many real Python Guests share a limited tool backend. It adds no runtime policy,
 permissions, dependencies or model calls.
 
+The [Linux COW and independent HTTP follow-up](early-read-validation.md) adds
+cross-platform evidence and a single-read latency regression. It also verifies
+that remote HTTP work may outlive a cancelled Guest. The policy remains experimental.
+
 ## Contract
 
 `cmd/pysolate-contention-bench` uses `Runner.Run` and `RunWithEarlyReads` on
@@ -20,9 +24,9 @@ The default cyclic mix is:
 
 Each program has an independently specified expected answer and call count.
 These are frozen programs, not a new model-generated cohort. Preparation and
-one sequential warm-up per workload are excluded from the measured window but
-recorded. Copy preparation is portable; COW and the optional data image require
-their existing platform/artifact contracts.
+one serially issued warm-up per workload, using the selected arm, are excluded
+from the measured window but recorded. Copy preparation is portable; COW and the
+optional data image require their existing platform/artifact contracts.
 
 Arrivals have fixed scheduled times, independent of previous completions. At the
 request cap, new arrivals are rejected rather than building an unbounded queue.

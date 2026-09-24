@@ -1,0 +1,1877 @@
+{
+  "metadata": {
+    "source_revision": "52aacd68be73de6560fd1e9336dcbe3c6f048060",
+    "binary_sha256": "68db0297c0400d7951a8b78ab26cad7633278043fe0989d126ee645d3a0142f1",
+    "guest_sha256": "2c63ce407eae626c89fcd1dd918c713b1f8b75a35a6cf6ca6861466168d0faf8",
+    "os": "linux",
+    "arch": "amd64",
+    "kernel": "6.17.0-35-generic",
+    "gomaxprocs": 2,
+    "affinity": [
+      0,
+      36
+    ],
+    "slurm_allocated_logical_cpus": 2,
+    "slurm_requested_memory_mib": 2048,
+    "memory_limit_independently_verified": false,
+    "memory_peak": null,
+    "physical_core_topology_verified": false,
+    "mode_cohort_order": [
+      "cow",
+      "data-image"
+    ],
+    "arm_order": "rotated within each mode; modes not interleaved",
+    "scope": "runtime API, bounded synthetic in-process backend, complete private traces; not HTTP throughput"
+  },
+  "plan": {
+    "requests": 60,
+    "repeats": 3,
+    "interval_ms": [
+      100,
+      40,
+      20
+    ],
+    "timeout_ms": 400,
+    "prepare": "cow",
+    "cow_data_image": false,
+    "arms": [
+      "sequential",
+      "early",
+      "spare-capacity"
+    ],
+    "binary_sha256": "68db0297c0400d7951a8b78ab26cad7633278043fe0989d126ee645d3a0142f1",
+    "guest_sha256": "2c63ce407eae626c89fcd1dd918c713b1f8b75a35a6cf6ca6861466168d0faf8",
+    "gomaxprocs": 2
+  },
+  "processes": [
+    {
+      "arrival_lag_p95_ns": 1089345,
+      "backend": {
+        "acquired": 100,
+        "attempts": 100,
+        "end_inflight": 0,
+        "errors": 0,
+        "peak_inflight": 2,
+        "queue_p95_ns": 49013
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 136006445,
+          "ok_p95_ns": 137382023,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 136853999,
+          "ok_p95_ns": 137987836,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 85479370,
+          "ok_p95_ns": 86781619,
+          "scheduled": 20
+        }
+      },
+      "calls": 100,
+      "complete": true,
+      "config": {
+        "arm": "sequential",
+        "requests": 60,
+        "interval_ns": 100000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 60,
+        "rejected": 0,
+        "timeout": 0
+      },
+      "elapsed_ns": 6036504806,
+      "kind": "summary",
+      "ok_p50_ns": 135774466,
+      "ok_p95_ns": 137736245,
+      "on_time_per_second": 9.939526585046837,
+      "scheduled": 60,
+      "repeat": 0
+    },
+    {
+      "arrival_lag_p95_ns": 1086571,
+      "backend": {
+        "acquired": 100,
+        "attempts": 100,
+        "end_inflight": 0,
+        "errors": 0,
+        "peak_inflight": 2,
+        "queue_p95_ns": 42994
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 143008350,
+          "ok_p95_ns": 144714407,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 107920006,
+          "ok_p95_ns": 110071681,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 104622299,
+          "ok_p95_ns": 106968527,
+          "scheduled": 20
+        }
+      },
+      "calls": 100,
+      "complete": true,
+      "config": {
+        "arm": "early",
+        "requests": 60,
+        "interval_ns": 100000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 60,
+        "rejected": 0,
+        "timeout": 0
+      },
+      "elapsed_ns": 6043013405,
+      "kind": "summary",
+      "ok_p50_ns": 107986520,
+      "ok_p95_ns": 144634858,
+      "on_time_per_second": 9.928821264959613,
+      "scheduled": 60,
+      "repeat": 0
+    },
+    {
+      "arrival_lag_p95_ns": 1157482,
+      "backend": {
+        "acquired": 100,
+        "attempts": 100,
+        "end_inflight": 0,
+        "errors": 0,
+        "peak_inflight": 2,
+        "queue_p95_ns": 47751
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 143225380,
+          "ok_p95_ns": 145765703,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 106749738,
+          "ok_p95_ns": 109248047,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 85349662,
+          "ok_p95_ns": 86770070,
+          "scheduled": 20
+        }
+      },
+      "calls": 100,
+      "complete": true,
+      "config": {
+        "arm": "spare-capacity",
+        "requests": 60,
+        "interval_ns": 100000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 60,
+        "rejected": 0,
+        "timeout": 0
+      },
+      "elapsed_ns": 6040938307,
+      "kind": "summary",
+      "ok_p50_ns": 106749738,
+      "ok_p95_ns": 144431218,
+      "on_time_per_second": 9.932231873726368,
+      "scheduled": 60,
+      "repeat": 0
+    },
+    {
+      "arrival_lag_p95_ns": 1164415,
+      "backend": {
+        "acquired": 100,
+        "attempts": 100,
+        "end_inflight": 0,
+        "errors": 0,
+        "peak_inflight": 2,
+        "queue_p95_ns": 44442
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 143461787,
+          "ok_p95_ns": 144696220,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 107026649,
+          "ok_p95_ns": 108691394,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 104823271,
+          "ok_p95_ns": 106343890,
+          "scheduled": 20
+        }
+      },
+      "calls": 100,
+      "complete": true,
+      "config": {
+        "arm": "early",
+        "requests": 60,
+        "interval_ns": 100000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 60,
+        "rejected": 0,
+        "timeout": 0
+      },
+      "elapsed_ns": 6043662435,
+      "kind": "summary",
+      "ok_p50_ns": 107301117,
+      "ok_p95_ns": 144369137,
+      "on_time_per_second": 9.927755007051449,
+      "scheduled": 60,
+      "repeat": 1
+    },
+    {
+      "arrival_lag_p95_ns": 1029815,
+      "backend": {
+        "acquired": 100,
+        "attempts": 100,
+        "end_inflight": 0,
+        "errors": 0,
+        "peak_inflight": 2,
+        "queue_p95_ns": 37581
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 143363639,
+          "ok_p95_ns": 144436049,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 107032748,
+          "ok_p95_ns": 109295589,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 85687359,
+          "ok_p95_ns": 88836285,
+          "scheduled": 20
+        }
+      },
+      "calls": 100,
+      "complete": true,
+      "config": {
+        "arm": "spare-capacity",
+        "requests": 60,
+        "interval_ns": 100000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 60,
+        "rejected": 0,
+        "timeout": 0
+      },
+      "elapsed_ns": 6044098053,
+      "kind": "summary",
+      "ok_p50_ns": 107032748,
+      "ok_p95_ns": 144163699,
+      "on_time_per_second": 9.927039481137948,
+      "scheduled": 60,
+      "repeat": 1
+    },
+    {
+      "arrival_lag_p95_ns": 1147593,
+      "backend": {
+        "acquired": 100,
+        "attempts": 100,
+        "end_inflight": 0,
+        "errors": 0,
+        "peak_inflight": 2,
+        "queue_p95_ns": 47945
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 136057794,
+          "ok_p95_ns": 137823738,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 136398167,
+          "ok_p95_ns": 138183114,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 85364871,
+          "ok_p95_ns": 87576949,
+          "scheduled": 20
+        }
+      },
+      "calls": 100,
+      "complete": true,
+      "config": {
+        "arm": "sequential",
+        "requests": 60,
+        "interval_ns": 100000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 60,
+        "rejected": 0,
+        "timeout": 0
+      },
+      "elapsed_ns": 6036076876,
+      "kind": "summary",
+      "ok_p50_ns": 135878198,
+      "ok_p95_ns": 138088694,
+      "on_time_per_second": 9.94023125162066,
+      "scheduled": 60,
+      "repeat": 1
+    },
+    {
+      "arrival_lag_p95_ns": 1061241,
+      "backend": {
+        "acquired": 100,
+        "attempts": 100,
+        "end_inflight": 0,
+        "errors": 0,
+        "peak_inflight": 2,
+        "queue_p95_ns": 41221
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 142594191,
+          "ok_p95_ns": 144629020,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 107693853,
+          "ok_p95_ns": 109951549,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 85366272,
+          "ok_p95_ns": 90015113,
+          "scheduled": 20
+        }
+      },
+      "calls": 100,
+      "complete": true,
+      "config": {
+        "arm": "spare-capacity",
+        "requests": 60,
+        "interval_ns": 100000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 60,
+        "rejected": 0,
+        "timeout": 0
+      },
+      "elapsed_ns": 6043431083,
+      "kind": "summary",
+      "ok_p50_ns": 107693853,
+      "ok_p95_ns": 143743446,
+      "on_time_per_second": 9.92813505705034,
+      "scheduled": 60,
+      "repeat": 2
+    },
+    {
+      "arrival_lag_p95_ns": 1031060,
+      "backend": {
+        "acquired": 100,
+        "attempts": 100,
+        "end_inflight": 0,
+        "errors": 0,
+        "peak_inflight": 2,
+        "queue_p95_ns": 42589
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 136175482,
+          "ok_p95_ns": 137933486,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 136586759,
+          "ok_p95_ns": 138486943,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 85153506,
+          "ok_p95_ns": 86221082,
+          "scheduled": 20
+        }
+      },
+      "calls": 100,
+      "complete": true,
+      "config": {
+        "arm": "sequential",
+        "requests": 60,
+        "interval_ns": 100000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 60,
+        "rejected": 0,
+        "timeout": 0
+      },
+      "elapsed_ns": 6036512103,
+      "kind": "summary",
+      "ok_p50_ns": 135531659,
+      "ok_p95_ns": 137946667,
+      "on_time_per_second": 9.93951457004144,
+      "scheduled": 60,
+      "repeat": 2
+    },
+    {
+      "arrival_lag_p95_ns": 1025705,
+      "backend": {
+        "acquired": 100,
+        "attempts": 100,
+        "end_inflight": 0,
+        "errors": 0,
+        "peak_inflight": 2,
+        "queue_p95_ns": 38004
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 142847366,
+          "ok_p95_ns": 145115999,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 107037916,
+          "ok_p95_ns": 109356172,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 104586488,
+          "ok_p95_ns": 107997302,
+          "scheduled": 20
+        }
+      },
+      "calls": 100,
+      "complete": true,
+      "config": {
+        "arm": "early",
+        "requests": 60,
+        "interval_ns": 100000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 60,
+        "rejected": 0,
+        "timeout": 0
+      },
+      "elapsed_ns": 6042831699,
+      "kind": "summary",
+      "ok_p50_ns": 107118159,
+      "ok_p95_ns": 144436533,
+      "on_time_per_second": 9.929119821412389,
+      "scheduled": 60,
+      "repeat": 2
+    },
+    {
+      "arrival_lag_p95_ns": 1012651,
+      "backend": {
+        "acquired": 98,
+        "attempts": 98,
+        "end_inflight": 0,
+        "errors": 2,
+        "peak_inflight": 2,
+        "queue_p95_ns": 152207129
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 18,
+            "timeout": 2
+          },
+          "ok_p50_ns": 298326783,
+          "ok_p95_ns": 366310012,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 19,
+            "rejected": 1
+          },
+          "ok_p50_ns": 196614811,
+          "ok_p95_ns": 256308808,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 181698249,
+          "ok_p95_ns": 239169097,
+          "scheduled": 20
+        }
+      },
+      "calls": 98,
+      "complete": true,
+      "config": {
+        "arm": "early",
+        "requests": 60,
+        "interval_ns": 40000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 57,
+        "rejected": 1,
+        "timeout": 2
+      },
+      "elapsed_ns": 2588455490,
+      "kind": "summary",
+      "ok_p50_ns": 220089962,
+      "ok_p95_ns": 352634627,
+      "on_time_per_second": 22.020853833573163,
+      "scheduled": 60,
+      "repeat": 0
+    },
+    {
+      "arrival_lag_p95_ns": 1077619,
+      "backend": {
+        "acquired": 100,
+        "attempts": 100,
+        "end_inflight": 0,
+        "errors": 0,
+        "peak_inflight": 2,
+        "queue_p95_ns": 125226947
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 255267187,
+          "ok_p95_ns": 343125311,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 256317173,
+          "ok_p95_ns": 356777367,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 140404222,
+          "ok_p95_ns": 212745227,
+          "scheduled": 20
+        }
+      },
+      "calls": 100,
+      "complete": true,
+      "config": {
+        "arm": "spare-capacity",
+        "requests": 60,
+        "interval_ns": 40000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 60,
+        "rejected": 0,
+        "timeout": 0
+      },
+      "elapsed_ns": 2634459604,
+      "kind": "summary",
+      "ok_p50_ns": 221005838,
+      "ok_p95_ns": 354060357,
+      "on_time_per_second": 22.77506928134321,
+      "scheduled": 60,
+      "repeat": 0
+    },
+    {
+      "arrival_lag_p95_ns": 1102780,
+      "backend": {
+        "acquired": 100,
+        "attempts": 100,
+        "end_inflight": 0,
+        "errors": 0,
+        "peak_inflight": 2,
+        "queue_p95_ns": 118220001
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 248996578,
+          "ok_p95_ns": 338867290,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 260857397,
+          "ok_p95_ns": 346733818,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 131959605,
+          "ok_p95_ns": 206843987,
+          "scheduled": 20
+        }
+      },
+      "calls": 100,
+      "complete": true,
+      "config": {
+        "arm": "sequential",
+        "requests": 60,
+        "interval_ns": 40000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 60,
+        "rejected": 0,
+        "timeout": 0
+      },
+      "elapsed_ns": 2644591452,
+      "kind": "summary",
+      "ok_p50_ns": 211128030,
+      "ok_p95_ns": 338867290,
+      "on_time_per_second": 22.68781438986516,
+      "scheduled": 60,
+      "repeat": 0
+    },
+    {
+      "arrival_lag_p95_ns": 1106262,
+      "backend": {
+        "acquired": 100,
+        "attempts": 100,
+        "end_inflight": 0,
+        "errors": 0,
+        "peak_inflight": 2,
+        "queue_p95_ns": 119880538
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 249969344,
+          "ok_p95_ns": 348657973,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 261874561,
+          "ok_p95_ns": 344830425,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 134922750,
+          "ok_p95_ns": 202046033,
+          "scheduled": 20
+        }
+      },
+      "calls": 100,
+      "complete": true,
+      "config": {
+        "arm": "spare-capacity",
+        "requests": 60,
+        "interval_ns": 40000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 60,
+        "rejected": 0,
+        "timeout": 0
+      },
+      "elapsed_ns": 2639232479,
+      "kind": "summary",
+      "ok_p50_ns": 216594223,
+      "ok_p95_ns": 344830425,
+      "on_time_per_second": 22.733882095424153,
+      "scheduled": 60,
+      "repeat": 1
+    },
+    {
+      "arrival_lag_p95_ns": 1093930,
+      "backend": {
+        "acquired": 100,
+        "attempts": 100,
+        "end_inflight": 0,
+        "errors": 0,
+        "peak_inflight": 2,
+        "queue_p95_ns": 116046774
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 249633003,
+          "ok_p95_ns": 338494229,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 253029973,
+          "ok_p95_ns": 367229346,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 131342053,
+          "ok_p95_ns": 191798452,
+          "scheduled": 20
+        }
+      },
+      "calls": 100,
+      "complete": true,
+      "config": {
+        "arm": "sequential",
+        "requests": 60,
+        "interval_ns": 40000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 60,
+        "rejected": 0,
+        "timeout": 0
+      },
+      "elapsed_ns": 2639826245,
+      "kind": "summary",
+      "ok_p50_ns": 207959307,
+      "ok_p95_ns": 338494229,
+      "on_time_per_second": 22.728768650453354,
+      "scheduled": 60,
+      "repeat": 1
+    },
+    {
+      "arrival_lag_p95_ns": 969219,
+      "backend": {
+        "acquired": 100,
+        "attempts": 100,
+        "end_inflight": 0,
+        "errors": 2,
+        "peak_inflight": 2,
+        "queue_p95_ns": 153451193
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 18,
+            "timeout": 2
+          },
+          "ok_p50_ns": 290513172,
+          "ok_p95_ns": 385919341,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 193228521,
+          "ok_p95_ns": 259349971,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 170643074,
+          "ok_p95_ns": 252677154,
+          "scheduled": 20
+        }
+      },
+      "calls": 100,
+      "complete": true,
+      "config": {
+        "arm": "early",
+        "requests": 60,
+        "interval_ns": 40000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 58,
+        "rejected": 0,
+        "timeout": 2
+      },
+      "elapsed_ns": 2641424469,
+      "kind": "summary",
+      "ok_p50_ns": 216234680,
+      "ok_p95_ns": 365481815,
+      "on_time_per_second": 21.95784913810458,
+      "scheduled": 60,
+      "repeat": 1
+    },
+    {
+      "arrival_lag_p95_ns": 1072078,
+      "backend": {
+        "acquired": 100,
+        "attempts": 100,
+        "end_inflight": 0,
+        "errors": 0,
+        "peak_inflight": 2,
+        "queue_p95_ns": 114787027
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 248619839,
+          "ok_p95_ns": 338731623,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 260153561,
+          "ok_p95_ns": 344640066,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 131517191,
+          "ok_p95_ns": 202884456,
+          "scheduled": 20
+        }
+      },
+      "calls": 100,
+      "complete": true,
+      "config": {
+        "arm": "sequential",
+        "requests": 60,
+        "interval_ns": 40000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 60,
+        "rejected": 0,
+        "timeout": 0
+      },
+      "elapsed_ns": 2639185994,
+      "kind": "summary",
+      "ok_p50_ns": 208035318,
+      "ok_p95_ns": 338731623,
+      "on_time_per_second": 22.734282516050666,
+      "scheduled": 60,
+      "repeat": 2
+    },
+    {
+      "arrival_lag_p95_ns": 955503,
+      "backend": {
+        "acquired": 97,
+        "attempts": 98,
+        "end_inflight": 0,
+        "errors": 2,
+        "peak_inflight": 2,
+        "queue_p95_ns": 152728460
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 18,
+            "timeout": 2
+          },
+          "ok_p50_ns": 301272813,
+          "ok_p95_ns": 385506400,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 19,
+            "rejected": 1
+          },
+          "ok_p50_ns": 192147570,
+          "ok_p95_ns": 261637259,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 184468050,
+          "ok_p95_ns": 254636456,
+          "scheduled": 20
+        }
+      },
+      "calls": 98,
+      "complete": true,
+      "config": {
+        "arm": "early",
+        "requests": 60,
+        "interval_ns": 40000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 57,
+        "rejected": 1,
+        "timeout": 2
+      },
+      "elapsed_ns": 2606951872,
+      "kind": "summary",
+      "ok_p50_ns": 218862934,
+      "ok_p95_ns": 349764809,
+      "on_time_per_second": 21.864615381744954,
+      "scheduled": 60,
+      "repeat": 2
+    },
+    {
+      "arrival_lag_p95_ns": 1058018,
+      "backend": {
+        "acquired": 100,
+        "attempts": 100,
+        "end_inflight": 0,
+        "errors": 0,
+        "peak_inflight": 2,
+        "queue_p95_ns": 128351030
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 252061400,
+          "ok_p95_ns": 356167946,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 255062878,
+          "ok_p95_ns": 365929866,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 20
+          },
+          "ok_p50_ns": 138043285,
+          "ok_p95_ns": 224969109,
+          "scheduled": 20
+        }
+      },
+      "calls": 100,
+      "complete": true,
+      "config": {
+        "arm": "spare-capacity",
+        "requests": 60,
+        "interval_ns": 40000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 60,
+        "rejected": 0,
+        "timeout": 0
+      },
+      "elapsed_ns": 2646409913,
+      "kind": "summary",
+      "ok_p50_ns": 219581359,
+      "ok_p95_ns": 359951925,
+      "on_time_per_second": 22.672224625996556,
+      "scheduled": 60,
+      "repeat": 2
+    },
+    {
+      "arrival_lag_p95_ns": 9822877,
+      "backend": {
+        "acquired": 52,
+        "attempts": 52,
+        "end_inflight": 0,
+        "errors": 3,
+        "peak_inflight": 2,
+        "queue_p95_ns": 159913106
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 8,
+            "rejected": 10,
+            "timeout": 2
+          },
+          "ok_p50_ns": 369133624,
+          "ok_p95_ns": 397389882,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 7,
+            "rejected": 10,
+            "timeout": 3
+          },
+          "ok_p50_ns": 349989192,
+          "ok_p95_ns": 391023298,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 12,
+            "rejected": 8
+          },
+          "ok_p50_ns": 200126514,
+          "ok_p95_ns": 242819096,
+          "scheduled": 20
+        }
+      },
+      "calls": 52,
+      "complete": true,
+      "config": {
+        "arm": "spare-capacity",
+        "requests": 60,
+        "interval_ns": 20000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 27,
+        "rejected": 28,
+        "timeout": 5
+      },
+      "elapsed_ns": 1401705461,
+      "kind": "summary",
+      "ok_p50_ns": 242819096,
+      "ok_p95_ns": 392399861,
+      "on_time_per_second": 19.262249275063645,
+      "scheduled": 60,
+      "repeat": 0
+    },
+    {
+      "arrival_lag_p95_ns": 1092109,
+      "backend": {
+        "acquired": 56,
+        "attempts": 56,
+        "end_inflight": 0,
+        "errors": 4,
+        "peak_inflight": 2,
+        "queue_p95_ns": 153339510
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 9,
+            "rejected": 7,
+            "timeout": 4
+          },
+          "ok_p50_ns": 369065702,
+          "ok_p95_ns": 390001629,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 9,
+            "rejected": 10,
+            "timeout": 1
+          },
+          "ok_p50_ns": 371029690,
+          "ok_p95_ns": 397242205,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 10,
+            "rejected": 10
+          },
+          "ok_p50_ns": 197179580,
+          "ok_p95_ns": 223058841,
+          "scheduled": 20
+        }
+      },
+      "calls": 56,
+      "complete": true,
+      "config": {
+        "arm": "sequential",
+        "requests": 60,
+        "interval_ns": 20000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 28,
+        "rejected": 27,
+        "timeout": 5
+      },
+      "elapsed_ns": 1482110657,
+      "kind": "summary",
+      "ok_p50_ns": 302073071,
+      "ok_p95_ns": 392534395,
+      "on_time_per_second": 18.891976700765333,
+      "scheduled": 60,
+      "repeat": 0
+    },
+    {
+      "arrival_lag_p95_ns": 14929623,
+      "backend": {
+        "acquired": 55,
+        "attempts": 55,
+        "end_inflight": 0,
+        "errors": 9,
+        "peak_inflight": 2,
+        "queue_p95_ns": 183744570
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 4,
+            "rejected": 7,
+            "timeout": 9
+          },
+          "ok_p50_ns": 332676012,
+          "ok_p95_ns": 386444331,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 9,
+            "rejected": 11
+          },
+          "ok_p50_ns": 254521003,
+          "ok_p95_ns": 331532898,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 11,
+            "rejected": 9
+          },
+          "ok_p50_ns": 236567201,
+          "ok_p95_ns": 304050721,
+          "scheduled": 20
+        }
+      },
+      "calls": 55,
+      "complete": true,
+      "config": {
+        "arm": "early",
+        "requests": 60,
+        "interval_ns": 20000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 24,
+        "rejected": 27,
+        "timeout": 9
+      },
+      "elapsed_ns": 1452711123,
+      "kind": "summary",
+      "ok_p50_ns": 259006119,
+      "ok_p95_ns": 334687687,
+      "on_time_per_second": 16.520834472883703,
+      "scheduled": 60,
+      "repeat": 0
+    },
+    {
+      "arrival_lag_p95_ns": 1068306,
+      "backend": {
+        "acquired": 55,
+        "attempts": 55,
+        "end_inflight": 0,
+        "errors": 4,
+        "peak_inflight": 2,
+        "queue_p95_ns": 152063618
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 10,
+            "rejected": 7,
+            "timeout": 3
+          },
+          "ok_p50_ns": 365335563,
+          "ok_p95_ns": 389917004,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 9,
+            "rejected": 10,
+            "timeout": 1
+          },
+          "ok_p50_ns": 346154078,
+          "ok_p95_ns": 377677924,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 9,
+            "rejected": 11
+          },
+          "ok_p50_ns": 193578224,
+          "ok_p95_ns": 213107572,
+          "scheduled": 20
+        }
+      },
+      "calls": 55,
+      "complete": true,
+      "config": {
+        "arm": "sequential",
+        "requests": 60,
+        "interval_ns": 20000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 28,
+        "rejected": 28,
+        "timeout": 4
+      },
+      "elapsed_ns": 1439174793,
+      "kind": "summary",
+      "ok_p50_ns": 314229499,
+      "ok_p95_ns": 388597601,
+      "on_time_per_second": 19.45559367506237,
+      "scheduled": 60,
+      "repeat": 1
+    },
+    {
+      "arrival_lag_p95_ns": 10847116,
+      "backend": {
+        "acquired": 50,
+        "attempts": 53,
+        "end_inflight": 0,
+        "errors": 7,
+        "peak_inflight": 2,
+        "queue_p95_ns": 178057382
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 5,
+            "rejected": 8,
+            "timeout": 7
+          },
+          "ok_p50_ns": 374181158,
+          "ok_p95_ns": 397099791,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 8,
+            "rejected": 12
+          },
+          "ok_p50_ns": 243640219,
+          "ok_p95_ns": 369275602,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 13,
+            "rejected": 7
+          },
+          "ok_p50_ns": 232911047,
+          "ok_p95_ns": 305434536,
+          "scheduled": 20
+        }
+      },
+      "calls": 53,
+      "complete": true,
+      "config": {
+        "arm": "early",
+        "requests": 60,
+        "interval_ns": 20000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 26,
+        "rejected": 27,
+        "timeout": 7
+      },
+      "elapsed_ns": 1434217781,
+      "kind": "summary",
+      "ok_p50_ns": 243761389,
+      "ok_p95_ns": 387857061,
+      "on_time_per_second": 18.128348668130197,
+      "scheduled": 60,
+      "repeat": 1
+    },
+    {
+      "arrival_lag_p95_ns": 4703316,
+      "backend": {
+        "acquired": 53,
+        "attempts": 53,
+        "end_inflight": 0,
+        "errors": 4,
+        "peak_inflight": 2,
+        "queue_p95_ns": 159681124
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 9,
+            "rejected": 8,
+            "timeout": 3
+          },
+          "ok_p50_ns": 346990559,
+          "ok_p95_ns": 378998590,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 8,
+            "rejected": 11,
+            "timeout": 1
+          },
+          "ok_p50_ns": 353362496,
+          "ok_p95_ns": 376638183,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 11,
+            "rejected": 9
+          },
+          "ok_p50_ns": 201756538,
+          "ok_p95_ns": 273290723,
+          "scheduled": 20
+        }
+      },
+      "calls": 53,
+      "complete": true,
+      "config": {
+        "arm": "spare-capacity",
+        "requests": 60,
+        "interval_ns": 20000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 28,
+        "rejected": 28,
+        "timeout": 4
+      },
+      "elapsed_ns": 1445290072,
+      "kind": "summary",
+      "ok_p50_ns": 314094237,
+      "ok_p95_ns": 376638183,
+      "on_time_per_second": 19.3732736026156,
+      "scheduled": 60,
+      "repeat": 1
+    },
+    {
+      "arrival_lag_p95_ns": 11086597,
+      "backend": {
+        "acquired": 50,
+        "attempts": 52,
+        "end_inflight": 0,
+        "errors": 5,
+        "peak_inflight": 2,
+        "queue_p95_ns": 185242336
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 4,
+            "rejected": 9,
+            "timeout": 7
+          },
+          "ok_p50_ns": 340123933,
+          "ok_p95_ns": 392865756,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 9,
+            "rejected": 11
+          },
+          "ok_p50_ns": 268235039,
+          "ok_p95_ns": 368589442,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 12,
+            "rejected": 8
+          },
+          "ok_p50_ns": 247670046,
+          "ok_p95_ns": 305752163,
+          "scheduled": 20
+        }
+      },
+      "calls": 52,
+      "complete": true,
+      "config": {
+        "arm": "early",
+        "requests": 60,
+        "interval_ns": 20000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 25,
+        "rejected": 28,
+        "timeout": 7
+      },
+      "elapsed_ns": 1400163145,
+      "kind": "summary",
+      "ok_p50_ns": 264752365,
+      "ok_p95_ns": 368589442,
+      "on_time_per_second": 17.855062168487514,
+      "scheduled": 60,
+      "repeat": 2
+    },
+    {
+      "arrival_lag_p95_ns": 9762503,
+      "backend": {
+        "acquired": 55,
+        "attempts": 55,
+        "end_inflight": 0,
+        "errors": 3,
+        "peak_inflight": 2,
+        "queue_p95_ns": 152604451
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 10,
+            "rejected": 8,
+            "timeout": 2
+          },
+          "ok_p50_ns": 382520035,
+          "ok_p95_ns": 397742874,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 9,
+            "rejected": 10,
+            "timeout": 1
+          },
+          "ok_p50_ns": 383470170,
+          "ok_p95_ns": 392847986,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 11,
+            "rejected": 9
+          },
+          "ok_p50_ns": 194008262,
+          "ok_p95_ns": 208956955,
+          "scheduled": 20
+        }
+      },
+      "calls": 55,
+      "complete": true,
+      "config": {
+        "arm": "spare-capacity",
+        "requests": 60,
+        "interval_ns": 20000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 30,
+        "rejected": 27,
+        "timeout": 3
+      },
+      "elapsed_ns": 1504992473,
+      "kind": "summary",
+      "ok_p50_ns": 358657046,
+      "ok_p95_ns": 397654982,
+      "on_time_per_second": 19.933654512038213,
+      "scheduled": 60,
+      "repeat": 2
+    },
+    {
+      "arrival_lag_p95_ns": 1087101,
+      "backend": {
+        "acquired": 55,
+        "attempts": 55,
+        "end_inflight": 0,
+        "errors": 3,
+        "peak_inflight": 2,
+        "queue_p95_ns": 153377539
+      },
+      "by_work": {
+        "dependent": {
+          "counts": {
+            "ok": 9,
+            "rejected": 8,
+            "timeout": 3
+          },
+          "ok_p50_ns": 366440923,
+          "ok_p95_ns": 397796406,
+          "scheduled": 20
+        },
+        "pair": {
+          "counts": {
+            "ok": 10,
+            "rejected": 9,
+            "timeout": 1
+          },
+          "ok_p50_ns": 372874440,
+          "ok_p95_ns": 397893574,
+          "scheduled": 20
+        },
+        "short": {
+          "counts": {
+            "ok": 9,
+            "rejected": 11
+          },
+          "ok_p50_ns": 195855997,
+          "ok_p95_ns": 231006413,
+          "scheduled": 20
+        }
+      },
+      "calls": 55,
+      "complete": true,
+      "config": {
+        "arm": "sequential",
+        "requests": 60,
+        "interval_ns": 20000000,
+        "timeout_ns": 400000000,
+        "max_inflight_requests": 8,
+        "tool_capacity": 2,
+        "synthetic_tool_delay_ns": 50000000,
+        "workloads": "pair,short,dependent",
+        "prepare": "cow",
+        "cow_data_image": false
+      },
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "incorrect": 0,
+        "ok": 28,
+        "rejected": 28,
+        "timeout": 4
+      },
+      "elapsed_ns": 1471371772,
+      "kind": "summary",
+      "ok_p50_ns": 292040102,
+      "ok_p95_ns": 397796406,
+      "on_time_per_second": 19.0298607957799,
+      "scheduled": 60,
+      "repeat": 2
+    }
+  ]
+}

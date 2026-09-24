@@ -1,0 +1,63 @@
+{
+  "scope": "macOS arm64, real Guest, separate loopback HTTP server process, race-enabled acceptance; mechanism test, not latency benchmark",
+  "guest_sha256": "2c63ce407eae626c89fcd1dd918c713b1f8b75a35a6cf6ca6861466168d0faf8",
+  "test_source_sha256": "64b91d8655c01a45bb0d214612c5463414f427b63f706d7911c26787a61f042a",
+  "cases": [
+    {
+      "backend_ignores_cancellation": false,
+      "termination": "manual_cancel",
+      "separate_process_verified": true,
+      "guest_returned_error": true,
+      "backend_observed_after_guest_return": null,
+      "backend_final_state": {
+        "Active": 0,
+        "Completed": 0,
+        "Cancelled": 1
+      }
+    },
+    {
+      "backend_ignores_cancellation": false,
+      "termination": "deadline",
+      "separate_process_verified": true,
+      "guest_returned_error": true,
+      "backend_observed_after_guest_return": null,
+      "backend_final_state": {
+        "Active": 0,
+        "Completed": 0,
+        "Cancelled": 1
+      }
+    },
+    {
+      "backend_ignores_cancellation": true,
+      "termination": "manual_cancel",
+      "separate_process_verified": true,
+      "guest_returned_error": true,
+      "backend_observed_after_guest_return": {
+        "Active": 1,
+        "Completed": 0,
+        "Cancelled": 0
+      },
+      "backend_final_state": {
+        "Active": 0,
+        "Completed": 1,
+        "Cancelled": 0
+      }
+    },
+    {
+      "backend_ignores_cancellation": true,
+      "termination": "deadline",
+      "separate_process_verified": true,
+      "guest_returned_error": true,
+      "backend_observed_after_guest_return": {
+        "Active": 1,
+        "Completed": 0,
+        "Cancelled": 0
+      },
+      "backend_final_state": {
+        "Active": 0,
+        "Completed": 1,
+        "Cancelled": 0
+      }
+    }
+  ]
+}

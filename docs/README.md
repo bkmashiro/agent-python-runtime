@@ -46,6 +46,8 @@ for the execution model and build commands.
 
 ## Performance and scheduling
 
+- [`early-read-frontend-cost.md`](early-read-frontend-cost.md) — phase timings and CPU profiles identify first-use front-end/display costs; no optimization implemented.
+
 - [`early-read-validation.md`](early-read-validation.md) — Linux COW follow-up, short-task overhead and independent HTTP cancellation tests; no runtime changes.
 
 - [`early-read-contention.md`](early-read-contention.md) — open-loop real-Guest comparison under shared tool capacity, with full local traces and explicit timeout/rejection accounting.

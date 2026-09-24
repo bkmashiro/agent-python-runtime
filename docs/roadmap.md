@@ -1,6 +1,14 @@
 # Pysolate development roadmap
 
-## Current delivery: contention validation (tests only)
+## Current delivery: front-end cost investigation
+
+Complete. A test-only Guest probe and existing measured-window CPU profiling
+locate the isolated early-read cost primarily in first-use imports and display
+formatting, rather than Guest creation. No caching, prewarming or output behavior
+change was implemented. See [`early-read-frontend-cost.md`](early-read-frontend-cost.md)
+for measurements, profiling limits and the next optimization candidate.
+
+## Previous delivery: contention validation (tests only)
 
 Complete. The existing benchmark ran 54 fresh Linux processes across default COW
 and COW data-image. An independent HTTP-process test covered cooperative and

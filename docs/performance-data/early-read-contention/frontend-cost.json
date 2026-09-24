@@ -1,0 +1,100 @@
+{
+  "scope": "isolated zero-delay Linux/COW data-image; separate from prior paced mixed-load cohort",
+  "source_base": "87bd0f346b8c9afe359704566241a2cb8da6aa5d",
+  "test_source_sha256": "2663065be109a53f20a9f4921b7a4a5f59d6fb5b1f14160f5a5a096918e7748f",
+  "artifact_sha256": "2c63ce407eae626c89fcd1dd918c713b1f8b75a35a6cf6ca6861466168d0faf8",
+  "logical_cpu_affinity": [
+    0,
+    36
+  ],
+  "cpu_topology": {
+    "0": {
+      "core_id": "0",
+      "physical_package_id": "0"
+    },
+    "36": {
+      "core_id": "0",
+      "physical_package_id": "0"
+    }
+  },
+  "inherited_memory_limit_bytes": 2147483648,
+  "gomaxprocs": 2,
+  "independent_diagnostic_processes": 3,
+  "measured_executions_per_process": 33,
+  "measured_guests_per_case_per_process": 11,
+  "warm_comparison": "second pass inside the same diagnostic Guest, not a shared/prewarmed production image",
+  "process_medians_ns": [
+    {
+      "repeat": "stages-0",
+      "import_ast_ns": 3451615,
+      "import_plm_ns": 869618,
+      "first_transform_ns": 1301750,
+      "first_unparse_ns": 10442283,
+      "first_compile_ns": 308051,
+      "warm_transform_ns": 1270270,
+      "warm_unparse_ns": 443465,
+      "warm_compile_ns": 305577,
+      "ordinary_elapsed_ns": 2020830,
+      "early_elapsed_ns": 18593762
+    },
+    {
+      "repeat": "stages-1",
+      "import_ast_ns": 3490445,
+      "import_plm_ns": 882643,
+      "first_transform_ns": 1316859,
+      "first_unparse_ns": 10455355,
+      "first_compile_ns": 304371,
+      "warm_transform_ns": 1291946,
+      "warm_unparse_ns": 449974,
+      "warm_compile_ns": 298289,
+      "ordinary_elapsed_ns": 2024495,
+      "early_elapsed_ns": 18657787
+    },
+    {
+      "repeat": "stages-2",
+      "import_ast_ns": 3491132,
+      "import_plm_ns": 890421,
+      "first_transform_ns": 1319432,
+      "first_unparse_ns": 10436462,
+      "first_compile_ns": 305217,
+      "warm_transform_ns": 1276105,
+      "warm_unparse_ns": 446830,
+      "warm_compile_ns": 301260,
+      "ordinary_elapsed_ns": 2025684,
+      "early_elapsed_ns": 18791751
+    }
+  ],
+  "profiled_phase_means_ns": {
+    "tools": {
+      "execute": 1159433.02,
+      "guest_close": 115249.19333333333,
+      "marshal": 11752.483333333334,
+      "new_guest": 1082023.03,
+      "read_response": 11266.156666666666,
+      "state_close": 1256.5666666666666
+    },
+    "early-reads": {
+      "execute": 18841693.1,
+      "guest_close": 210936.74666666667,
+      "marshal": 13726.14,
+      "new_guest": 1006720.7,
+      "read_response": 15242.283333333333,
+      "state_close": 1187.3133333333333
+    }
+  },
+  "profiled_requests_per_arm": 300,
+  "cpu_profile_limit": "Go pprof does not resolve most JIT/CPython function identities; do not name Python C hotspots from ExternalCode",
+  "module_imports": {
+    "ast": [
+      "ast",
+      "_ast"
+    ],
+    "plm": [
+      "plm"
+    ],
+    "first_unparse": [
+      "_ast_unparse",
+      "contextlib"
+    ]
+  }
+}

@@ -1,5 +1,9 @@
 # Early-read validation: Linux COW and HTTP cancellation
 
+The [front-end phase investigation](early-read-frontend-cost.md) subsequently
+isolates first-use import/formatting costs. It uses a different zero-delay load
+and does not replace or pool the results below.
+
 This follow-up adds tests and evidence only. Runtime code, public interfaces,
 permissions, defaults and the existing experimental policy are unchanged.
 

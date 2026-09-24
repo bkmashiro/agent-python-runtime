@@ -46,6 +46,8 @@ for the execution model and build commands.
 
 ## Performance and scheduling
 
+- [`early-read-contention.md`](early-read-contention.md) — open-loop real-Guest comparison under shared tool capacity, with full local traces and explicit timeout/rejection accounting.
+
 - [`dependency-evaluation.md`](dependency-evaluation.md) — opaque cursors and dependent branches, with full private recordings replayed offline.
 
 - [`agent-evaluation.md`](agent-evaluation.md) — controlled DeepSeek direct-tool versus Python comparison, with independent answer grading and all scored traces.

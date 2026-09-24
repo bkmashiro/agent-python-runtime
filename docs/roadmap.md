@@ -1,6 +1,16 @@
-# Pysolate development recording and dependency validation
+# Pysolate development roadmap
 
-## Current pointer
+## Current delivery: shared-tool contention
+
+Complete. A small real-Guest open-loop harness compares sequential execution,
+early reads and an experimental host-side spare-capacity rule. Full local traces
+account for scheduled arrivals, rejection, deadlines and tool lifecycle. The
+three-arm macOS/copy pilot shows low-load latency gains and busy-backend costs;
+the simple rule mostly returns to sequential behavior under pressure. No runtime
+default, public scheduling API or eviction mechanism was changed. See
+[`early-read-contention.md`](early-read-contention.md) for results and limits.
+
+## Previous delivery: development recording and dependency validation
 
 Complete. Default-on full private capture passed a real-provider smoke and no-key offline replay. All 12 dependency episodes were correct and subsequently replayed with no live provider/tool dispatch. Full archives stay local; see development-recording.md and dependency-evaluation.md. Prior v1 results remain unchanged and are not full recordings.
 

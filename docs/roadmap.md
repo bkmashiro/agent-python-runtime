@@ -1,6 +1,17 @@
 # Pysolate development roadmap
 
-## Current delivery: front-end cost investigation
+## Current delivery: external AppWorld development acceptance
+
+Complete. A benchmark-only Guest/Host API bridge preserves Host-side AppWorld
+state and original grading without executing Guest source on the Host. All 57
+original dev references passed natively; a predeclared 33-program subset passed
+annotation-only native controls and real Guest execution with identical API
+request sequences. The 24 helper-dependent references remain outside this
+portability result. No model score or full multi-turn environment compatibility
+is claimed. Runtime behavior, permissions, public APIs and scheduling are
+unchanged. See [`appworld-acceptance.md`](appworld-acceptance.md).
+
+## Previous delivery: front-end cost investigation
 
 Complete. A test-only Guest probe and existing measured-window CPU profiling
 locate the isolated early-read cost primarily in first-use imports and display

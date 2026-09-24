@@ -46,6 +46,8 @@ for the execution model and build commands.
 
 ## Performance and scheduling
 
+- [`appworld-acceptance.md`](appworld-acceptance.md) — official dev reference baseline and a bounded Guest/Host API adapter, with explicit portability and score limitations.
+
 - [`early-read-frontend-cost.md`](early-read-frontend-cost.md) — phase timings and CPU profiles identify first-use front-end/display costs; no optimization implemented.
 
 - [`early-read-validation.md`](early-read-validation.md) — Linux COW follow-up, short-task overhead and independent HTTP cancellation tests; no runtime changes.

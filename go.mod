@@ -1,12 +1,12 @@
 module github.com/bkmashiro/agent-python-runtime
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/ncruces/go-sqlite3 v0.32.0
 	github.com/tetratelabs/wazero v1.11.0
-	golang.org/x/sys v0.46.0
+	golang.org/x/sys v0.48.0
 )
 
 require (

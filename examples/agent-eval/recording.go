@@ -66,6 +66,7 @@ type privateEpisodeRecording struct {
 
 type privateToolBinding struct {
 	Name        string          `json:"name"`
+	Writes      bool            `json:"writes,omitempty"`
 	PythonPath  string          `json:"python_path"`
 	Description string          `json:"description"`
 	Schema      json.RawMessage `json:"schema"`

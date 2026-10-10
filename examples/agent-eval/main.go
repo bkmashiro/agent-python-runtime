@@ -1,5 +1,5 @@
 // Command agent-eval compares direct OpenAI tool calls with Pysolate code on
-// four deterministic, read-only task classes. It is intentionally a small
+// deterministic task fixtures, including an opt-in partial-write probe. It is a small
 // validation harness, not a general benchmark framework.
 package main
 
@@ -226,6 +226,7 @@ type domainDeclaration struct {
 	PythonPath  string
 	Description string
 	Schema      json.RawMessage
+	Writes      bool
 	Call        func(context.Context, json.RawMessage) (any, error)
 }
 
@@ -238,7 +239,7 @@ func (d domainDeclaration) manifestTool(host *episodeHost) (string, pysolate.Too
 		PythonPath:  d.PythonPath,
 		Description: d.Description,
 		InputSchema: d.Schema,
-		Annotations: pysolate.ToolAnnotations{ReadOnlyHint: true},
+		Annotations: pysolate.ToolAnnotations{ReadOnlyHint: !d.Writes},
 		Call: func(ctx context.Context, raw json.RawMessage) (any, error) {
 			return host.call(d.Name, ctx, raw)
 		},
@@ -253,11 +254,13 @@ type taskCase struct {
 }
 
 type taskEpisode struct {
-	Task         *taskCase
-	Domains      []domainDeclaration
-	CheckAnswer  func(json.RawMessage) (bool, error)
-	TransientKey string
-	transientHit bool
+	Task        *taskCase
+	Domains     []domainDeclaration
+	CheckAnswer func(json.RawMessage) (bool, error)
+	// Optional pure regrading from captured effects, without dispatching tools.
+	CheckRecordedAnswer func(json.RawMessage, *privateEpisodeRecording) (bool, error)
+	TransientKey        string
+	transientHit        bool
 }
 
 func (e *taskEpisode) domain(name string) (domainDeclaration, bool) {
@@ -323,14 +326,12 @@ func (e *episodeRuntime) callDomain(name string, ctx context.Context, raw json.R
 		if err := json.Unmarshal(call.Result, &wire); err == nil && wire.Error != nil {
 			return nil, errors.New(*wire.Error)
 		}
-		var value any
-		decoder := json.NewDecoder(bytes.NewReader(call.Result))
-		decoder.UseNumber()
-		if err := decoder.Decode(&value); err != nil {
+		if !json.Valid(call.Result) {
 			e.replayErr = errors.New("offline direct tool result invalid")
 			return nil, e.replayErr
 		}
-		return value, nil
+		// Keep member order and number spelling in the next model message.
+		return json.RawMessage(append([]byte(nil), call.Result...)), nil
 	}
 	if e.hostCalls >= maxHostCalls {
 		e.toolLimit = true
@@ -375,13 +376,16 @@ func executePythonDefinition() ToolDefinition {
 
 func allTasks() map[string]taskCase {
 	return map[string]taskCase{
-		"lookup":           lookupTask(),
-		"paginated_sum":    paginatedSumTask(),
-		"join":             joinTask(),
-		"transient":        transientTask(),
-		"cursor_sum":       cursorSumTask(),
-		"dependent_due":    dependentBranchTask(false),
-		"dependent_credit": dependentBranchTask(true),
+		"lookup":             lookupTask(),
+		"paginated_sum":      paginatedSumTask(),
+		"join":               joinTask(),
+		"transient":          transientTask(),
+		"cursor_sum":         cursorSumTask(),
+		"dependent_due":      dependentBranchTask(false),
+		"dependent_credit":   dependentBranchTask(true),
+		"partial_docs":       partialEffectsTask("docs"),
+		"partial_structured": partialEffectsTask("structured"),
+		"partial_query":      partialEffectsTask("query"),
 	}
 }
 
@@ -762,7 +766,7 @@ func runEpisode(ctx context.Context, provider ChatProvider, budget *requestBudge
 		private.MaxTurns, private.MaxTokens = maxTurns, maxTokensPerRequest
 		private.ReserveRequests = reserve
 		for _, d := range fixture.Domains {
-			private.DomainBindings = append(private.DomainBindings, privateToolBinding{Name: d.Name, PythonPath: d.PythonPath, Description: d.Description, Schema: append(json.RawMessage(nil), d.Schema...)})
+			private.DomainBindings = append(private.DomainBindings, privateToolBinding{Name: d.Name, Writes: d.Writes, PythonPath: d.PythonPath, Description: d.Description, Schema: append(json.RawMessage(nil), d.Schema...)})
 		}
 	}
 	if replaying {
@@ -814,6 +818,21 @@ func runEpisode(ctx context.Context, provider ChatProvider, budget *requestBudge
 	modeInstructions := "Use each listed readonly function tool by its schema name (Python binding names are informational), then call submit_answer exactly once with the task-specific structured answer. Tool errors are feedback; repair and retry. Do not invent values."
 	if arm == "code" {
 		modeInstructions = "Write complete Python in execute_python, calling approved tools by their python_path with keyword arguments only. Each execute_python call starts a fresh Guest, so do not rely on Python state between calls. Readonly tool errors are feedback; repair and retry. Set the Python global result to your computed JSON-compatible answer (for example result = some_dict), or print intermediate observations, then call submit_answer. Never use shell, subprocess, network, credentials, environment variables, or host filesystem."
+	}
+	for _, d := range fixture.Domains {
+		if !d.Writes {
+			continue
+		}
+		// Keep legacy readonly prompts unchanged; never recommend blind retries for writes.
+		modeInstructions = strings.ReplaceAll(modeInstructions, "readonly function", "function")
+		modeInstructions = strings.ReplaceAll(modeInstructions, "Readonly tool errors are feedback; repair and retry.", "Use tool contracts and observed outcomes to decide how to proceed after errors.")
+		modeInstructions = strings.ReplaceAll(modeInstructions, "Tool errors are feedback; repair and retry.", "Use tool contracts and observed outcomes to decide how to proceed after errors.")
+		for i := range tools {
+			if tools[i].Function.Name == "execute_python" {
+				tools[i].Function.Parameters = json.RawMessage(strings.ReplaceAll(string(tools[i].Function.Parameters), "injected read-only tools", "injected tools"))
+			}
+		}
+		break
 	}
 	system := modeInstructions
 	if arm == "code" {
@@ -907,6 +926,9 @@ func runEpisode(ctx context.Context, provider ChatProvider, budget *requestBudge
 			}
 			if call.Function.Name == "submit_answer" {
 				correct, validationErr := fixture.CheckAnswer(json.RawMessage(call.Function.Arguments))
+				if replaying && fixture.CheckRecordedAnswer != nil {
+					correct, validationErr = fixture.CheckRecordedAnswer(json.RawMessage(call.Function.Arguments), private)
+				}
 				if validationErr != nil {
 					protocolFailure = true
 					reply(call, "submit_answer", jsonError(validationErr))
@@ -1153,7 +1175,7 @@ func main() {
 	outPath := flag.String("out", "", "new JSONL output path; never overwritten")
 	privatePath := flag.String("private-record", "", "private lossless provider/execution/tool JSONL (default: alongside -out)")
 	replayPath := flag.String("replay", "", "offline replay of a private recording; no API key or network is used")
-	cases := flag.String("cases", "", "optional comma-separated cases: lookup,paginated_sum,join,transient")
+	cases := flag.String("cases", "", "comma-separated cases; default lookup,paginated_sum,join,transient; opt-in partial_docs,partial_structured,partial_query")
 	repeats := flag.Int("repeats", 2, "number of paired repeats (4 cases x 2 arms x 2 repeats = 16 episodes)")
 	maxTurns := flag.Int("max-turns", defaultMaxTurns, "maximum model turns per episode")
 	maxRequests := flag.Int("max-model-requests", defaultMaxRequests, "shared campaign model-request cap, at most 96")
@@ -1182,7 +1204,7 @@ func main() {
 			os.Exit(2)
 		}
 		if replayErr := replayPrivateCampaign(context.Background(), *replayPath, *outPath, wasm, selected, *maxTurns, *maxRequests); replayErr != nil {
-			fmt.Fprintln(os.Stderr, "agent-eval: offline replay failed")
+			fmt.Fprintln(os.Stderr, "agent-eval: offline replay failed:", replayErr)
 			os.Exit(1)
 		}
 		return

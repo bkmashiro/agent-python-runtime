@@ -34,7 +34,7 @@ func validateRecordedEpisode(ep privateEpisodeRecording, header privateRecording
 	fixture := task.NewEpisode()
 	bindings := make([]privateToolBinding, 0, len(fixture.Domains))
 	for _, d := range fixture.Domains {
-		bindings = append(bindings, privateToolBinding{Name: d.Name, PythonPath: d.PythonPath, Description: d.Description, Schema: d.Schema})
+		bindings = append(bindings, privateToolBinding{Name: d.Name, Writes: d.Writes, PythonPath: d.PythonPath, Description: d.Description, Schema: d.Schema})
 	}
 	want, _ := json.Marshal(bindings)
 	got, _ := json.Marshal(ep.DomainBindings)

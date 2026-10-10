@@ -1,0 +1,40 @@
+{
+  "episodes": 12,
+  "correct": 12,
+  "model_requests": 56,
+  "provider_tokens": 79121,
+  "offline_replayed": 12,
+  "model": [
+    "deepseek-flash"
+  ],
+  "groups": {
+    "partial_docs": {
+      "episodes": 4,
+      "correct": 4,
+      "model_requests": 20,
+      "provider_tokens": 26829
+    },
+    "partial_query": {
+      "episodes": 4,
+      "correct": 4,
+      "model_requests": 19,
+      "provider_tokens": 25155
+    },
+    "partial_structured": {
+      "episodes": 4,
+      "correct": 4,
+      "model_requests": 17,
+      "provider_tokens": 27137
+    }
+  },
+  "guest_sha256": "2c63ce407eae626c89fcd1dd918c713b1f8b75a35a6cf6ca6861466168d0faf8",
+  "private_recording_sha256": "d1d8505806287874dbff58e588319907d80de59c469e8cf3e0a74266b95fcd7b",
+  "smoke": {
+    "episodes": 2,
+    "correct": 2,
+    "requests": 11,
+    "tokens": 14791,
+    "included_in_cohort": false,
+    "offline_replayed": true
+  }
+}

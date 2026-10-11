@@ -262,7 +262,9 @@ func callWithBytes(ctx context.Context, m api.Module, name string, data []byte) 
 	if ptr[0] == 0 || !m.Memory().Write(uint32(ptr[0]), data) {
 		return nil, errors.New("Guest request allocation failed")
 	}
-	defer m.ExportedFunction("release").Call(ctx, ptr[0])
+	// Resolve release only after execution returns: ExportedFunction allocates
+	// an engine call stack that need not stay live while a Host tool waits.
+	defer func() { _, _ = m.ExportedFunction("release").Call(ctx, ptr[0]) }()
 	return m.ExportedFunction(name).Call(ctx, ptr[0], uint64(len(data)))
 }
 

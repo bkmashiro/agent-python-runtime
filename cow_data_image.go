@@ -27,8 +27,8 @@ type cowDataImage struct {
 	active     []cowDataSegment
 }
 
-// transformCOWDataImage makes a replacement-only shell. It deliberately parses
-// and rewrites only the Data section; all other section bytes are copied as-is.
+// transformCOWDataImage makes a replacement-only shell. It rewrites Data and,
+// when present, DataCount; unrelated section bytes and passive indices stay intact.
 func transformCOWDataImage(wasm []byte) (cowDataImage, error) {
 	var image cowDataImage
 	if len(wasm) < 8 || string(wasm[:4]) != "\x00asm" || binary.LittleEndian.Uint32(wasm[4:8]) != 1 {
@@ -37,7 +37,8 @@ func transformCOWDataImage(wasm []byte) (cowDataImage, error) {
 	var memoryCount, importedMemoryCount uint32
 	var memoryMin, memoryMax uint32
 	var haveMemory bool
-	var dataSeen, activeSeen bool
+	var dataSeen, activeSeen, dataCountSeen bool
+	var dataCount uint64
 	var code []byte
 	var dataModes []bool
 	out := make([]byte, 0, len(wasm))
@@ -135,6 +136,16 @@ func transformCOWDataImage(wasm []byte) (cowDataImage, error) {
 				return image, errors.New("multiple Code sections")
 			}
 			code = payload
+		case 12: // DataCount must be validated before any descriptor compaction.
+			if dataCountSeen {
+				return image, errors.New("multiple DataCount sections")
+			}
+			var end int
+			dataCount, end, err = readULEB(payload, 0, 32)
+			if err != nil || end != len(payload) {
+				return image, errors.New("invalid DataCount section")
+			}
+			dataCountSeen = true
 		case wasmStartSection:
 			return image, errors.New("COW data image does not support a start function")
 		case wasmDataSection:
@@ -184,6 +195,56 @@ func transformCOWDataImage(wasm []byte) (cowDataImage, error) {
 		if err := validateDataImageCode(code, dataModes); err != nil {
 			return image, err
 		}
+	}
+	if dataCountSeen && dataCount != uint64(len(dataModes)) {
+		return image, errors.New("DataCount does not match Data section")
+	}
+	// Validation above rejects memory.init/data.drop targeting active segments.
+	// Remove only a trailing run of active descriptors: passive segment indices
+	// and every earlier descriptor remain unchanged. Their bytes live in the
+	// seed image, not in these empty engine descriptors.
+	keep := len(dataModes)
+	for keep > 0 && dataModes[keep-1] {
+		keep--
+	}
+	if keep < len(dataModes) {
+		compact := make([]byte, 0, len(out))
+		compact = append(compact, out[:8]...)
+		for pos := 8; pos < len(out); {
+			id := out[pos]
+			length, next, _ := readULEB(out, pos+1, 32) // parsed above
+			end := next + int(length)
+			if id == wasmDataSection {
+				payload := out[next:end]
+				_, cursor, _ := readULEB(payload, 0, 32)
+				entriesStart := cursor
+				for i := 0; i < keep; i++ {
+					flags, after, _ := readULEB(payload, cursor, 32)
+					cursor = after
+					if flags == 2 {
+						_, cursor, _ = readULEB(payload, cursor, 32)
+					}
+					if flags != 1 {
+						_, cursor, _ = readI32Const(payload, cursor)
+					}
+					n, after, _ := readULEB(payload, cursor, 32)
+					cursor = after + int(n)
+				}
+				countBytes := appendULEB(nil, uint32(keep))
+				compact = append(compact, id)
+				compact = appendULEB(compact, uint32(len(countBytes)+cursor-entriesStart))
+				compact = append(compact, countBytes...)
+				compact = append(compact, payload[entriesStart:cursor]...)
+			} else if id == 12 {
+				countBytes := appendULEB(nil, uint32(keep))
+				compact = append(compact, id, byte(len(countBytes)))
+				compact = append(compact, countBytes...)
+			} else {
+				compact = append(compact, out[pos:end]...)
+			}
+			pos = end
+		}
+		out = compact
 	}
 	image.memorySize = uint64(memoryMin) * wasmPageSizeBytes
 	image.shell = bytes.Clone(out)

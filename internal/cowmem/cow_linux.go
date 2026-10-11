@@ -3,6 +3,7 @@
 package cowmem
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"runtime"
@@ -159,15 +160,29 @@ func (c *linuxCOW) captureBytes(data []byte) error {
 	if err := unix.Ftruncate(c.fd, int64(len(data))); err != nil {
 		return fmt.Errorf("size COW image: %w", err)
 	}
+	// Ftruncate leaves zero-filled holes. Materialize only nonzero OS pages,
+	// batching adjacent pages into one write, instead of charging untouched
+	// linear-memory capacity to the sealed shmem image.
+	zero := make([]byte, cowPageSize)
 	for offset := 0; offset < len(data); {
-		n, err := unix.Pwrite(c.fd, data[offset:], int64(offset))
-		if err != nil {
-			return fmt.Errorf("write COW image: %w", err)
+		if bytes.Equal(data[offset:offset+cowPageSize], zero) {
+			offset += cowPageSize
+			continue
 		}
-		if n == 0 {
-			return errors.New("short write while creating COW image")
+		end := offset + cowPageSize
+		for end < len(data) && !bytes.Equal(data[end:end+cowPageSize], zero) {
+			end += cowPageSize
 		}
-		offset += n
+		for offset < end {
+			n, err := unix.Pwrite(c.fd, data[offset:end], int64(offset))
+			if err != nil {
+				return fmt.Errorf("write COW image: %w", err)
+			}
+			if n == 0 {
+				return errors.New("short write while creating COW image")
+			}
+			offset += n
+		}
 	}
 	seals := unix.F_SEAL_SHRINK | unix.F_SEAL_GROW | unix.F_SEAL_WRITE | unix.F_SEAL_SEAL
 	if _, err := unix.FcntlInt(uintptr(c.fd), unix.F_ADD_SEALS, seals); err != nil {

@@ -31,7 +31,8 @@ func TestTransformCOWDataImagePreservesSectionsAndSemantics(t *testing.T) {
 	if got := nonDataSections(image.shell); !bytes.Equal(got, originalNonData) {
 		t.Fatalf("non-Data sections changed\n got %x\nwant %x", got, originalNonData)
 	}
-	wantData := []byte{3, 2, 0, 0x41, 0, 0x0b, 0, 1, 2, 'p', 'q', 0, 0x41, 2, 0x0b, 0}
+	// Passive index 1 and preceding active index 0 remain; unreferenced tail is removed.
+	wantData := []byte{2, 2, 0, 0x41, 0, 0x0b, 0, 1, 2, 'p', 'q'}
 	if got := dataSectionPayload(image.shell); !bytes.Equal(got, wantData) {
 		t.Fatalf("rewritten Data=%x want %x", got, wantData)
 	}

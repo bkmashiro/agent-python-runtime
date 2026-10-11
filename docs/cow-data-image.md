@@ -50,14 +50,14 @@ go run ./cmd/pysolate-bench -mode cow -work python -n 200 -cow-data-image=true
 
 ## What changes
 
-At construction, the runtime copies all non-Data sections byte-for-byte. Each active data segment keeps its index, classification, memory index and offset, but its payload becomes empty. Passive data segments stay unchanged. The original active payloads are written, in original order, into a sealed sparse memfd. Overlapping segments therefore preserve last-write behavior.
+At construction, the runtime copies all sections except Data and, when present, DataCount byte-for-byte. Active payloads become empty. After proving that no instruction references an active segment, it removes only the trailing run of active descriptors and adjusts DataCount. Entries through the last passive segment retain their original indices, classification and offsets; passive payloads remain unchanged. This avoids an otherwise per-instance empty descriptor array. The original active payloads are written, in original order, into a sealed sparse memfd. Overlapping segments therefore preserve last-write behavior.
 
 Only the transformed module is compiled. Each new instance receives the original-data mapping **before** `_initialize`. The first instance then initializes Python and captures the final clean image. Later instances run `_initialize` against original data and attach the final Python image afterward, exactly preserving the old ordering of initialization versus restore. Globals, tables and engine state are still constructed per instance.
 
 The runtime retains two immutable images per Runner:
 
 - the original data seed, needed to preserve `_initialize` behavior;
-- the prepared Python image, used for execution.
+- the prepared Python image, used for execution. Its zero pages are stored as sparse holes; byte contents, extent and seals are unchanged. This reduces shared backing allocation, not per-Guest private memory.
 
 Reading sparse seed holes while capturing the first full snapshot materializes tmpfs pages. Construction therefore closes that initial Guest and rebuilds the seed from its original segments once, before returning the Runner. This reduces retained seed allocation without altering bytes or per-request execution. The temporary segment descriptors and transformed bytes are not intentionally cached separately by the Runner.
 
@@ -71,7 +71,7 @@ These checks run during Runner construction, not per request. wazero still valid
 
 ## Verification
 
-- Transformation tests preserve every non-Data byte, passive payloads, segment indexes and overlapping placement.
+- Transformation tests preserve unrelated sections, passive payloads and indices, and overlapping placement. DataCount consistency is checked before compaction. A real-engine fixture exercises passive `memory.init`/`data.drop` after suffix removal and checks drop isolation across instances.
 - Rejection tests cover active-segment references, instruction-like bytes inside constants, truncated instructions, unsupported instructions and over-width LEB values.
 - Linux tests check sealed mappings, growth, isolation, error/timeout recovery, cleanup and sparse seed storage.
 - Real Guest comparisons cover fresh/copy/COW/data-image deterministic random bytes, clocks, hash behavior, NumPy and Host Tools, including concurrent recorded execution and journal-stop recovery.

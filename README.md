@@ -1,13 +1,13 @@
 # Pysolate
 
-**Safe, fast Python execution for AI agents, with controlled tools and recoverable runs.**
+**Isolated Python execution for AI agents, embedded in Go.**
 
 Let an agent write ordinary Python to process files and call your APIs. Pysolate
 runs each script in a fresh isolated environment. Your application grants its
 tools and workspace, while keeping credentials and the rest of the machine out
 of reach. Implemented in Go with CPython and WebAssembly/WASI.
 
-## The product in one minute
+## Features
 
 - **Isolation and explicit tool permissions.** Python has no ambient Host
   network, filesystem, environment, credentials, or subprocess access. It can
@@ -22,12 +22,7 @@ of reach. Implemented in Go with CPython and WebAssembly/WASI.
 - **Deterministic replay and crash recovery.** Recorded runs can reproduce
   controlled Python inputs and reuse completed Tool outcomes; durable runs keep
   journal state so a process restart can resume without duplicating an
-  idempotent effect. A Host-owned workspace is a separate lifecycle: it can
-  carry files from one disposable Guest to the next, but it is not replay.
-
-The execution core directly evolves Pysolate Spine (`1abc99a`, MIT). It is not a
-wrapper around the former runtime. The old APIs, experiments and evidence remain
-in Git at `2be7488b`.
+  idempotent effect. Host-owned workspaces carry files across disposable Guests.
 
 ## A Python + Tool demo
 
@@ -53,8 +48,8 @@ result = {
 }
 ```
 
-The Host grants exactly one capability. Its canonical identity remains stable,
-while `PythonPath` controls the natural API presented to generated code:
+The Host registers `market/get-price`; `PythonPath` exposes it to Python as
+`market.get_price`:
 
 ```go
 prices := map[string]float64{"AAPL": 225.50, "MSFT": 418.20, "NVDA": 176.40}
@@ -101,7 +96,7 @@ It returns the Python value together with the observed Host-call count. The same
 boundary can be backed by an HTTP client, database, internal service, or an MCP
 server without packaging that dependency into Python.
 
-## Start with the core path
+## Try the demos
 
 With a verified `dist/pysolate.wasm`, run:
 
@@ -112,10 +107,9 @@ With a verified `dist/pysolate.wasm`, run:
 Set `PYSOLATE_GUEST=/path/to/pysolate.wasm` when the Guest artifact lives
 elsewhere. The five steps show approved
 Host Tools, files carried across isolated executions, repeated execution
-through the local HTTP service, safe early reads, and deterministic replay. The
-workspace step is file continuity; the replay step reconstructs a recorded Run.
+through the local HTTP service, safe early reads, and deterministic replay.
 
-Measured examples:
+### Measurements
 
 - **17.82 → 2.90 ms warm execution** for short Python with the opt-in Linux COW
   data-image path. Runtime API measurement; startup and memory costs are reported
@@ -137,16 +131,15 @@ set an execution-time cap; ordinary HTTP Runs can opt into safe early reads.
 For debugging, [export an ended durable Run and replay it offline](docs/offline-replay.md)
 without credentials or live tool calls. Exported inputs and results remain private.
 
-See the [`docs/` index](docs/README.md) for supported workflows, measured
-performance, scheduling studies and recent deliveries. See
+See the [`docs/` index](docs/README.md) for workflows, performance and scheduling
+studies, and
 [Execution-derived durability](docs/execution-derived-durability.md) for the
 precise comparison with workflow-first systems such as Temporal.
 
 For a small real model integration, see [the standalone agent loop](docs/agent-loop.md):
 DeepSeek generates Python, Pysolate executes it against a private CSV workspace,
-and the model uses execution feedback to produce a report. It is an optional
-example requiring provider credentials, not part of the execution core or the
-default demo suite.
+and the model uses execution feedback to produce a report. This example requires
+provider credentials and runs separately from the default demos.
 
 ## Host responsibilities and boundaries
 
@@ -157,7 +150,7 @@ workspace publication, and declares recovery behavior for durable effects.
 
 Pysolate does not provide arbitrary Python compatibility, exactly-once behavior
 for an external provider, tenant authentication, a workflow engine, or mounts
-of arbitrary Host paths. These limits are part of the integration contract.
+of arbitrary Host paths.
 
 ## Execution model
 
@@ -169,14 +162,10 @@ Runner owns compiled code and an optional clean image
   -> close the Guest and finish its tool workers
 ```
 
-There are four responsibilities:
-
 - **Runner:** ordinary execution and complete-source early reads share one lifecycle.
 - **Tools:** Host providers discover canonical tools, metadata and Go call implementations; a small Python shim exposes only that catalog.
 - **Image:** optional full-copy or Linux private COW memory, captured before user execution.
 - **Store:** optional SQLite history for deterministic replay and durable waits.
-
-No Broker/Plan hierarchy, plugin catalog, receipts, source certificates, workspace transaction framework, generic workflow engine, native backend or cross-run result cache is required.
 
 ## Build and run
 
@@ -213,15 +202,7 @@ go run ./cmd/pysolate -source examples/numpy.py
 
 The CLI grants only a pure `echo` demonstration tool. Applications supply their own tools through the Go API. Python stdout is forwarded to stderr; the final JSON value is printed to stdout.
 
-For the short presentation path, run the four core product demonstrations:
-
-```sh
-./demos/run-core.sh
-```
-
-It covers dynamic namespaced Host tools, workspace continuation across
-disposable Guests, the hot HTTP service, and deterministic Tool-outcome replay.
-For the original short acceptance suite, use:
+Run the acceptance suite with:
 
 ```sh
 ./demos/run-all.sh
@@ -234,7 +215,7 @@ A Runner compiles once and may serve independent Runs. Each Run owns its Python 
 
 ### Dynamic Host tools and MCP adapters
 
-`ToolSpec` separates the canonical Host identity from its `PythonPath`, and can carry a description, JSON input schema and discovery annotations. Provider-native identities remain stable while the generated Python surface stays natural:
+`ToolSpec` associates a Host tool identity with a `PythonPath`, description, JSON input schema and discovery annotations. Python calls use the configured paths:
 
 ```python
 price = stock.getprice(symbol="AAPL")
@@ -247,7 +228,7 @@ Every generated function still dispatches through the same narrow Host call ABI.
 
 ### Private workspaces
 
-`runtime/workspace` creates a bounded private filesystem and grants an exclusive writer lease. `CreateFromDirectory` copies an ordinary Host working tree once; `.git` metadata remains Host-owned and source files are never modified in place. `RunWorkspace` mounts that lease only at `/workspace` and starts user code there with `/workspace` first on `sys.path`, enabling relative files and local-module imports. Ordinary `Run` still has no Host filesystem authority. The rooted adapter rejects traversal, symlinks, hard links, devices, filesystem-boundary crossings and writes beyond Host-selected file/byte/depth limits.
+`runtime/workspace` creates a bounded private filesystem and grants an exclusive writer lease. `CreateFromDirectory` copies an ordinary Host working tree once; `.git` metadata remains Host-owned and source files are never modified in place. `RunWorkspace` mounts that lease only at `/workspace` and starts user code there. Relative paths and local-module imports resolve from `/workspace`, which is first on `sys.path`. Ordinary `Run` has no Host filesystem authority. The rooted adapter rejects traversal, symlinks, hard links, devices, filesystem-boundary crossings and writes beyond Host-selected file/byte/depth limits.
 
 Workspace-prepared images need the same WASI preopen shape captured at initialization. Use `NewPreparedWorkspace` or Linux `NewPreparedWorkspaceCOW`, then execute with `RunWorkspace`. Ordinary `NewPrepared` runners reject workspace attachment instead of restoring an incompatible image. Workspace state can continue across disposable Guests, but publication back to a real project remains a separate Host operation. Writable workspaces are not part of `RunRecorded` durable replay.
 
@@ -379,7 +360,7 @@ Real-Guest tests fail when the artifact is missing. Linux COW tests require Linu
 
 ## Performance and bounded execution
 
-See [the measured results and trade-offs](docs/performance-results.md) for seeded reconstruction, native cache, Guest startup, historical PLM/prefix measurements and admission. The default paths remain explicit; improvements are not a claim that every workload or cold cache is faster.
+See [performance results](docs/performance-results.md) for measurements of seeded reconstruction, compilation caching, Guest startup and admission, plus historical PLM/prefix experiments.
 
 ## Verified scope
 
@@ -387,7 +368,7 @@ The new Guest was built and run, including matrix operations and separate NumPy 
 
 Linux tests exercise actual private COW mappings and Guest isolation. Recovery was verified after closing/reopening SQLite, after killing the process following an external fixture commit, and after hard-stopping/restarting a 2-vCPU/2-GiB Linux VM at that same window. The recovered fixture recorded one read, two write requests and one idempotent effect. This is not a physical-host power-loss guarantee.
 
-Old APIs and databases are intentionally incompatible. The core and Guest contain 2,883 physical source lines (including comments/blank lines, excluding tests, CLI, build tooling and dependencies). Build tooling is separate from the execution core.
+Old APIs and databases are incompatible with this version. The previous implementation and experiments remain in Git at `2be7488b`. The core and Guest contain 2,883 physical source lines (including comments/blank lines, excluding tests, CLI, build tooling and dependencies).
 
 ## Prepared deterministic attempts
 
@@ -401,8 +382,8 @@ replayed with different randomness. Early reads remain excluded from recorded ex
 For durable use, pass `durable.Preparation{Seed: "seed", COW: true}` as the optional
 last argument to `durable.NewRunner`. The default is still fresh. This changes no
 stored schema and can resume history made by a fresh Runner with the same seed.
-The image has startup and retained-memory costs; account for them, not just warm
-resume time. See `docs/performance-results.md` for measurements.
+See [performance results](docs/performance-results.md) for image preparation time,
+retained memory and warm resume time.
 
 ## Optional compilation cache
 

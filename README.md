@@ -51,6 +51,11 @@ Native uses prewarmed CPython 3.14.7 + fork. Pysolate uses the **experimental
 optimized runtime**, CPython 3.14.0 + Prepared/COW + checked poll1024; these
 optimizations are not all integrated into this repository's default runtime.
 
+[![Native CPython and experimental Pysolate: memory growth and throughput](docs/figures/runtime-cost/overview.svg)][native-comparison]
+
+<details>
+<summary>Measurements, workloads and p99 latency</summary>
+
 **Resident memory growth**, whole-service PSS fitted over 10/50/100 instances:
 
 | Workload | Native KiB/instance | Pysolate KiB/instance |
@@ -77,7 +82,10 @@ Native forks and reaps a child per request; Pysolate creates and closes a Guest.
 Native runs trusted fixtures without an adversarial sandbox. The full comparison
 covers C1–32, CPU/request and open-loop queueing: **288 cells, 390,836 successful requests**.
 
+</details>
+
 [Report, raw data and reproduction][native-comparison] ·
+[Figure source](docs/figures/runtime-cost/README.md) ·
 [Default-runtime performance](docs/performance-results.md) · [Documentation](docs/README.md)
 
 [native-comparison]: https://github.com/bkmashiro/pysolate-spine/tree/1908514a55f524289146bad5c9b3e7a24ef5c688/experiments/runtime-cost/compare/evidence/linux-arm64-20261012

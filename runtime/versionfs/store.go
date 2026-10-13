@@ -121,10 +121,7 @@ func (s *Store) WriteFile(name string, data []byte) error {
 			}
 			identity = Identity{ResourceID: old.identity.ResourceID, Version: old.identity.Version + 1}
 		} else {
-			id, err := randomID(s.storeID + "-resource-")
-			if err != nil {
-				return nil, 0, 0, err
-			}
+			id := fmt.Sprintf("%s-%016x", s.storeID, s.state.generation+1)
 			identity = Identity{ResourceID: id, Version: 1}
 		}
 		owned := append([]byte(nil), data...)
@@ -140,10 +137,7 @@ func (s *Store) Mkdir(name string) error {
 		if s.state.files >= s.limits.MaxFiles {
 			return nil, 0, 0, errors.New("versionfs: file/directory quota exceeded")
 		}
-		id, err := randomID(s.storeID + "-resource-")
-		if err != nil {
-			return nil, 0, 0, err
-		}
+		id := fmt.Sprintf("%s-%016x", s.storeID, s.state.generation+1)
 		return &node{identity: Identity{ResourceID: id, Version: 1}, dir: true, children: make(map[string]*node)}, 1, 0, nil
 	})
 }
@@ -201,24 +195,16 @@ func (s *Store) mutate(name string, change func(*node, string, *node) (*node, in
 	}
 	base := components[len(components)-1]
 	old := current.children[base]
+	if s.state.generation == ^uint64(0) {
+		return errors.New("versionfs: generation exhausted")
+	}
 	replacement, countDelta, byteDelta, err := change(current, base, old)
 	if err != nil {
 		return err
 	}
-	if s.state.generation == ^uint64(0) {
-		return errors.New("versionfs: generation exhausted")
-	}
 	updated := cloneDir(current)
-	membershipChanged := (old == nil) != (replacement == nil)
-	if membershipChanged {
-		if updated.identity.Version == ^uint64(0) {
-			return errors.New("versionfs: directory version exhausted")
-		}
-		for _, dir := range parents {
-			if dir.identity.Version == ^uint64(0) {
-				return errors.New("versionfs: directory version exhausted")
-			}
-		}
+	if updated.identity.Version == ^uint64(0) {
+		return errors.New("versionfs: directory version exhausted")
 	}
 	if replacement == nil {
 		delete(updated.children, base)
@@ -230,15 +216,13 @@ func (s *Store) mutate(name string, change func(*node, string, *node) (*node, in
 			return errors.New("versionfs: directory version exhausted")
 		}
 	}
-	if membershipChanged {
-		updated.identity.Version++
-	}
+	// Directory observations include entry metadata, not only names. A changed
+	// descendant can change DirEntry.Info, so version all copied ancestors.
+	updated.identity.Version++
 	for i := len(parents) - 1; i >= 0; i-- {
 		copyDir := cloneDir(parents[i])
 		copyDir.children[components[i]] = updated
-		if membershipChanged {
-			copyDir.identity.Version++
-		}
+		copyDir.identity.Version++
 		updated = copyDir
 	}
 	s.state = &treeState{root: updated, generation: s.state.generation + 1, files: s.state.files + countDelta, bytes: s.state.bytes + byteDelta}

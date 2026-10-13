@@ -6,6 +6,8 @@ for the execution model and build commands.
 
 ## Supported workflows
 
+- [`versioned-files.md`](versioned-files.md) — immutable input views, optional FS records and resource/version lookup.
+
 - [`development-recording.md`](development-recording.md) — default-on private experiment capture and no-network replay.
 
 - [`agent-loop.md`](agent-loop.md) — a small model → isolated Python → report example, verified with DeepSeek.

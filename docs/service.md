@@ -43,7 +43,8 @@ All request and response bodies are JSON. Request bodies are capped at 1 MiB. `[
   - Creates and exclusively leases a bounded private workspace.
 - `POST /v1/workspaces/{ref}/run`
   - Same body as `/v1/run`; `/workspace` is mounted read/write.
-  - The response includes before/after revisions and an added/modified/deleted summary.
+  - By default the response includes before/after content-hash revisions and an added/modified/deleted summary. This reads and hashes every workspace file before and after execution.
+  - Set `"changes":false` when no change summary is needed. Execution and private writes still work, but both content snapshots are skipped and `before`, `after`, and `changes` are absent. The explicit snapshot endpoint remains available. This does not disable the filesystem's path, ownership or quota checks.
   - `early_reads:true` is rejected; workspace execution has no early-read mode.
 - `GET /v1/workspaces/{ref}/snapshot`
   - Returns deterministic path, mode, size, and content-digest metadata. File contents are not included.

@@ -230,8 +230,8 @@ func TestParentDirectoryVersionTracksVisibleChildren(t *testing.T) {
 	v3 := s.View()
 	d3, _ := v3.Identity("d")
 	f3, _ := v3.Identity("d/f")
-	if d3.Version != d2.Version {
-		t.Fatalf("file replacement changed parent version: %#v -> %#v", d2, d3)
+	if d3.Version != d2.Version+1 {
+		t.Fatalf("file replacement did not version parent entry metadata: %#v -> %#v", d2, d3)
 	}
 	if f3.Version != f2.Version+1 {
 		t.Fatalf("file replacement version: %#v -> %#v", f2, f3)

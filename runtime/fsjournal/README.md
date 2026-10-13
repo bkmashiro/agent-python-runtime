@@ -12,15 +12,14 @@
 - `(*Store).Events(runID string) (Run, []Event, error)` — a missing run returns `ErrNotFound`.
 - `(*Store).Find(resource string, version *uint64) ([]Reference, error)` — nil version means all versions.
 - `(*Store).Content(resource string, version uint64) ([]byte, error)` returns a copy of captured bytes; missing content returns `sql.ErrNoRows`.
-- `(*Store).QueryPlanForFind() (string, error)` exposes the SQLite plan for the index test.
 
 `Run.Complete` is recording completeness; `Run.RunError` separately reflects the Guest/program outcome. Therefore a Python error can coexist with a complete recording. `RecordingError` marks a failed/incomplete recording. `Event.Detail` must be valid JSON and is size-limited.
 
 ## Limits and persistence
 
-Zero-valued `Options` use 100,000 events per run, 4 MiB of queued event metadata, 64 MiB of captured contents per session, batches of 128 events, and 16 KiB per detail value. Metadata accounting is conservative (UTF-8 byte lengths plus fixed row overhead); the queue bound applies to pending, not already committed, batches. Events exceeding a configured bound are rejected, the recording error becomes sticky, and `Finish` returns it without marking the run complete. Accepted, already committed batches remain queryable.
+Zero-valued `Options` use 100,000 events per run, 4 MiB of queued event metadata, 64 MiB of newly stored content bytes per session (already stored versions do not consume this budget), batches of 128 events, and 16 KiB per detail value. Metadata accounting is conservative (UTF-8 byte lengths plus fixed row overhead); the queue bound applies to pending, not already committed, batches. Events exceeding a configured bound are rejected, the recording error becomes sticky, and `Finish` returns it without marking the run complete. Accepted, already committed batches remain queryable.
 
-Append writes complete transactions at each batch boundary and Finish writes the final partial batch before marking complete. There is no promise that a just-appended event survives process or power loss before its batch commit; abrupt exit can retain only a committed prefix and leaves the run incomplete. A Close with active sessions does not finalize them. Close is idempotent; subsequent store operations return `ErrClosed`, while finishing a session after Close returns an error and leaves its persisted run incomplete.
+Append writes complete transactions at each batch boundary and Finish writes the final partial batch before marking complete. There is no promise that a just-appended event survives process or power loss before its batch commit; abrupt exit can retain only a committed prefix and leaves the run incomplete. A Close with active sessions drops their uncommitted in-memory tail and does not finalize them. Close is idempotent; subsequent store operations return `ErrClosed`, while finishing a session after Close returns an error and leaves its persisted run incomplete.
 
 The DB file is created with mode 0600 (and chmodded to 0600 on open); the parent directory is created with mode 0700 when needed. Treat the caller-provided path and its parent as caller-owned local storage; this package is not a defense against hostile shared-directory races. WAL sidecars are SQLite-managed. `synchronous(normal)` is deliberate: batching is a performance tradeoff, not a crash-durable-before-observation guarantee.
 
@@ -30,4 +29,4 @@ Events store metadata and a `(resource, version)` reference, not duplicate file 
 
 ## Verification and benchmark
 
-Run `go test ./runtime/fsjournal`, `go test -race ./runtime/fsjournal`, `go vet ./runtime/fsjournal`; `go test -bench=BenchmarkBatchAppend -run=^$ ./runtime/fsjournal` reports throughput and approximate SQLite bytes/event against naively repeated 1 KiB detail payload bytes. This short benchmark is local and not an end-to-end Guest performance claim.
+Run `go test ./runtime/fsjournal`, `go test -race ./runtime/fsjournal`, `go vet ./runtime/fsjournal`; `go test -bench=BenchmarkBatchAppend -run=^$ ./runtime/fsjournal` reports throughput and approximate SQLite bytes/event against naively repeated 1 KiB detail payload bytes. For the file-payload case, `go test -bench=BenchmarkRepeatedFileReads -benchtime=1x -count=3 -run=^$ ./runtime/fsjournal` measures 1,000 reads of one 64-KiB immutable version, with and without capture. [Validation notes](../../docs/fs-foundation-validation.md) retain the cold-start sample and storage scope. These are Host-only benchmarks, not end-to-end Guest performance claims.

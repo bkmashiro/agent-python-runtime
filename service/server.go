@@ -52,6 +52,7 @@ type runRequest struct {
 	Inputs     json.RawMessage `json:"inputs"`
 	TimeoutMS  *int64          `json:"timeout_ms"`
 	EarlyReads bool            `json:"early_reads,omitempty"`
+	Changes    *bool           `json:"changes,omitempty"` // Workspace summaries remain enabled when omitted.
 }
 
 type runResponse struct {
@@ -289,21 +290,29 @@ func (server *Server) handleWorkspaceRun(w http.ResponseWriter, request *http.Re
 	}
 	defer server.release()
 	started := time.Now()
-	before, err := lease.Snapshot()
-	if err != nil {
-		writeError(w, statusFor(err), err.Error())
-		return
+	includeChanges := body.Changes == nil || *body.Changes
+	var before workspacepkg.Snapshot
+	if includeChanges {
+		before, err = lease.Snapshot()
+		if err != nil {
+			writeError(w, statusFor(err), err.Error())
+			return
+		}
 	}
 	runStarted := time.Now()
 	out, runErr := server.workspace.RunWorkspace(runContext, body.Source, decodeInputs(body.Inputs), lease)
 	runNS := time.Since(runStarted).Nanoseconds()
-	after, snapshotErr := lease.Snapshot()
-	if snapshotErr != nil {
-		writeError(w, statusFor(snapshotErr), snapshotErr.Error())
-		return
+	response := runResponse{Value: out.Value, Stdout: out.Stdout, Transformed: out.Transformed, RunNS: runNS}
+	if includeChanges {
+		after, snapshotErr := lease.Snapshot()
+		if snapshotErr != nil {
+			writeError(w, statusFor(snapshotErr), snapshotErr.Error())
+			return
+		}
+		changes := workspacepkg.Diff(before, after)
+		response.Before, response.After, response.Changes = before.Revision, after.Revision, &changes
 	}
-	changes := workspacepkg.Diff(before, after)
-	response := runResponse{Value: out.Value, Stdout: out.Stdout, Transformed: out.Transformed, Before: before.Revision, After: after.Revision, Changes: &changes, RunNS: runNS, TotalNS: time.Since(started).Nanoseconds()}
+	response.TotalNS = time.Since(started).Nanoseconds()
 	if runErr != nil {
 		response.Error = runErr.Error()
 		writeJSON(w, runErrorStatus(runErr), response)

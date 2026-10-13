@@ -84,6 +84,9 @@ func (r *Runner) invoke(ctx context.Context, request callRequest) []byte {
 const maxToolCalls = 1024
 
 func (r *Runner) dispatch(ctx context.Context, request callRequest) []byte {
+	if err := ctx.Err(); err != nil {
+		return encodeResponse(nil, err)
+	}
 	spec, ok := r.manifest[request.Tool]
 	if !ok {
 		return encodeResponse(nil, fmt.Errorf("unknown tool: %s", request.Tool))

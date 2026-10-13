@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/bkmashiro/agent-python-runtime/runtime/fsrecord"
+
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
 )
@@ -47,18 +49,8 @@ func (o Options) normalized() Options {
 	return o
 }
 
-// Event describes one completed filesystem operation; Seq is assigned by Append.
-type Event struct {
-	Seq       uint64          `json:"seq"`
-	Operation string          `json:"operation"`
-	Path      string          `json:"path"`
-	Resource  string          `json:"resource,omitempty"`
-	Version   uint64          `json:"version,omitempty"`
-	Offset    int64           `json:"offset,omitempty"`
-	Count     int64           `json:"count,omitempty"`
-	Error     string          `json:"error,omitempty"`
-	Detail    json.RawMessage `json:"detail,omitempty"`
-}
+// Event is shared with recording-free runtime consumers; SQLite stays optional.
+type Event = fsrecord.Event
 
 // Run reports recording completeness separately from the program's own outcome.
 type Run struct {
@@ -84,16 +76,17 @@ type Store struct {
 	sessions  map[*Session]bool
 }
 type Session struct {
-	mu          sync.Mutex
-	store       *Store
-	runID       string
-	opts        Options
-	next        uint64
-	queued      []Event
-	queuedBytes int64
-	captured    int64
-	sticky      error
-	finished    bool
+	mu           sync.Mutex
+	store        *Store
+	runID        string
+	viewRevision string
+	opts         Options
+	next         uint64
+	queued       []Event
+	queuedBytes  int64
+	captured     int64
+	sticky       error
+	finished     bool
 }
 
 // Open opens an independent SQLite journal. The database file is created privately when new.
@@ -118,7 +111,11 @@ func Open(path string) (*Store, error) {
 	if err := os.Chmod(path, 0600); err != nil {
 		return nil, err
 	}
-	u := url.URL{Scheme: "file", Path: path}
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+	u := url.URL{Scheme: "file", Path: absolute}
 	db, err := sql.Open("sqlite3", u.String()+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(wal)&_pragma=synchronous(normal)")
 	if err != nil {
 		return nil, err
@@ -136,12 +133,27 @@ func Open(path string) (*Store, error) {
 }
 func (s *Store) Close() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.closed {
+		s.mu.Unlock()
 		return nil
 	}
 	s.closed = true
-	return s.db.Close()
+	sessions := s.sessions
+	s.sessions = nil
+	err := s.db.Close()
+	s.mu.Unlock()
+	// Session methods take their lock before Store.mu. Release Store.mu before
+	// dropping their queued tails; committed prefixes remain incomplete on disk.
+	for x := range sessions {
+		x.mu.Lock()
+		x.queued = nil
+		x.queuedBytes = 0
+		if x.sticky == nil {
+			x.sticky = ErrClosed
+		}
+		x.mu.Unlock()
+	}
+	return err
 }
 func (s *Store) Begin(runID, viewRevision string, options Options) (*Session, error) {
 	if runID == "" {
@@ -159,7 +171,7 @@ func (s *Store) Begin(runID, viewRevision string, options Options) (*Session, er
 	if _, err := s.db.Exec(`INSERT INTO runs(run_id,view_revision) VALUES(?,?)`, runID, viewRevision); err != nil {
 		return nil, fmt.Errorf("fsjournal begin: %w", err)
 	}
-	x := &Session{store: s, runID: runID, opts: o}
+	x := &Session{store: s, runID: runID, viewRevision: viewRevision, opts: o}
 	s.sessions[x] = true
 	return x, nil
 }
@@ -174,6 +186,8 @@ func (x *Session) fail(err error) error {
 	}
 	return x.sticky
 }
+func (x *Session) ViewRevision() string { return x.viewRevision }
+
 func (x *Session) Append(e Event) error {
 	x.mu.Lock()
 	defer x.mu.Unlock()
@@ -182,6 +196,12 @@ func (x *Session) Append(e Event) error {
 	}
 	if x.sticky != nil {
 		return x.sticky
+	}
+	x.store.mu.Lock()
+	closed := x.store.closed
+	x.store.mu.Unlock()
+	if closed {
+		return x.fail(ErrClosed)
 	}
 	if e.Operation == "" {
 		return x.fail(errors.New("fsjournal: empty operation"))
@@ -243,13 +263,16 @@ func (x *Session) flushLocked() error {
 		tx.Rollback()
 		return err
 	}
+	if _, err = tx.Exec(`UPDATE runs SET event_count=? WHERE run_id=?`, x.next, x.runID); err != nil {
+		tx.Rollback()
+		return err
+	}
 	if err = tx.Commit(); err != nil {
 		return err
 	}
 	x.queued = nil
 	x.queuedBytes = 0
-	_, err = s.db.Exec(`UPDATE runs SET event_count=? WHERE run_id=?`, x.next, x.runID)
-	return err
+	return nil
 }
 
 // EnsureContent stores immutable bytes once for a resource/version, when capture is enabled.
@@ -261,6 +284,12 @@ func (x *Session) EnsureContent(resource string, version uint64, load func() ([]
 	}
 	if x.sticky != nil {
 		return x.sticky
+	}
+	x.store.mu.Lock()
+	closed := x.store.closed
+	x.store.mu.Unlock()
+	if closed {
+		return x.fail(ErrClosed)
 	}
 	if !x.opts.CaptureContents {
 		return nil
@@ -291,6 +320,9 @@ func (x *Session) EnsureContent(resource string, version uint64, load func() ([]
 	}
 	if int64(len(data)) > x.opts.MaxCapturedBytes-x.captured {
 		return x.fail(errors.New("fsjournal: captured content limit exceeded"))
+	}
+	if data == nil {
+		data = []byte{}
 	}
 	s.mu.Lock()
 	if s.closed {
@@ -432,28 +464,4 @@ func (s *Store) Content(resource string, version uint64) ([]byte, error) {
 		return nil, err
 	}
 	return append([]byte(nil), content...), nil
-}
-
-// QueryPlanForFind exposes the read-only query plan for proving the lookup index is selected.
-func (s *Store) QueryPlanForFind() (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.closed {
-		return "", ErrClosed
-	}
-	rows, err := s.db.Query(`EXPLAIN QUERY PLAN SELECT resource,version,run_id,seq FROM events WHERE resource=? AND version=? ORDER BY run_id,seq`, "r", uint64(1))
-	if err != nil {
-		return "", err
-	}
-	defer rows.Close()
-	var out string
-	for rows.Next() {
-		var id, parent, unused int
-		var detail string
-		if err = rows.Scan(&id, &parent, &unused, &detail); err != nil {
-			return "", err
-		}
-		out += detail + "\n"
-	}
-	return out, rows.Err()
 }

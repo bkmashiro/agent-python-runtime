@@ -9,6 +9,8 @@ WebAssembly/WASI, with a fresh Guest for each execution.
   Credentials and network clients stay in the Host. [Tools](docs/mcp.md)
 - **Private workspaces:** bounded filesystems shared across successive executions,
   with snapshots, diffs and change export. [Workspace](docs/workspace.md)
+- **Versioned inputs:** immutable read-only file views, explicit Host updates and
+  optional FS access records without full-tree hashing. [Files](docs/versioned-files.md)
 - **Prepared execution:** reuse compiled code and initialized Python state through
   full-copy images or Linux COW mappings. [COW](docs/cow-data-image.md)
 - **Concurrent I/O:** overlap explicitly approved independent reads; release

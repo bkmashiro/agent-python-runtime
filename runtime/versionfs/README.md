@@ -14,7 +14,7 @@ _ = info.Sys().(versionfs.Identity) // FileInfo.Sys carries identity
 _, _, _ = view, identity, err
 ```
 
-`Identity.ResourceID` is an opaque random identifier scoped uniquely in practice across stores. Replacing a file retains that ID and increments `Version`; remove then create allocates a new ID. Directories also have identities; their versions increment whenever direct visible children are added or removed. Replacing file contents does not change its parent directory version. `Revision()` is an opaque store ID plus monotonically increasing publication generation, never a content hash. Generations/versions fail rather than wrap.
+`Identity.ResourceID` combines a once-random Store namespace with a monotonic publication counter. Replacing a file retains that ID and increments `Version`; remove then create allocates a new ID. Directory versions advance on every descendant mutation, including file-content replacement that changes the metadata returned by `DirEntry.Info`. This is deliberately conservative. `Revision()` is an opaque store ID plus monotonically increasing publication generation, never a content hash. Generations/versions fail rather than wrap.
 
 Every publication copies caller-provided bytes; `ReadFile` returns a separate copy. Immutable nodes and payloads are shared between snapshots. Open files hold their original immutable node, and ReaderAt/Seek/Read never expose internal slices. View reads take no Store lock. Host writes are serialized and publish only after validation, quota checks, identity allocation, and path-copy construction succeed.
 

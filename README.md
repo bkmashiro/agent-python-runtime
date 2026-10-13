@@ -86,9 +86,25 @@ covers C1–32, CPU/request and open-loop queueing: **288 cells, 390,836 success
 
 [Report, raw data and reproduction][native-comparison] ·
 [Figure source](docs/figures/runtime-cost/README.md) ·
-[Default-runtime performance](docs/performance-results.md) · [Documentation](docs/README.md)
+[Default-runtime performance](docs/performance-results.md) ·
+[Benchmark catalog and experiment entry points](docs/benchmarks.md) · [Documentation](docs/README.md)
 
 [native-comparison]: https://github.com/bkmashiro/pysolate-spine/tree/1908514a55f524289146bad5c9b3e7a24ef5c688/experiments/runtime-cost/compare/evidence/linux-arm64-20261012
+
+## Benchmark suites
+
+| Scope | Reports and reproduction |
+|---|---|
+| Native vs Pysolate: memory slopes, throughput, CPU and tails | [Matched comparison][native-comparison] · [one-command suite](https://github.com/bkmashiro/pysolate-spine/tree/92cb647c774f04c75f3b5949ebbaab54bcb0e677/experiments/runtime-cost/compare) |
+| COW, allocator, engine metadata, residency and Host ABI | [Experimental suites](docs/benchmarks.md#experimental-runtime-measurements) |
+| Default runtime, startup, imports and HTTP service | [Performance](docs/performance-results.md) · [hotspots](docs/performance-dissection.md) |
+| I/O scheduling and early reads | [Scheduling](docs/scheduling-evaluation.md) · [contention](docs/early-read-contention.md) |
+| Common workloads, model/tool behavior and code reuse | [Workloads](docs/workload-pack.md) · [agent evaluation](docs/agent-evaluation.md) · [full catalog](docs/benchmarks.md) |
+
+Spine experiment links require access to its private GitHub repository.
+Cache/fault-recovery follow-ups, named Guest/JIT attribution, frozen/minimalfs and
+compile-seed experiments remain local; [unpublished studies](docs/benchmarks.md#completed-experiments-still-local)
+lists their exact revisions. The catalog distinguishes source, raw results and Guest build inputs.
 
 ## Test
 

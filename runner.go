@@ -29,7 +29,7 @@ type Runner struct {
 	code           wazero.CompiledModule
 	manifest       Manifest
 	guestManifest  []guestToolSpec
-	preparedState  *preparedRecording
+	preparedState  *preparedEnvironmentState
 	image          []byte // Immutable full-copy baseline; COW owns its image separately.
 	cow            cowmem.Runtime
 	cowSeed        cowmem.Runtime // Optional pre-_initialize seed for a data-image shell.
@@ -145,7 +145,7 @@ func (r *Runner) Run(ctx context.Context, source string, inputs any) (Output, er
 	if r.workspaceImage {
 		return Output{}, errors.New("workspace-prepared runner requires RunWorkspace")
 	}
-	return r.run(ctx, source, inputs, false, nil, nil)
+	return r.run(ctx, source, inputs, runOptions{})
 }
 
 // RunWithEarlyReads enables the built-in Guest AST pass over the complete source,
@@ -154,7 +154,7 @@ func (r *Runner) RunWithEarlyReads(ctx context.Context, source string, inputs an
 	if r.workspaceImage {
 		return Output{}, errors.New("workspace-prepared runner requires RunWorkspace")
 	}
-	return r.run(ctx, source, inputs, true, nil, nil)
+	return r.run(ctx, source, inputs, runOptions{earlyReads: true})
 }
 
 // RunWorkspace grants one private bounded workspace at /workspace for this
@@ -175,7 +175,7 @@ func (r *Runner) RunWorkspace(ctx context.Context, source string, inputs any, le
 	if err != nil {
 		return Output{}, err
 	}
-	return r.run(ctx, source, inputs, false, nil, fsConfig)
+	return r.run(ctx, source, inputs, runOptions{fsConfig: fsConfig})
 }
 
 func workspaceFSConfig(filesystem experimentalsys.FS) (wazero.FSConfig, error) {
@@ -186,10 +186,14 @@ func workspaceFSConfig(filesystem experimentalsys.FS) (wazero.FSConfig, error) {
 	return base.WithSysFSMount(filesystem, "workspace"), nil
 }
 
-func (r *Runner) run(ctx context.Context, source string, inputs any, earlyReads bool, recording *recording, fsConfig wazero.FSConfig) (Output, error) {
-	state := newRun(ctx, r, earlyReads)
-	state.recording = recording
-	state.fsConfig = fsConfig
+// run is the internal integration point for ordinary and recorded execution.
+// RunFiles should supply fsConfig here; recorded attempts supply environment
+// and journal independently, while plain runs pass only the FS option.
+func (r *Runner) run(ctx context.Context, source string, inputs any, options runOptions) (Output, error) {
+	state := newRun(ctx, r, options.earlyReads)
+	state.environment = options.environment
+	state.journal = options.journal
+	state.fsConfig = options.fsConfig
 	defer func() {
 		span := perfdiag.Start(state.ctx, "state_close")
 		defer span.End()
@@ -197,7 +201,7 @@ func (r *Runner) run(ctx context.Context, source string, inputs any, earlyReads 
 	}()
 	ctx = state.ctx
 	marshalSpan := perfdiag.Start(ctx, "marshal")
-	request, err := r.marshalRunRequest(source, inputs, earlyReads, fsConfig != nil)
+	request, err := r.marshalRunRequest(source, inputs, options.earlyReads, options.fsConfig != nil)
 	marshalSpan.End()
 	if err != nil {
 		return Output{}, err

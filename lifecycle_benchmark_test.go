@@ -25,7 +25,7 @@ func BenchmarkFreshLifecycle(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		stdout, stderr := &boundedText{}, &boundedText{}
 		t := time.Now()
-		m, e := r.runtime.InstantiateModule(ctx, r.code, r.moduleConfig(ctx, stdout, stderr))
+		m, e := r.runtime.InstantiateModule(ctx, r.code, moduleConfig(stdout, stderr, nil, nil))
 		instantiate += time.Since(t)
 		if e != nil {
 			b.Fatal(e)

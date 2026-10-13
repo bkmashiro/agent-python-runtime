@@ -8,6 +8,7 @@ import (
 
 	"github.com/bkmashiro/agent-python-runtime/internal/cowmem"
 	"github.com/bkmashiro/agent-python-runtime/internal/perfdiag"
+	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/experimental"
 	experimentalsysfs "github.com/tetratelabs/wazero/experimental/sysfs"
@@ -121,13 +122,13 @@ func prepare(ctx context.Context, wasm []byte, manifest Manifest, cow, workspace
 		}
 	}
 	r.workspaceImage = workspace
-	var rec *recording
+	var environment *executionEnvironment
 	if len(seed) == 1 || workspace {
 		state := newRun(ctx, r, false)
 		defer state.close()
 		if len(seed) == 1 {
-			rec = newRecording(seed[0], nil)
-			state.recording = rec
+			environment = newExecutionEnvironment(seed[0])
+			state.environment = environment
 		}
 		if workspace {
 			empty, err := os.MkdirTemp("", "pysolate-workspace-shape-")
@@ -177,8 +178,8 @@ func prepare(ctx context.Context, wasm []byte, manifest Manifest, cow, workspace
 			return nil, err
 		}
 	}
-	if rec != nil {
-		r.preparedState, err = rec.capture()
+	if environment != nil {
+		r.preparedState, err = environment.capture()
 		if err != nil {
 			return nil, err
 		}
@@ -205,7 +206,13 @@ func (r *Runner) newGuest(ctx context.Context, stdout, stderr *boundedText) (api
 		}
 		instantiateCtx = experimental.WithMemoryAllocator(instantiateCtx, cowmem.DeferredAllocator(mapped))
 	}
-	m, err := r.runtime.InstantiateModule(instantiateCtx, r.code, r.moduleConfig(ctx, stdout, stderr))
+	state, _ := ctx.Value(runKey{}).(*runState)
+	var environment *executionEnvironment
+	var fsConfig wazero.FSConfig
+	if state != nil {
+		environment, fsConfig = state.environment, state.fsConfig
+	}
+	m, err := r.runtime.InstantiateModule(instantiateCtx, r.code, moduleConfig(stdout, stderr, environment, fsConfig))
 	if err != nil {
 		if mapped != nil {
 			mapped.Free() // Instantiation may fail before wazero takes ownership.
@@ -257,8 +264,8 @@ func (r *Runner) newGuest(ctx context.Context, stdout, stderr *boundedText) (api
 			return nil, errors.New("cannot copy prepared memory")
 		}
 	}
-	if state, ok := ctx.Value(runKey{}).(*runState); ok && state.recording != nil && r.preparedState != nil {
-		if err := state.recording.restore(r.preparedState); err != nil {
+	if state != nil && state.environment != nil && r.preparedState != nil {
+		if err := state.environment.restore(r.preparedState); err != nil {
 			return nil, err
 		}
 	}

@@ -69,8 +69,8 @@ func (r *Runner) invoke(ctx context.Context, request callRequest) []byte {
 		return encodeResponse(nil, errors.New("tool call budget exhausted"))
 	}
 	state.calls++
-	if state.recording != nil {
-		response, err := state.recording.journal.Call(ctx, request.Tool, request.Args, func(callCtx context.Context) []byte { return r.dispatch(callCtx, request) })
+	if state.journal != nil {
+		response, err := state.journal.Call(ctx, request.Tool, request.Args, func(callCtx context.Context) []byte { return r.dispatch(callCtx, request) })
 		if err != nil {
 			state.controlErr = err
 			return nil

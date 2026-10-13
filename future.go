@@ -12,17 +12,27 @@ import (
 // One owner per Run. Only the Guest thread edits the map; workers publish via done.
 // Early tools promise a stable, read-only snapshot for this run and must honor ctx.
 type runState struct {
-	recording  *recording
-	controlErr error
-	calls      uint32
-	runner     *Runner
-	ctx        context.Context
-	cancel     context.CancelFunc
-	enabled    bool
-	next       uint32
-	futures    map[uint32]*future
-	workers    sync.WaitGroup
-	fsConfig   wazero.FSConfig
+	environment *executionEnvironment
+	journal     Journal
+	controlErr  error
+	calls       uint32
+	runner      *Runner
+	ctx         context.Context
+	cancel      context.CancelFunc
+	enabled     bool
+	next        uint32
+	futures     map[uint32]*future
+	workers     sync.WaitGroup
+	fsConfig    wazero.FSConfig
+}
+
+// runOptions keeps attempt concerns explicit without coupling environmental
+// determinism to the optional tool-call journal.
+type runOptions struct {
+	earlyReads  bool
+	environment *executionEnvironment
+	journal     Journal
+	fsConfig    wazero.FSConfig
 }
 
 type future struct {

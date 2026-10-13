@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 )
 
 type journalFunc func(context.Context, string, json.RawMessage, func(context.Context) []byte) ([]byte, error)
@@ -42,6 +43,54 @@ func TestRecordedControlCannotBeCaught(t *testing.T) {
 	_, err = runner.RunRecorded(context.Background(), "import os; os._exit(125)", nil, "seed", journal)
 	if err == nil || errors.Is(err, parked) || journalCalls != 1 {
 		t.Fatalf("forged park: %v", err)
+	}
+}
+
+func TestExecutionEnvironmentDoesNotRequireJournal(t *testing.T) {
+	wasm, err := readGuestArtifact()
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner, err := New(context.Background(), wasm, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	source := "import os, time\nresult = [os.urandom(12).hex(), time.time(), time.monotonic()]"
+	run := func() Output {
+		out, err := runner.run(context.Background(), source, nil, runOptions{environment: newExecutionEnvironment("environment-only")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	first, second := run(), run()
+	if !json.Valid(first.Value) || len(first.Value) == 0 || !bytes.Equal(first.Value, second.Value) {
+		t.Fatalf("environment-only runs differ or returned invalid result: first=%s second=%s", first.Value, second.Value)
+	}
+}
+
+func TestOrdinaryRunUsesLiveEnvironment(t *testing.T) {
+	wasm, err := readGuestArtifact()
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner, err := New(context.Background(), wasm, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close(context.Background())
+	before := time.Now().Unix()
+	out, err := runner.Run(context.Background(), "import time\nresult = time.time()", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got float64
+	if err := json.Unmarshal(out.Value, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got < float64(before) || got > float64(time.Now().Unix()+1) {
+		t.Fatalf("ordinary run did not use current wall time: %v", got)
 	}
 }
 
